@@ -119,7 +119,8 @@ export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
     const env = {
       PORT: new URL(httpUrl).port,
       OPENPENCIL_MCP_AUTH_TOKEN: authToken ?? '',
-      OPENPENCIL_MCP_ROOT: designRoot,
+      // 容器 env 可覆盖 MCP 文件工具根目录（如导出目录），默认仍是设计工作区。
+      OPENPENCIL_MCP_ROOT: process.env.OPENPENCIL_MCP_ROOT?.trim() || designRoot,
       OPENPENCIL_MCP_DISCOVERY_PATH: `${stateDir}/mcp.json`
     }
     try {

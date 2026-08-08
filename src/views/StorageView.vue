@@ -18,7 +18,7 @@ import { loadWorkspaceFonts } from '@/app/editor/fonts'
 import { reconcileStorageDocuments } from '@/app/storage/reconcile'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
 import { getLocalCanvasStore } from '@/app/storage/local-store'
-import { activeTab, createTab, openStorageDocumentInNewTab } from '@/app/tabs'
+import { activeTab, createUntitledTab, openStorageDocumentInNewTab } from '@/app/tabs'
 
 const { dialogs } = useI18n()
 const router = useRouter()
@@ -101,7 +101,7 @@ async function createDocument(): Promise<void> {
   const current = activeTab.value
   const isUntouched =
     current?.store.state.documentName === 'Untitled' && !current.store.undo.canUndo
-  if (!isUntouched) createTab()
+  if (!isUntouched) createUntitledTab()
 }
 
 watch(activeStorageProviderID, () => void refresh())

@@ -6,6 +6,7 @@ import { computeAllLayouts } from '@open-pencil/core/layout'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
+import { clearRememberedWorkspaceFile, rememberWorkspaceFile } from '@/app/bridge/restore'
 import { setOpenPencilStore } from '@/app/browser-bridge'
 import { replayPendingAiOps } from '@/app/automation/bridge/replay'
 import type { DocumentSourceIdentity } from '@/app/document/io/types'
@@ -78,6 +79,12 @@ export function createTab(store?: EditorStore, initialGraph?: SceneGraph): Tab {
   tabsRef.value = [...tabsRef.value, tab]
   activateTab(tab)
   return tab
+}
+
+/** 用户主动新建空白画布：清除「刷新恢复」记忆的 URL 文件参数。 */
+export function createUntitledTab(): Tab {
+  clearRememberedWorkspaceFile()
+  return createTab()
 }
 
 function activateTab(tab: Tab) {
@@ -190,6 +197,8 @@ export async function openStorageDocumentInNewTab(document: StorageDocument): Pr
     const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
     await store.switchPage(pageId)
     if (providerId === BRIDGE_PROVIDER_ID) {
+      // 刷新恢复：把工作区文件记进 URL，重开后自动重新打开。
+      rememberWorkspaceFile(document.id)
       // 防丢失重放：上次关闭/刷新时尚未落盘的 AI 操作，从本地日志重放到内存图。
       const tab = getTabForStore(store)
       if (tab) {
@@ -292,6 +301,7 @@ export function useTabsStore() {
     tabs: allTabs,
     activeTabId,
     createTab,
+    createUntitledTab,
     switchTab,
     closeTab,
     getActiveTabId,

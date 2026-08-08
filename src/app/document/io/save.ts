@@ -2,6 +2,7 @@ import type { EditorState } from '@open-pencil/core/editor'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { journalDocPathForBinding, withAiOpsLock } from '@/app/bridge/op-journal'
+import { rememberWorkspaceFile } from '@/app/bridge/restore'
 import { resolveUniqueWorkspacePath, sanitizeWorkspaceFileName } from '@/app/bridge/workspace-name'
 import { downloadBlob } from '@/app/document/io/browser'
 import { documentNameFromFigPath } from '@/app/document/io/names'
@@ -102,6 +103,7 @@ export function createSaveActions({
       startWatchingFile()
       void bridgeClient.reportRecent(path)
       void bridgeClient.reportActive(path)
+      rememberWorkspaceFile(path)
       toast.info('文件已保存')
     }
   }

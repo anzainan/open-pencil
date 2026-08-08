@@ -14,7 +14,7 @@ import { createSelectionMenuActions } from '@/app/shell/menu/selection-actions'
 import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import { openFileDialog } from '@/app/shell/menu/use'
 import { useAppTheme } from '@/app/shell/theme'
-import { closeTab, activeTab } from '@/app/tabs'
+import { closeTab, activeTab, createUntitledTab } from '@/app/tabs'
 
 export interface AppMenuGroup {
   label: string
@@ -95,7 +95,7 @@ export function useAppMenu() {
 
   const actions: Partial<Record<string, () => void>> = {
     new: () => {
-      void import('@/app/tabs').then((m) => m.createTab())
+      createUntitledTab()
     },
     open: () => void openFileDialog(),
     'open-storage-workspace': () => openStorageWorkspace(router),

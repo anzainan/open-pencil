@@ -5,7 +5,7 @@ import { tv } from 'tailwind-variants'
 
 import Tip from '@/components/ui/Tip.vue'
 import tabBarTheme from '@/theme/tab-bar'
-import { useTabsStore, createTab } from '@/app/tabs'
+import { useTabsStore, createUntitledTab } from '@/app/tabs'
 import { useI18n } from '@open-pencil/vue'
 
 const { dialogs } = useI18n()
@@ -70,7 +70,7 @@ function onClose(e: MouseEvent, tabId: string) {
         data-test-id="tabbar-new"
         :class="baseStyles.newAction()"
         :aria-label="dialogs.newTab"
-        @click="createTab()"
+        @click="createUntitledTab()"
       >
         <icon-lucide-plus :class="baseStyles.newIcon()" />
       </button>

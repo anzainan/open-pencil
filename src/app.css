@@ -115,6 +115,11 @@ body {
     Inter,
     system-ui,
     -apple-system,
+    "Source Han Sans SC",
+    "Smiley Sans",
+    "Noto Sans SC",
+    "PingFang SC",
+    "Microsoft YaHei",
     sans-serif;
   font-size: 13px;
   color: var(--color-surface);

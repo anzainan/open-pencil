@@ -3,9 +3,11 @@ import {
   responseWithTarget,
   type AutomationTarget
 } from '@/app/automation/bridge/target'
-import { resolveBrowserFileURL } from '@/app/document/io/browser'
+import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
+import { resolveWorkspaceRelPath } from '@/app/bridge/workspace-path'
+import { activeStorageProviderID, type StorageDocument } from '@/app/integrations/storage'
 import { openFileFromPath } from '@/app/shell/menu/use'
-import { createTab, getActiveStore, openFileInNewTab } from '@/app/tabs'
+import { createTab, getActiveStore, openStorageDocumentInNewTab } from '@/app/tabs'
 import { isTauri } from '@/app/tauri/env'
 
 export async function handleSaveFile(target: AutomationTarget, args: unknown): Promise<unknown> {
@@ -53,12 +55,18 @@ export async function handleOpenFile(_target: AutomationTarget, args: unknown): 
   if (isTauri()) {
     await openFileFromPath(path)
   } else {
-    const resourceURL = resolveBrowserFileURL(path)
-    const response = await fetch(resourceURL)
-    if (!response.ok) throw new Error(`Failed to fetch file: ${response.statusText}`)
-    const name = resourceURL.pathname.split('/').pop() ?? 'file.fig'
-    const file = new File([await response.blob()], name)
-    await openFileInNewTab(file, undefined, resourceURL.href)
+    // web 版打开工作区文件：走 storage binding 管线（绑定 bridge-fs 文档 id），
+    // 保存时直接覆盖写回原文件，而不是只留一个不可写的 filePath。
+    const rel = await resolveWorkspaceRelPath(path)
+    const meta = await bridgeClient.getFileMeta(rel).catch(() => null)
+    const document: StorageDocument = {
+      id: rel,
+      name: (meta?.name ?? rel.split('/').pop() ?? 'file').replace(/\.(fig|pen)$/i, ''),
+      updatedAt: meta?.updatedAt ?? new Date().toISOString(),
+      metadataAuthoritative: true
+    }
+    activeStorageProviderID.value = BRIDGE_PROVIDER_ID
+    await openStorageDocumentInNewTab(document)
   }
   const target = resolveAutomationTarget(getActiveStore(), undefined)
   return responseWithTarget({ ok: true, result: { opened: true } }, target)

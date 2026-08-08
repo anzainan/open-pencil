@@ -69,7 +69,8 @@ export class BridgeClient {
   readonly recentWriteMs: number
 
   private token: string | null = null
-  private tokenPromise: Promise<string | null> | null = null
+  private designRoot: string | null = null
+  private configPromise: Promise<{ token?: string | null; designRoot?: string } | null> | null = null
   private eventSource: EventSource | null = null
   private listeners = new Set<BridgeListener>()
   private connected = false
@@ -82,19 +83,30 @@ export class BridgeClient {
     this.recentWriteMs = options?.recentWriteMs ?? RECENT_WRITE_MS
   }
 
-  async getToken(): Promise<string | null> {
-    if (this.token !== null) return this.token
-    if (!this.tokenPromise) {
-      this.tokenPromise = fetch(`${this.apiBase}/config`)
+  async getConfig(): Promise<{ token?: string | null; designRoot?: string } | null> {
+    if (!this.configPromise) {
+      this.configPromise = fetch(`${this.apiBase}/config`)
         .then(async (response) => {
           if (!response.ok) return null
-          const data = (await response.json()) as { token?: string | null }
+          const data = (await response.json()) as { token?: string | null; designRoot?: string }
           this.token = data.token || null
-          return this.token
+          this.designRoot = typeof data.designRoot === 'string' ? data.designRoot : null
+          return data
         })
         .catch(() => null)
     }
-    return this.tokenPromise
+    return this.configPromise
+  }
+
+  async getToken(): Promise<string | null> {
+    const config = await this.getConfig()
+    return config?.token ?? null
+  }
+
+  /** 工作区根目录（file-bridge config 下发，如 /data/design），用于把绝对路径换算成相对路径。 */
+  async getDesignRoot(): Promise<string | null> {
+    const config = await this.getConfig()
+    return config?.designRoot ?? null
   }
 
   private async authHeaders(): Promise<Record<string, string>> {

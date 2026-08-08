@@ -21,6 +21,11 @@ export function openFileFromQueryParam(): void {
       metadataAuthoritative: true
     }
     await openStorageDocumentInNewTab(document)
+    // 刷新恢复：确保回到编辑器视图展示该文件（打开失败时停留在当前页/空白画布即可）。
+    if (window.location.pathname !== '/') {
+      const { default: router } = await import('@/router')
+      await router.replace('/')
+    }
   })().catch((error) => {
     console.warn('[open-from-param]', error)
   })
