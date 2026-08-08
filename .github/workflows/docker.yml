@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -59,9 +59,15 @@ jobs:
           docker save ghcr.io/${{ github.repository }}:web-latest | gzip > /tmp/img/openpencil-web-latest.tar.gz
           ls -lh /tmp/img/
 
-      - name: Upload tarball artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload tarball to Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: openpencil-web-latest
-          path: /tmp/img/openpencil-web-latest.tar.gz
-          retention-days: 7
+          tag_name: web-latest
+          name: OpenPencil web-latest
+          body: |
+            OpenPencil web 镜像 tar.gz（供软路由 docker load）
+            自动构建：${{ github.sha }}
+          files: /tmp/img/openpencil-web-latest.tar.gz
+          allowUpdates: true
+          draft: false
+          prerelease: false
