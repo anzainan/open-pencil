@@ -50,3 +50,18 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 导出镜像 tar（供软路由 docker load，绕开软路由无法直连 ghcr.io 的问题）
+      - name: Export image tarball
+        run: |
+          docker pull ghcr.io/${{ github.repository }}:web-latest
+          mkdir -p /tmp/img
+          docker save ghcr.io/${{ github.repository }}:web-latest | gzip > /tmp/img/openpencil-web-latest.tar.gz
+          ls -lh /tmp/img/
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openpencil-web-latest
+          path: /tmp/img/openpencil-web-latest.tar.gz
+          retention-days: 7
