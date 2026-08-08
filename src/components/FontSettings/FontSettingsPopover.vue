@@ -31,6 +31,7 @@ const primaryButton = useButtonUI({
   ui: { base: 'w-full px-2 py-1.5 text-[10px] font-medium disabled:opacity-50' }
 })
 const showDownloadedFonts = isTauri()
+const showLocalFontAccess = isTauri()
 const webFontProviderIds = WEB_FONT_PROVIDER_IDS
 const popoverOpen = ref(false)
 
@@ -115,7 +116,7 @@ onMounted(() => {
           </div>
 
           <div class="grid gap-1.5 rounded border border-border bg-input/40 p-2 text-[10px]">
-            <div class="flex justify-between gap-3 text-muted">
+            <div v-if="showLocalFontAccess" class="flex justify-between gap-3 text-muted">
               <span>{{ dialogs.localFonts }}</span>
               <span class="text-surface">{{ accessStateLabel }}</span>
             </div>
@@ -136,7 +137,10 @@ onMounted(() => {
           </div>
 
           <div class="space-y-1.5">
-            <div class="grid grid-cols-[1fr_auto] gap-2 rounded border border-border p-2">
+            <div
+              v-if="showLocalFontAccess"
+              class="grid grid-cols-[1fr_auto] gap-2 rounded border border-border p-2"
+            >
               <div>
                 <p class="text-[10px] font-medium text-surface">{{ dialogs.systemFontAccess }}</p>
                 <p class="mt-0.5 text-[10px] leading-relaxed text-muted">

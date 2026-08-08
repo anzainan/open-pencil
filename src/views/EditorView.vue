@@ -25,7 +25,6 @@ import MobileDrawer from '@/components/MobileDrawer.vue'
 import MobileHud from '@/components/MobileHud/MobileHud.vue'
 import PropertiesPanel from '@/components/PropertiesPanel.vue'
 import RenameSelectionDialog from '@/components/selection/RenameSelectionDialog.vue'
-import SafariBanner from '@/components/SafariBanner.vue'
 import TabBar from '@/components/TabBar.vue'
 import Tip from '@/components/ui/Tip.vue'
 import Toolbar from '@/components/Toolbar/Toolbar.vue'
@@ -114,7 +113,6 @@ onUnmounted(() => {
 
 <template>
   <div data-test-id="editor-root" class="flex h-screen w-screen flex-col">
-    <SafariBanner />
     <RenameSelectionDialog />
     <TabBar />
 

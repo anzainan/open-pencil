@@ -5,6 +5,7 @@ import { useI18n } from '@open-pencil/vue'
 
 import {
   activeStorageProviderID,
+  BRIDGE_STORAGE_PROVIDER,
   createActiveStorageAdapter,
   storageCredentialStatuses,
   storagePreferencesComplete,
@@ -13,7 +14,7 @@ import {
 } from '@/app/integrations/storage'
 import { openSettingsDialog, settingsDialogOpen } from '@/app/settings/dialog'
 import type { CredentialStatus } from '@/app/settings/credentials/types'
-import { createCanvasId } from '@/app/storage/id'
+import { loadWorkspaceFonts } from '@/app/editor/fonts'
 import { reconcileStorageDocuments } from '@/app/storage/reconcile'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
 import { getLocalCanvasStore } from '@/app/storage/local-store'
@@ -22,6 +23,9 @@ import { activeTab, createTab, openStorageDocumentInNewTab } from '@/app/tabs'
 const { dialogs } = useI18n()
 const router = useRouter()
 const provider = computed(() => storageProviderRegistry.get(activeStorageProviderID.value))
+const workspaceLabel = computed(() =>
+  provider.value.id === BRIDGE_STORAGE_PROVIDER.id ? '本地工作区 · file-bridge' : provider.value.label
+)
 const documents = ref<StorageDocument[]>([])
 const credentialStatuses = ref<Record<string, CredentialStatus>>({})
 const configured = computed(
@@ -49,6 +53,7 @@ async function paintLocalDocuments(): Promise<void> {
 async function refresh(): Promise<void> {
   loading.value = true
   error.value = null
+  void loadWorkspaceFonts()
   await paintLocalDocuments()
   try {
     credentialStatuses.value = await storageCredentialStatuses(provider.value.id)
@@ -94,16 +99,9 @@ async function createDocument(): Promise<void> {
   await router.push('/')
   await nextTick()
   const current = activeTab.value
-  const store =
+  const isUntouched =
     current?.store.state.documentName === 'Untitled' && !current.store.undo.canUndo
-      ? current.store
-      : createTab().store
-  const documentId = createCanvasId()
-  store.setStorageDocumentSource(
-    { providerId: activeStorageProviderID.value, documentId },
-    'Untitled'
-  )
-  await store.saveFigFile()
+  if (!isUntouched) createTab()
 }
 
 watch(activeStorageProviderID, () => void refresh())
@@ -122,7 +120,7 @@ onMounted(() => {
     <header class="flex h-14 items-center border-b border-border px-6">
       <div>
         <h1 class="text-sm font-semibold">{{ dialogs.storageWorkspace }}</h1>
-        <p class="text-[10px] text-muted">{{ activeStorageProviderID }}</p>
+        <p class="text-[10px] text-muted">{{ workspaceLabel }}</p>
       </div>
       <div class="ml-auto flex gap-2">
         <button

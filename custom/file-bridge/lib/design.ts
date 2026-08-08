@@ -1,7 +1,7 @@
 import { readdirSync, statSync, type Dirent } from 'node:fs'
 import { join } from 'node:path'
 
-import { ALLOWED_DESIGN_EXTENSIONS } from './paths'
+import { ALLOWED_DESIGN_EXTENSIONS, ALLOWED_FONT_EXTENSIONS, FONTS_REL_DIR } from './paths'
 
 export interface DesignFileInfo {
   path: string
@@ -74,4 +74,42 @@ export function scanDesignRoot(root: string): DesignListing {
     .map(([brand, files]) => ({ brand, files: files.sort((a, b) => a.path.localeCompare(b.path)) }))
 
   return { groups, flat }
+}
+
+export interface FontFileInfo {
+  path: string
+  name: string
+  ext: string
+  size: number
+  mtime: string
+  updatedAt: string
+}
+
+/** 递归扫描工作区 fonts/ 文件夹下的字体文件（ttf/otf/woff/woff2）。返回相对设计根的路径。 */
+export function scanFontsRoot(root: string): FontFileInfo[] {
+  const fontsRoot = join(root, FONTS_REL_DIR)
+  const out: FontFileInfo[] = []
+
+  const walk = (dir: string, relDir: string) => {
+    let entries: Dirent[]
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const rel = relDir ? `${relDir}/${entry.name}` : entry.name
+      if (entry.isDirectory()) {
+        walk(join(dir, entry.name), rel)
+      } else if (entry.isFile() && ALLOWED_FONT_EXTENSIONS.test(entry.name)) {
+        const info = fileMeta(root, rel)
+        if (!info) continue
+        out.push(info)
+      }
+    }
+  }
+  walk(fontsRoot, FONTS_REL_DIR)
+
+  out.sort((a, b) => a.path.localeCompare(b.path))
+  return out
 }

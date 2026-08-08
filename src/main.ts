@@ -4,10 +4,24 @@ import { createApp } from 'vue'
 import './app.css'
 import { openFileFromQueryParam } from '@/app/bridge/open-from-param'
 import { preloadFonts } from '@/app/editor/fonts'
+import {
+  activeStorageProviderID,
+  BRIDGE_STORAGE_PROVIDER,
+  S3_STORAGE_PROVIDER,
+  storagePreferencesComplete
+} from '@/app/integrations/storage'
 import { IS_TAURI } from '@/constants'
 
 import App from './App.vue'
 import router from './router'
+
+// 本地工作区（file-bridge）接管存储：遗留的 s3-compatible 若从未配置则切回 bridge-fs。
+if (
+  activeStorageProviderID.value === S3_STORAGE_PROVIDER.id &&
+  !storagePreferencesComplete(S3_STORAGE_PROVIDER.id)
+) {
+  activeStorageProviderID.value = BRIDGE_STORAGE_PROVIDER.id
+}
 
 preloadFonts()
 const head = createHead()

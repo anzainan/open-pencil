@@ -14,6 +14,8 @@ export interface BridgeFileInfo {
   updatedAt: string
 }
 
+export type BridgeFontInfo = BridgeFileInfo
+
 export interface BridgeBrandGroup {
   brand: string
   files: BridgeFileInfo[]
@@ -152,6 +154,21 @@ export class BridgeClient {
       headers: await this.authHeaders()
     })
     if (!response.ok) throw new Error(`Bridge delete failed (${response.status}): ${path}`)
+  }
+
+  /** 列出工作区 fonts/ 文件夹下的字体文件。 */
+  async listFonts(): Promise<BridgeFontInfo[]> {
+    const response = await fetch(`${this.apiBase}/fonts`)
+    if (!response.ok) throw new Error(`Bridge list fonts failed (${response.status})`)
+    const data = (await response.json()) as { fonts?: BridgeFontInfo[] }
+    return data.fonts ?? []
+  }
+
+  /** 读取工作区字体文件字节（path 为 fonts/xxx.ttf 相对路径）。 */
+  async getFont(path: string): Promise<Uint8Array> {
+    const response = await fetch(`${this.apiBase}/fonts/${encodeRelPath(path.replace(/^fonts\//, ''))}`)
+    if (!response.ok) throw new Error(`Bridge font fetch failed (${response.status}): ${path}`)
+    return new Uint8Array(await response.arrayBuffer())
   }
 
   /** 上报活动文件（打开/切换 tab 时）。失败仅警告，不影响编辑。 */

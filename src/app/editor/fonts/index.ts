@@ -19,9 +19,15 @@ import {
   createTauriDownloadedFontCache,
   downloadedFontCacheSummary as tauriDownloadedFontCacheSummary
 } from '@/app/editor/fonts/cache'
+import {
+  loadWorkspaceFonts,
+  workspaceFontFamilies
+} from '@/app/editor/fonts/workspace'
 import { toast } from '@/app/shell/ui'
 import { isTauri } from '@/app/tauri/env'
 import { tauriFetch } from '@/app/tauri/http'
+
+export { loadWorkspaceFonts } from '@/app/editor/fonts/workspace'
 
 if (typeof navigator !== 'undefined') {
   fontManager.setFallbackUserAgent(navigator.userAgent)
@@ -100,7 +106,16 @@ export function preloadFonts(): void {
     void getTauriFonts().then(registerFontFaces)
     return
   }
+  void ensureWorkspaceFonts()
   if (onlineFontsEnabled.value) fontManager.preloadWebFontFamilies()
+}
+
+let workspaceFontsLoaded = false
+
+/** 扫描并注册工作区 fonts/ 字体（成功一次后不再重复扫描；bridge 不可达时下次重试）。 */
+export async function ensureWorkspaceFonts(): Promise<void> {
+  if (workspaceFontsLoaded) return
+  if (await loadWorkspaceFonts()) workspaceFontsLoaded = true
 }
 
 export function localFontAccessState(): LocalFontAccessState {
@@ -149,8 +164,15 @@ export async function listFamilies(): Promise<FontFamilyOption[]> {
       byFamily.set(font.family, { family: font.family, source: 'local' })
     return [...byFamily.values()].sort((a, b) => a.family.localeCompare(b.family))
   }
+  await ensureWorkspaceFonts()
+  const byFamily = new Map(
+    (await fontManager.listFamilyOptions()).map((option) => [option.family, option])
+  )
+  for (const family of workspaceFontFamilies()) {
+    if (!byFamily.has(family)) byFamily.set(family, { family, source: 'local' })
+  }
   showWebFontUnavailableToast()
-  return fontManager.listFamilyOptions()
+  return [...byFamily.values()].sort((a, b) => a.family.localeCompare(b.family))
 }
 
 export async function listFonts(): Promise<TauriFontFamily[]> {

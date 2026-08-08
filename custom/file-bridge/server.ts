@@ -1,10 +1,17 @@
 import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 
-import { fileMeta, scanDesignRoot } from './lib/design'
+import { fileMeta, scanDesignRoot, scanFontsRoot } from './lib/design'
 import { EventBus, FileWatcher, sseResponse } from './lib/events'
 import { handleMcpRequest, type McpDeps } from './mcp'
-import { ALLOWED_DESIGN_EXTENSIONS, isSafeBrand, isSafeRelativePath, resolveDesignPath } from './lib/paths'
+import {
+  ALLOWED_DESIGN_EXTENSIONS,
+  isSafeBrand,
+  isSafeFontRelPath,
+  isSafeRelativePath,
+  resolveDesignPath,
+  resolveFontPath
+} from './lib/paths'
 import { StateStore } from './lib/state'
 
 export interface BridgeServerOptions {
@@ -15,7 +22,7 @@ export interface BridgeServerOptions {
   token?: string
 }
 
-const VERSION = '0.2.0'
+const VERSION = '0.3.0'
 const RECONCILE_MS = 60_000
 const SSE_PING_MS = 25_000
 const MAX_BODY_BYTES = 512 * 1024 * 1024
@@ -272,6 +279,27 @@ export function startServer(options: BridgeServerOptions) {
     return json({ path: rel, deleted: true })
   }
 
+  // ---- 工作区字体（fonts/ 文件夹）----
+
+  function listFonts(): Response {
+    return json({ fonts: scanFontsRoot(designRoot) })
+  }
+
+  function serveFont(rel: string): Response {
+    const full = resolveFontPath(designRoot, rel)
+    if (!full) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (!existsSync(full) || isDirectory(full)) {
+      return json({ ok: false, error: `not found: ${rel}` }, 404)
+    }
+    return new Response(Bun.file(full), {
+      headers: {
+        'Content-Type': mimeFor(full),
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff'
+      }
+    })
+  }
+
   // ---- active / recent ----
 
   function getActive(): Response {
@@ -351,6 +379,22 @@ export function startServer(options: BridgeServerOptions) {
         return createFileEntry(request)
       }
       return methodNotAllowed()
+    }
+
+    if (path === '/api/v1/fonts') {
+      if (method !== 'GET') return methodNotAllowed()
+      return listFonts()
+    }
+
+    const fontMatch = path.match(/^\/api\/v1\/fonts\/(.+)$/)
+    if (fontMatch) {
+      if (method !== 'GET') return methodNotAllowed()
+      const raw = fontMatch[1]
+      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
+      const rel = decodeRelPath(raw)
+      if (!rel) return json({ ok: false, error: 'bad path encoding' }, 400)
+      if (!isSafeFontRelPath(`fonts/${rel}`)) return json({ ok: false, error: 'unsafe path' }, 403)
+      return serveFont(`fonts/${rel}`)
     }
 
     if (path === '/api/v1/events') {

@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient, type BridgeFileEvent } from '@/app/bridge/client'
+import { resolveUniqueWorkspacePath } from '@/app/bridge/workspace-name'
 import { activeStorageProviderID, type StorageDocument } from '@/app/integrations/storage'
 import { activeTab, createTab, openStorageDocumentInNewTab } from '@/app/tabs'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
@@ -103,11 +104,7 @@ async function createDocument(): Promise<void> {
   createBusy.value = true
   error.value = null
   try {
-    const existing = await bridgeClient.getFileMeta(path).catch(() => null)
-    if (existing) {
-      error.value = `文件已存在：${path}`
-      return
-    }
+    const finalPath = await resolveUniqueWorkspacePath(path)
     activeStorageProviderID.value = BRIDGE_PROVIDER_ID
     await router.push('/')
     await nextTick()
@@ -116,7 +113,10 @@ async function createDocument(): Promise<void> {
       current?.store.state.documentName === 'Untitled' && !current.store.undo.canUndo
         ? current.store
         : createTab().store
-    store.setStorageDocumentSource({ providerId: BRIDGE_PROVIDER_ID, documentId: path }, displayNameOf(path))
+    store.setStorageDocumentSource(
+      { providerId: BRIDGE_PROVIDER_ID, documentId: finalPath },
+      displayNameOf(finalPath)
+    )
     await store.saveFigFile()
     showCreate.value = false
     createPath.value = ''

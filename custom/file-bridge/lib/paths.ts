@@ -3,7 +3,13 @@ import { join, relative, resolve, sep } from 'node:path'
 
 export const ALLOWED_DESIGN_EXTENSIONS = /\.(fig|pen)$/i
 
-export function isSafeRelativePath(rel: string): boolean {
+/** 工作区 fonts/ 文件夹内可加载的字体扩展名（ttf/otf/woff/woff2）。 */
+export const ALLOWED_FONT_EXTENSIONS = /\.(ttf|otf|woff|woff2)$/i
+
+/** 工作区字体根目录名（相对设计根）。 */
+export const FONTS_REL_DIR = 'fonts'
+
+function isSafeRelSegments(rel: string, lastMustMatch: RegExp): boolean {
   if (!rel || rel.length === 0) return false
   if (rel.includes('\0')) return false
   if (rel.startsWith('/') || rel.startsWith('\\')) return false
@@ -12,7 +18,19 @@ export function isSafeRelativePath(rel: string): boolean {
   if (segments.length === 0) return false
   if (segments.some((segment) => segment === '..' || segment === '.')) return false
   const last = segments[segments.length - 1] ?? ''
-  return ALLOWED_DESIGN_EXTENSIONS.test(last)
+  return lastMustMatch.test(last)
+}
+
+export function isSafeRelativePath(rel: string): boolean {
+  return isSafeRelSegments(rel, ALLOWED_DESIGN_EXTENSIONS)
+}
+
+/** 校验字体相对路径：必须位于 fonts/ 子树下且扩展名在白名单内。 */
+export function isSafeFontRelPath(rel: string): boolean {
+  const [first, ...rest] = rel.split('/')
+  if (first !== FONTS_REL_DIR) return false
+  if (rest.length === 0) return false
+  return isSafeRelSegments(rel, ALLOWED_FONT_EXTENSIONS)
 }
 
 export function isSafeBrand(brand: string): boolean {
@@ -29,7 +47,16 @@ export function isSafeBrand(brand: string): boolean {
  * 以此阻止符号链接逃逸（含悬空符号链接，写入时不可见）。
  */
 export function resolveDesignPath(root: string, rel: string): string | null {
-  if (!isSafeRelativePath(rel)) return null
+  return resolveSafePath(root, rel, isSafeRelativePath)
+}
+
+/** 解析字体相对路径（fonts/ 子树，见 isSafeFontRelPath）。 */
+export function resolveFontPath(root: string, rel: string): string | null {
+  return resolveSafePath(root, rel, isSafeFontRelPath)
+}
+
+function resolveSafePath(root: string, rel: string, validate: (rel: string) => boolean): string | null {
+  if (!validate(rel)) return null
 
   const rootResolved = resolve(root)
   const full = resolve(rootResolved, rel)
