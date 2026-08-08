@@ -5,8 +5,9 @@ import { fontManager, weightToStyle } from '#core/text/fonts'
 const fontDigestCache = new Map<string, Uint8Array>()
 
 async function computeFontDigest(data: ArrayBuffer): Promise<Uint8Array> {
-  if (typeof crypto !== 'undefined') {
-    const hash = await crypto.subtle.digest('SHA-1', data)
+  const cryptoLike = globalThis as { crypto?: Crypto & { subtle?: SubtleCrypto } }
+  if (cryptoLike.crypto?.subtle) {
+    const hash = await cryptoLike.crypto.subtle.digest('SHA-1', data)
     return new Uint8Array(hash)
   }
   return new Uint8Array(20)
