@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs'
 
+import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 
 import { CanvasHelper } from '#tests/helpers/canvas'
 
 const fixture = readFileSync('tests/fixtures/gold-preview.fig')
 
-function mockBridgeWorkspace(page: import('@playwright/test').Page) {
+function mockBridgeWorkspace(page: Page) {
   void page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url())
     const method = route.request().method()
