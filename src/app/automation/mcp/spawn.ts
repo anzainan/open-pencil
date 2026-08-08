@@ -19,6 +19,8 @@ interface AutomationHealth {
 export interface AutomationServerHandle {
   disconnect: () => void
   authToken: string | null
+  /** Same-origin MCP WebSocket path (web mode) — when set, connectAutomation uses it instead of 127.0.0.1. */
+  wsPath?: string
 }
 
 const DEV_AUTOMATION_AUTH_TOKEN =
@@ -214,6 +216,12 @@ export async function getAutomationAuthToken(): Promise<string | null> {
 
 export async function spawnMCPIfNeeded(): Promise<AutomationServerHandle | null> {
   if (import.meta.env.DEV || !isTauri()) {
+    if (!import.meta.env.DEV && !isTauri()) {
+      // Web production mode: the container relays the upstream MCP server to the
+      // same origin. Advertised via /api/v1/config — when absent (MCP disabled),
+      // the browser does not connect automation and keeps today's behavior.
+      return resolveWebMcpHandle()
+    }
     return DEV_AUTOMATION_AUTH_TOKEN
       ? { disconnect: noop, authToken: DEV_AUTOMATION_AUTH_TOKEN }
       : null
@@ -307,6 +315,38 @@ export async function spawnMCPIfNeeded(): Promise<AutomationServerHandle | null>
   throw new Error(
     `Failed to start MCP server. Install @open-pencil/mcp@${APP_VERSION} globally with your package manager, then restart OpenPencil.`
   )
+}
+
+/**
+ * Web production mode: the container relays the upstream MCP server to the same
+ * origin via file-bridge. Reads the MCP auth token + WebSocket path from
+ * `/api/v1/config`; returns null when the container does not advertise MCP
+ * (graceful — automation simply stays off, matching the pre-MCP behavior).
+ * Retries briefly since the container MCP server boots after file-bridge.
+ */
+async function resolveWebMcpHandle(): Promise<AutomationServerHandle | null> {
+  const attempts = 5
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch('/api/v1/config', { signal: AbortSignal.timeout(2000) })
+      if (!res.ok) return null
+      const data = (await res.json()) as {
+        mcpAuthToken?: string | null
+        mcpWsPath?: string | null
+      }
+      if (data.mcpAuthToken && data.mcpWsPath) {
+        return {
+          disconnect: noop,
+          authToken: data.mcpAuthToken,
+          wsPath: data.mcpWsPath
+        }
+      }
+    } catch (e) {
+      console.warn('[MCP] web config lookup failed:', e instanceof Error ? e.message : e)
+    }
+    if (i < attempts - 1) await promiseTimeout(500)
+  }
+  return null
 }
 
 /**

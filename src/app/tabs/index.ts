@@ -7,6 +7,7 @@ import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { setOpenPencilStore } from '@/app/browser-bridge'
+import { replayPendingAiOps } from '@/app/automation/bridge/replay'
 import type { DocumentSourceIdentity } from '@/app/document/io/types'
 import { setActiveEditorStore } from '@/app/editor/active-store'
 import { createEditorStore } from '@/app/editor/session'
@@ -16,6 +17,7 @@ import {
   createActiveStorageAdapter,
   type StorageDocument
 } from '@/app/integrations/storage'
+import { toast } from '@/app/shell/ui'
 import { getLocalCanvasStore } from '@/app/storage/local-store'
 import { seedStorageCanvasFromRemote } from '@/app/storage/sync/persist'
 import { createFileOpenCoordinator } from '@/app/tabs/open/coordinator'
@@ -187,6 +189,17 @@ export async function openStorageDocumentInNewTab(document: StorageDocument): Pr
     store.clearSelection()
     const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
     await store.switchPage(pageId)
+    if (providerId === BRIDGE_PROVIDER_ID) {
+      // 防丢失重放：上次关闭/刷新时尚未落盘的 AI 操作，从本地日志重放到内存图。
+      const tab = getTabForStore(store)
+      if (tab) {
+        const replayed = await replayPendingAiOps(store, tab.id, document.id)
+        if (replayed > 0) {
+          store.requestRender()
+          toast.info(`已从本地暂存恢复 ${replayed} 条 AI 操作`)
+        }
+      }
+    }
     await store.fitCurrentPageToViewport()
   } finally {
     store.state.loading = false

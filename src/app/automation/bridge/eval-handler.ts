@@ -9,13 +9,21 @@ export function createAutomationEvalHandler(makeFigma: FigmaFactory) {
   return async function handleEval(target: AutomationTarget, args: unknown): Promise<unknown> {
     const code = (args as { code?: string }).code
     if (!code) throw new Error('Missing "code" in args')
+    const store = target.store
+    const before = store.snapshotPage()
     const figma = makeFigma(target.store, target.pageId)
     const AsyncFunction = Object.getPrototypeOf(async function () {
       /* noop */
     }).constructor
     const fn = new AsyncFunction('figma', wrapEvalCode(code))
     const result = await fn(figma)
-    target.store.requestRender()
+    store.requestRender()
+    const after = store.snapshotPage()
+    store.pushUndoEntry({
+      label: 'AI: eval',
+      forward: () => store.restorePageFromSnapshot(after),
+      inverse: () => store.restorePageFromSnapshot(before)
+    })
     return { ok: true, result: result ?? null }
   }
 }

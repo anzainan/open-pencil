@@ -11,6 +11,10 @@ import type { StateStore } from './lib/state'
  * 让 AI 工具链（OpenClaw / Claude / Cursor 等）原生感知文件状态。
  * 不引入 @modelcontextprotocol/sdk 依赖（避免重型 npm install），手写最小 JSON-RPC。
  *
+ * 路径：默认挂载在 `/mcp`；当容器开启了上游 MCP server（`MCP_AUTH_TOKEN` 非空，
+ * 见 `mcp-proxy.ts`）时，`/mcp` 让位给上游（110 个画布工具），本桥接工具改挂
+ * `/bridge-mcp`，两者并存。
+ *
  * 暴露工具：
  *   bridge_get_active   → { path?, openedAt?, updatedAt? }            只读
  *   bridge_get_recent   → { recents: [{path, openedAt}] }             只读
@@ -133,7 +137,7 @@ async function handleMessage(msg: JsonRpcRequest, deps: McpDeps, authHeader: str
     case 'tools/list':
       return rpcResult(id, { tools: TOOL_DEFS })
     case 'tools/call': {
-      const name = String(params.name ?? '')
+      const name = typeof params.name === 'string' ? params.name : ''
       const args = (params.arguments ?? {}) as Record<string, unknown>
       const tool = TOOL_DEFS.find((t) => t.name === name)
       if (!tool) return rpcError(id, -32601, `Unknown tool: ${name}`)
@@ -149,7 +153,7 @@ async function handleMessage(msg: JsonRpcRequest, deps: McpDeps, authHeader: str
             return rpcResult(id, textContent(JSON.stringify(listing, null, 2)))
           }
           case 'bridge_read_file': {
-            const rel = String(args.path ?? '')
+            const rel = typeof args.path === 'string' ? args.path : ''
             if (!isSafeRelativePath(rel)) return rpcResult(id, textContent('ERROR: invalid path'))
             const full = resolveDesignPath(deps.designRoot, rel)
             if (!full) return rpcResult(id, textContent('ERROR: unsafe path'))
@@ -175,8 +179,8 @@ async function handleMessage(msg: JsonRpcRequest, deps: McpDeps, authHeader: str
             }
           }
           case 'bridge_write_file': {
-            const rel = String(args.path ?? '')
-            const data = String(args.data ?? '')
+            const rel = typeof args.path === 'string' ? args.path : ''
+            const data = typeof args.data === 'string' ? args.data : ''
             if (!isSafeRelativePath(rel)) return rpcResult(id, textContent('ERROR: invalid path'))
             if (!isAuthorized(authHeader, deps.token)) {
               return rpcResult(id, textContent('ERROR: unauthorized (BRIDGE_TOKEN required)'))
@@ -193,7 +197,7 @@ async function handleMessage(msg: JsonRpcRequest, deps: McpDeps, authHeader: str
             }
           }
           case 'bridge_set_active': {
-            const rel = String(args.path ?? '')
+            const rel = typeof args.path === 'string' ? args.path : ''
             if (!isSafeRelativePath(rel)) return rpcResult(id, textContent('ERROR: invalid path'))
             if (!isAuthorized(authHeader, deps.token)) {
               return rpcResult(id, textContent('ERROR: unauthorized (BRIDGE_TOKEN required)'))

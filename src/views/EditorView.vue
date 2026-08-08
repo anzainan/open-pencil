@@ -90,8 +90,14 @@ onMounted(async () => {
     const mcp = await spawnMCPIfNeeded()
     mcpCleanup.value = mcp?.disconnect ?? null
     const tauri = isTauri()
-    if (import.meta.env.DEV || tauri) {
-      automationCleanup.value = connectAutomation(getActiveStore, mcp?.authToken ?? null).disconnect
+    // Desktop/dev always connect automation; web production connects only when the
+    // container advertises a same-origin MCP relay (wsPath present).
+    if (import.meta.env.DEV || tauri || mcp?.wsPath) {
+      automationCleanup.value = connectAutomation(
+        getActiveStore,
+        mcp?.authToken ?? null,
+        mcp?.wsPath ? { wsPath: mcp.wsPath } : undefined
+      ).disconnect
     }
   } catch (e) {
     console.warn('[MCP]', e)

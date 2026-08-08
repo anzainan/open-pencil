@@ -23,6 +23,10 @@ services:
       DESIGN_ROOT: /data/design
       STATE_DIR: /data/state
       BRIDGE_TOKEN: ${BRIDGE_TOKEN:-changeme}
+      # 开启浏览器内存级实时协作：MCP server（@open-pencil/mcp）随容器启动，
+      # file-bridge 把 /mcp /rpc /health /ws 反代到同源；AI/浏览器共用此 token。
+      # 置空则保持旧行为（/mcp 仍是 file-bridge 自带桥接工具）。
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:8080/api/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s

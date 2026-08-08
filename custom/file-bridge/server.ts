@@ -3,6 +3,7 @@ import { dirname, join, resolve, sep } from 'node:path'
 
 import { fileMeta, scanDesignRoot, scanFontsRoot } from './lib/design'
 import { EventBus, FileWatcher, sseResponse } from './lib/events'
+import { createMcpProxy, type McpProxyHandle } from './mcp-proxy'
 import { handleMcpRequest, type McpDeps } from './mcp'
 import {
   ALLOWED_DESIGN_EXTENSIONS,
@@ -168,6 +169,14 @@ function json(body: unknown, status = 200): Response {
   return Response.json(body, { status })
 }
 
+/** 从 file-bridge 目录向上找仓库根（含 packages/mcp/src/index.ts 的目录）。 */
+function resolveRepoRoot(fileBridgeDir: string): string {
+  for (const candidate of [join(fileBridgeDir, '..', '..'), join(fileBridgeDir, '..')]) {
+    if (existsSync(join(candidate, 'packages', 'mcp', 'src', 'index.ts'))) return candidate
+  }
+  return join(fileBridgeDir, '..', '..')
+}
+
 function methodNotAllowed(): Response {
   return json({ ok: false, error: 'method not allowed' }, 405)
 }
@@ -207,6 +216,25 @@ export function startServer(options: BridgeServerOptions) {
   }, RECONCILE_MS)
 
   const mcpDeps: McpDeps = { designRoot, state, token }
+
+  // ---- 可选的上游 MCP server（内存级实时协作：纯 JSON-RPC 转发，不解析画布）----
+  const mcpAuthToken = process.env.MCP_AUTH_TOKEN?.trim() || ''
+  const mcpEnabled = mcpAuthToken !== ''
+  const mcpHttpPort = Number(process.env.MCP_PORT ?? '7600')
+  const mcpHttpUrl = process.env.MCP_HTTP_URL?.trim() || `http://127.0.0.1:${mcpHttpPort}`
+  const mcpWsUrl = mcpHttpUrl.replace(/^http/, 'ws')
+  const mcpServerCmd = process.env.MCP_SERVER_CMD?.trim() || null
+  const mcpProxy: McpProxyHandle = createMcpProxy({
+    enabled: mcpEnabled,
+    authToken: mcpAuthToken || null,
+    httpUrl: mcpHttpUrl,
+    wsUrl: mcpWsUrl,
+    serverCmd: mcpServerCmd,
+    spawnCwd: resolveRepoRoot(import.meta.dir),
+    designRoot,
+    stateDir
+  })
+  const mcpPath = mcpEnabled ? '/bridge-mcp' : '/mcp'
 
   // ---- 文件 API ----
 
@@ -341,7 +369,10 @@ export function startServer(options: BridgeServerOptions) {
 
   // ---- 路由 ----
 
-  async function route(request: Request): Promise<Response> {
+  async function route(
+    request: Request,
+    server: Parameters<Parameters<typeof Bun.serve>[0]['fetch']>[1]
+  ): Promise<Response | undefined> {
     const url = new URL(request.url)
     const path = url.pathname
     const method = request.method
@@ -352,10 +383,43 @@ export function startServer(options: BridgeServerOptions) {
 
     if (method === 'GET' && path === '/api/v1/config') {
       // 供同源 SPA 获取写接口 token（安全基线见 deploy-plan §8：LAN 信任 + 外网 NPM Basic Auth）
-      return json({ ok: true, version: VERSION, designRoot, token: token || null })
+      // MCP 可用时下发独立的 MCP auth token（与 BRIDGE_TOKEN 分离），浏览器据此连接 automation。
+      return json({
+        ok: true,
+        version: VERSION,
+        designRoot,
+        token: token || null,
+        ...(mcpEnabled && mcpProxy.isReady()
+          ? { mcpAuthToken, mcpWsPath: '/ws', mcpHealthPath: '/health', mcpMcpPath: mcpPath }
+          : {})
+      })
     }
 
-    if (path === '/mcp') {
+    // ---- 上游 MCP server 反代（MCP 开启时接管 /mcp；否则 /mcp 仍走桥接工具）----
+    if (mcpEnabled && (path === '/mcp' || path === '/rpc' || path === '/health')) {
+      if (method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, DELETE',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, MCP-Protocol-Version, Mcp-Session-Id, X-MCP-Token',
+            'Access-Control-Max-Age': '86400'
+          }
+        })
+      }
+      return mcpProxy.forward(request)
+    }
+
+    if (mcpEnabled && path === '/ws') {
+      if (method === 'GET') {
+        if (mcpProxy.upgrade(request, server)) return undefined
+        return new Response('MCP WebSocket proxy not ready', { status: 502 })
+      }
+      return methodNotAllowed()
+    }
+
+    if (path === mcpPath) {
       if (method === 'OPTIONS') {
         return new Response(null, {
           status: 204,
@@ -458,13 +522,32 @@ export function startServer(options: BridgeServerOptions) {
   const server = Bun.serve({
     port: options.port,
     maxRequestBodySize: MAX_BODY_BYTES,
-    fetch: route
+    fetch: route,
+    websocket: {
+      open(ws: Bun.ServerWebSocket) {
+        mcpProxy.pipe(ws)
+      },
+      message(ws: Bun.ServerWebSocket, message: string | Buffer) {
+        mcpProxy.forwardMessage(ws, message)
+      },
+      close(ws: Bun.ServerWebSocket) {
+        const client = (ws.data as { client?: WebSocket } | undefined)?.client
+        try {
+          client?.close()
+        } catch {
+          // 已关闭
+          // oxlint-ignore-next-line no-silent-catch
+          void ws
+        }
+      }
+    }
   })
 
   const shutdown = () => {
     clearInterval(reconcileTimer)
     watcher.stop()
     bus.close()
+    mcpProxy.close()
     try {
       server.stop(true)
     } catch {
@@ -477,7 +560,7 @@ export function startServer(options: BridgeServerOptions) {
 
   console.log(`[file-bridge] v${VERSION} listening on ${server.url.hostname}:${server.port}`)
   console.log(
-    `[file-bridge] designRoot=${designRoot} stateDir=${stateDir} token=${token ? 'configured' : 'NOT SET (writes denied)'} watcher=${watcherActive ? 'on' : 'off'}`
+    `[file-bridge] designRoot=${designRoot} stateDir=${stateDir} token=${token ? 'configured' : 'NOT SET (writes denied)'} watcher=${watcherActive ? 'on' : 'off'} mcp=${mcpEnabled ? `enabled (${mcpHttpUrl}, path=${mcpPath})` : 'off'}`
   )
   return server
 }

@@ -1,6 +1,7 @@
 import type { EditorState } from '@open-pencil/core/editor'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
+import { clearAiOps } from '@/app/bridge/op-journal'
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
 import { persistStorageCanvasLocally } from '@/app/storage/sync/persist'
 import { isTauri } from '@/app/tauri/env'
@@ -32,6 +33,8 @@ export function createDocumentWriter({
         await bridgeClient.putFile(storage.documentId, data)
         setLastWriteTime(Date.now())
         setSavedVersion(state.sceneVersion)
+        // 落盘成功 = 磁盘已含全部已应用 AI 操作 → 清空防丢失日志。
+        void clearAiOps(storage.documentId).catch(() => undefined)
         return true
       }
       await persistStorageCanvasLocally({
