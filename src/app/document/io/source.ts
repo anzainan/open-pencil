@@ -2,6 +2,7 @@ import type { Editor, EditorState } from '@open-pencil/core/editor'
 import { exportFigFile } from '@open-pencil/core/io/formats/fig'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
+import { journalDocPathForBinding, withAiOpsLock } from '@/app/bridge/op-journal'
 import { createAutosave } from '@/app/document/autosave'
 import {
   documentNameFromFigPath,
@@ -75,7 +76,12 @@ export function createDocumentSourceActions({
     getSavedVersion,
     hasWritableSource: () => !!getFileHandle() || !!getFilePath() || !!getStorageBinding(),
     saveCurrentDocument: async () => {
-      await writeFile(await buildFigFile())
+      // 序列化 + PUT + 清空 journal 全程持有该文档的互斥锁（withAiOpsLock），
+      // 与「应用 AI 操作 + 追加 journal」互斥，杜绝「清空晚于覆盖它的追加」竞态。
+      const docPath = journalDocPathForBinding(getStorageBinding())
+      await withAiOpsLock(docPath, async () => {
+        await writeFile(await buildFigFile())
+      })
     }
   })
 

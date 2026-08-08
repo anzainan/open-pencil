@@ -1,6 +1,7 @@
 import type { EditorState } from '@open-pencil/core/editor'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
+import { journalDocPathForBinding, withAiOpsLock } from '@/app/bridge/op-journal'
 import { resolveUniqueWorkspacePath, sanitizeWorkspaceFileName } from '@/app/bridge/workspace-name'
 import { downloadBlob } from '@/app/document/io/browser'
 import { documentNameFromFigPath } from '@/app/document/io/names'
@@ -51,7 +52,8 @@ export function createSaveActions({
     const storageBinding = getStorageBinding()
     const downloadName = getDownloadName()
     if (storageBinding || filePath || fileHandle) {
-      const wrote = await writeFile(await buildFigFile())
+      const docPath = journalDocPathForBinding(storageBinding)
+      const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildFigFile()))
       if (wrote && !storageBinding) setSourceIdentity({ handle: fileHandle, path: filePath })
     } else if (downloadName) {
       downloadBlob(new Uint8Array(await buildFigFile()), downloadName, 'application/octet-stream')
@@ -92,7 +94,7 @@ export function createSaveActions({
     setSourceIdentity({ handle: null, path: null })
     state.autosaveEnabled = true
     setSavedVersion(state.sceneVersion)
-    const wrote = await writeFile(data)
+    const wrote = await withAiOpsLock(path, () => writeFile(data))
     if (wrote) {
       startWatchingFile()
       void bridgeClient.reportRecent(path)
