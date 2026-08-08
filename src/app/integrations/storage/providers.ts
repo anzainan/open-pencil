@@ -1,5 +1,16 @@
+import { createBridgeStorageAdapter } from '@/app/bridge/storage-adapter'
+
 import { defineStorageProvider, StorageProviderRegistry } from './registry'
 import { createS3StorageAdapter } from './s3/adapter'
+
+export const BRIDGE_STORAGE_PROVIDER = defineStorageProvider({
+  id: 'bridge-fs',
+  label: 'Bridge filesystem',
+  description: 'Design files served by the local file-bridge (工作/设计/)',
+  preferenceFields: [],
+  credentialFields: [],
+  createAdapter: createBridgeStorageAdapter
+})
 
 export const S3_STORAGE_PROVIDER = defineStorageProvider({
   id: 's3-compatible',
@@ -17,4 +28,7 @@ export const S3_STORAGE_PROVIDER = defineStorageProvider({
   createAdapter: createS3StorageAdapter
 })
 
-export const storageProviderRegistry = new StorageProviderRegistry([S3_STORAGE_PROVIDER])
+export const storageProviderRegistry = new StorageProviderRegistry([
+  S3_STORAGE_PROVIDER,
+  BRIDGE_STORAGE_PROVIDER
+])

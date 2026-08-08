@@ -1,0 +1,45 @@
+# VCS
+.git
+.gitignore
+.gitattributes
+.lfsconfig
+
+# Dependencies & build outputs (dist is built inside Stage 1)
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.tsbuildinfo
+components.d.ts
+
+# Local env / secrets
+.env
+.env.*
+!*.env.example
+*.local
+
+# Logs
+*.log
+logs/
+
+# Editors, IDEs, OS metadata
+.DS_Store
+.idea/
+.vscode/
+*.sw?
+
+# Test & dev-server artifacts
+test-results/
+playwright-report/
+blob-report/
+storybook-static/
+.vite/
+.turbo/
+.wrangler/
+.worktrees/
+scratch/
+.opencode/
+
+# Tauri desktop artifacts (not used by web image)
+desktop/*
+!desktop/*.pub

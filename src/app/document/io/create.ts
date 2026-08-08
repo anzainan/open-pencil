@@ -28,11 +28,13 @@ export function createDocumentIOActions(
     state,
     getFilePath: sourceState.getFilePath,
     getFileHandle: sourceState.getFileHandle,
+    getStorageBinding: sourceState.getStorageBinding,
     setSavedVersion: sourceState.setSavedVersion
   })
   const { startWatchingFile, stopWatchingFile } = createFileWatcher({
     getFilePath: sourceState.getFilePath,
     getFileHandle: sourceState.getFileHandle,
+    getStorageBinding: sourceState.getStorageBinding,
     getLastWriteTime: sourceState.getLastWriteTime,
     reloadFromDisk: () => {
       void reloadFromDisk()

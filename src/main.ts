@@ -2,6 +2,7 @@ import { createHead } from '@unhead/vue/client'
 import { createApp } from 'vue'
 
 import './app.css'
+import { openFileFromQueryParam } from '@/app/bridge/open-from-param'
 import { preloadFonts } from '@/app/editor/fonts'
 import { IS_TAURI } from '@/constants'
 
@@ -11,6 +12,7 @@ import router from './router'
 preloadFonts()
 const head = createHead()
 createApp(App).use(router).use(head).mount('#app')
+openFileFromQueryParam()
 
 if (!IS_TAURI) {
   void import('virtual:pwa-register').then(({ registerSW }) => {

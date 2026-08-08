@@ -1,5 +1,6 @@
 import type { EditorState } from '@open-pencil/core/editor'
 
+import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
 import { persistStorageCanvasLocally } from '@/app/storage/sync/persist'
 import { isTauri } from '@/app/tauri/env'
@@ -27,6 +28,12 @@ export function createDocumentWriter({
     setLastWriteTime(Date.now())
     const storage = getStorageBinding()
     if (storage) {
+      if (storage.providerId === BRIDGE_PROVIDER_ID) {
+        await bridgeClient.putFile(storage.documentId, data)
+        setLastWriteTime(Date.now())
+        setSavedVersion(state.sceneVersion)
+        return true
+      }
       await persistStorageCanvasLocally({
         providerId: storage.providerId,
         canvasId: storage.documentId,

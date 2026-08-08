@@ -5,6 +5,7 @@ import { readFigFile } from '@open-pencil/core/io/formats/fig'
 import { computeAllLayouts } from '@open-pencil/core/layout'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
+import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { setOpenPencilStore } from '@/app/browser-bridge'
 import type { DocumentSourceIdentity } from '@/app/document/io/types'
 import { setActiveEditorStore } from '@/app/editor/active-store'
@@ -82,6 +83,10 @@ function activateTab(tab: Tab) {
   setActiveEditorStore(tab.store)
   triggerRef(tabsRef)
   setOpenPencilStore(tab.store)
+  const binding = tab.store.getStorageBinding()
+  if (binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId) {
+    void bridgeClient.reportActive(binding.documentId)
+  }
 }
 
 export function switchTab(tabId: string) {

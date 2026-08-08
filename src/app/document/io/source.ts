@@ -1,6 +1,7 @@
 import type { Editor, EditorState } from '@open-pencil/core/editor'
 import { exportFigFile } from '@open-pencil/core/io/formats/fig'
 
+import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { createAutosave } from '@/app/document/autosave'
 import {
   documentNameFromFigPath,
@@ -107,6 +108,11 @@ export function createDocumentSourceActions({
     state.documentName = documentName
     state.autosaveEnabled = true
     setSavedVersion(state.sceneVersion)
+    if (binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId) {
+      void bridgeClient.reportRecent(binding.documentId)
+      void bridgeClient.reportActive(binding.documentId)
+      void startWatchingFile()
+    }
   }
 
   function setPlannedFilePath(path: string) {

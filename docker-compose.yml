@@ -1,0 +1,32 @@
+# OpenPencil soft-router deployment (docs/deploy-plan.md §5.2)
+# Usage:
+#   docker compose up -d                              # pull from registry
+#   docker compose up -d --build                       # build locally (heavy web build, run on CI/strong machine)
+services:
+  openpencil:
+    image: ${OPENPENCIL_IMAGE:-ghcr.io/anzainan/open-pencil:web-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      # LAN 访问入口：http://192.168.100.1:8080（web 端 + 读接口；写接口带 BRIDGE_TOKEN）
+      - "8080:8080"
+      # AI（OpenClaw）专用写入口：仅本机 127.0.0.1:8081，不对 LAN 暴露（deploy-plan §5.4）
+      # 不需要时删掉本行；AI 脚本用 BRIDGE_URL=http://127.0.0.1:8081 直连
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - ${DESIGN_DIR:-/mnt/数据/工作/设计}:/data/design
+      - ${STATE_DIR:-/mnt/数据/.openpencil/state}:/data/state
+    environment:
+      BRIDGE_PORT: "8080"
+      DESIGN_ROOT: /data/design
+      STATE_DIR: /data/state
+      BRIDGE_TOKEN: ${BRIDGE_TOKEN:-changeme}
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:8080/api/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    init: true

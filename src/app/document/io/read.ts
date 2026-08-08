@@ -6,6 +6,7 @@ import { yieldToUI } from '@/app/document/io/browser'
 import { applyImportedDocument } from '@/app/document/io/imported-document'
 import { readReloadSource } from '@/app/document/io/reload-source'
 import { captureReloadState, restoreReloadState } from '@/app/document/io/reload-state'
+import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
 import { toast } from '@/app/shell/ui'
 
 type OpenDocumentState = EditorState & {
@@ -32,6 +33,7 @@ type ReloadActionsOptions = {
   state: ReloadDocumentState
   getFilePath: () => string | null
   getFileHandle: () => FileSystemFileHandle | null
+  getStorageBinding: () => StorageDocumentBinding | null
   setSavedVersion: (version: number) => void
 }
 
@@ -68,6 +70,7 @@ export function createReloadActions({
   state,
   getFilePath,
   getFileHandle,
+  getStorageBinding,
   setSavedVersion
 }: ReloadActionsOptions) {
   async function reloadFromDisk() {
@@ -78,7 +81,8 @@ export function createReloadActions({
     const imported = await readReloadSource({
       documentName: state.documentName,
       filePath,
-      fileHandle
+      fileHandle,
+      storageBinding: getStorageBinding()
     })
     if (!imported) return
     const pageId = imported.getNode(snapshot.pageId) ? snapshot.pageId : imported.getPages()[0]?.id

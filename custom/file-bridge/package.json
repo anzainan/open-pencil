@@ -1,0 +1,11 @@
+{
+  "name": "@open-pencil/file-bridge",
+  "version": "0.2.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "OpenPencil soft-router bridge: static hosting + design-file service (scan / CRUD / SSE events / active+recent state)",
+  "scripts": {
+    "start": "bun run index.ts"
+  }
+}
