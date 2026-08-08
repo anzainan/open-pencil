@@ -68,8 +68,6 @@ export class BridgeClient {
   readonly pollMs: number
   readonly recentWriteMs: number
 
-  private token: string | null = null
-  private designRoot: string | null = null
   private configPromise: Promise<{ token?: string | null; designRoot?: string } | null> | null = null
   private eventSource: EventSource | null = null
   private listeners = new Set<BridgeListener>()
@@ -89,8 +87,6 @@ export class BridgeClient {
         .then(async (response) => {
           if (!response.ok) return null
           const data = (await response.json()) as { token?: string | null; designRoot?: string }
-          this.token = data.token || null
-          this.designRoot = typeof data.designRoot === 'string' ? data.designRoot : null
           return data
         })
         .catch(() => null)
