@@ -8,6 +8,7 @@ import { documentNameFromFigPath } from '@/app/document/io/names'
 import { chooseBrowserFigSaveHandle, chooseTauriFigSavePath } from '@/app/document/io/save-targets'
 import type { DocumentSourceAccess } from '@/app/document/io/types'
 import { createDocumentWriter } from '@/app/document/io/write'
+import { toast } from '@/app/shell/ui'
 import { IS_TAURI } from '@/constants'
 
 type SaveDocumentState = EditorState & {
@@ -55,8 +56,10 @@ export function createSaveActions({
       const docPath = journalDocPathForBinding(storageBinding)
       const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildFigFile()))
       if (wrote && !storageBinding) setSourceIdentity({ handle: fileHandle, path: filePath })
+      if (wrote) toast.info('文件已保存')
     } else if (downloadName) {
       downloadBlob(new Uint8Array(await buildFigFile()), downloadName, 'application/octet-stream')
+      toast.info('文件已保存')
     } else {
       await saveUntitledToWorkspace()
     }
@@ -99,6 +102,7 @@ export function createSaveActions({
       startWatchingFile()
       void bridgeClient.reportRecent(path)
       void bridgeClient.reportActive(path)
+      toast.info('文件已保存')
     }
   }
 
