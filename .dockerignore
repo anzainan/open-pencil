@@ -41,5 +41,9 @@ scratch/
 .opencode/
 
 # Tauri desktop artifacts (not used by web image)
+# desktop/icons/ is the symlink target for public/favicon-*.png (upstream keeps
+# icons in sync via symlinks), so it must stay in the build context.
 desktop/*
 !desktop/*.pub
+!desktop/icons
+!desktop/icons/**
