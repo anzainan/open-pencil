@@ -169,6 +169,16 @@ function json(body: unknown, status = 200): Response {
   return Response.json(body, { status })
 }
 
+/** 推导 web 静态资源目录：显式配置（options/env）优先；默认从 file-bridge 目录向上兼容查找 dist。 */
+function resolveDistDir(explicit: string | undefined): string {
+  if (explicit) return explicit
+  const candidates = [join(import.meta.dir, '../dist'), join(import.meta.dir, '../../dist')]
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'index.html'))) return candidate
+  }
+  return candidates[0]
+}
+
 /** 从 file-bridge 目录向上找仓库根（含 packages/mcp/src/index.ts 的目录）。 */
 function resolveRepoRoot(fileBridgeDir: string): string {
   for (const candidate of [join(fileBridgeDir, '..', '..'), join(fileBridgeDir, '..')]) {
@@ -194,7 +204,7 @@ function checkAuth(request: Request, token: string): Response | null {
 }
 
 export function startServer(options: BridgeServerOptions) {
-  const distDir = options.distDir ?? process.env.DIST_DIR ?? join(import.meta.dir, '../dist')
+  const distDir = resolveDistDir(options.distDir ?? process.env.DIST_DIR)
   const designRoot = options.designRoot ?? process.env.DESIGN_ROOT ?? '/data/design'
   const stateDir = options.stateDir ?? process.env.STATE_DIR ?? '/data/state'
   const token = options.token ?? process.env.BRIDGE_TOKEN ?? ''
