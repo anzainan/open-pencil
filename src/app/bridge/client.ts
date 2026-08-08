@@ -44,6 +44,12 @@ export interface BridgeFileEvent {
 
 type BridgeListener = (event: BridgeFileEvent) => void
 
+/** SSE 事件 payload 的领域子集：仅消费 path/brand 字段。 */
+interface BridgeSsePayload {
+  path?: string
+  brand?: string
+}
+
 function encodeRelPath(path: string): string {
   return path
     .split('/')
@@ -207,11 +213,11 @@ export class BridgeClient {
         if (this.seenSeqs.size > 200) this.seenSeqs.clear()
         this.seenSeqs.add(seq)
       }
-      let data: Record<string, unknown> = {}
+      let data: BridgeSsePayload = {}
       try {
-        data = JSON.parse(event.data) as Record<string, unknown>
-      } catch {
-        // 忽略无法解析的负载
+        data = JSON.parse(event.data)
+      } catch (error) {
+        console.warn('[bridge] failed to parse event payload', error)
       }
       const type = event.type as BridgeFileEvent['type']
       const path = typeof data.path === 'string' ? data.path : ''
@@ -238,7 +244,7 @@ export class BridgeClient {
   }
 
   private dispatch(event: BridgeFileEvent): void {
-    for (const listener of [...this.listeners]) {
+    for (const listener of this.listeners) {
       try {
         listener(event)
       } catch (error) {
@@ -265,6 +271,7 @@ export class BridgeClient {
     let lastMtime = ''
     void this.getFileMeta(path).then((meta) => {
       lastMtime = meta?.mtime ?? ''
+      return lastMtime
     })
 
     const handleEvent = (event: BridgeFileEvent): void => {
@@ -276,23 +283,29 @@ export class BridgeClient {
     }
     const unsubscribe = this.subscribe(handleEvent)
 
+    // SSE 断线轮询是 BridgeClient 自有的 service-owned 定时器（AGENTS.md：
+    // 此类重连/兜底定时器可手写 interval，client.ts 保持零外部依赖可直接单测），
+    // 故刻意不使用 useIntervalFn。
     let pollTimer: ReturnType<typeof setInterval> | null = null
     const stopPoll = (): void => {
       if (pollTimer) {
+        // oxlint-disable-next-line open-pencil/prefer-vueuse-intervals
         clearInterval(pollTimer)
         pollTimer = null
       }
     }
     const startPoll = (): void => {
       if (pollTimer) return
+      // oxlint-disable-next-line open-pencil/prefer-vueuse-intervals
       pollTimer = setInterval(() => {
         if (this.connected) return
         void this.getFileMeta(path).then((meta) => {
           const mtime = meta?.mtime ?? ''
-          if (!mtime || mtime === lastMtime) return
+          if (!mtime || mtime === lastMtime) return mtime
           lastMtime = mtime
-          if (Date.now() - getLastWriteTime() < this.recentWriteMs) return
+          if (Date.now() - getLastWriteTime() < this.recentWriteMs) return mtime
           reloadFromDisk()
+          return mtime
         })
       }, this.pollMs)
     }

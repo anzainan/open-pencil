@@ -4,7 +4,7 @@ import { openStorageDocumentInNewTab } from '@/app/tabs'
 import { IS_BROWSER } from '@/constants'
 
 export function openFileFromQueryParam(): void {
-  if (!IS_BROWSER || typeof window === 'undefined') return
+  if (!IS_BROWSER) return
 
   const params = new URLSearchParams(window.location.search)
   const relPath = params.get('file')

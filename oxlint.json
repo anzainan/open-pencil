@@ -416,6 +416,14 @@
   "overrides": [
     {
       "files": [
+        "src/app/browser-bridge.ts"
+      ],
+      "rules": {
+        "open-pencil/no-sibling-domain-prefixed-files": "off"
+      }
+    },
+    {
+      "files": [
         "src/**/*.ts",
         "packages/*/src/**/*.ts"
       ],
