@@ -108,7 +108,7 @@ export function createDocumentSourceActions({
     state.documentName = documentName
     state.autosaveEnabled = true
     setSavedVersion(state.sceneVersion)
-    if (binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId) {
+    if (binding.providerId === BRIDGE_PROVIDER_ID && binding.documentId) {
       void bridgeClient.reportRecent(binding.documentId)
       void bridgeClient.reportActive(binding.documentId)
       void startWatchingFile()
