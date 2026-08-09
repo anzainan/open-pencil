@@ -336,6 +336,16 @@ export class FontManager {
     return this.loadedFamilies.get(`${family}|${style}`) ?? null
   }
 
+  /** 已加载字体家族名（含工作区 fonts/ 注册的字体），用于画布 UI 标签的中文兜底 typeface。 */
+  loadedFamilyNames(): string[] {
+    const names = new Set<string>()
+    for (const key of this.loadedFamilies.keys()) {
+      const sep = key.indexOf('|')
+      if (sep > 0) names.add(key.slice(0, sep))
+    }
+    return [...names].sort((a, b) => a.localeCompare(b))
+  }
+
   renderFamily(family: string, _style: string): string {
     // CanvasKit can shape metrics but paint no glyphs for some CJK/Arabic faces registered under a
     // synthetic alias. Keep every shard under the font's source family; character-aware remote

@@ -14,7 +14,7 @@ import {
   COMPONENT_LABEL_ICON_GAP
 } from '#core/constants'
 
-import { ellipsizeLabelText } from './text'
+import { ellipsizeLabelText, pickLabelFont } from './text'
 
 export function drawSectionTitles(r: SkiaRenderer, canvas: Canvas, graph: SceneGraph): void {
   if (!r.sectionTitleFont) return
@@ -22,12 +22,13 @@ export function drawSectionTitles(r: SkiaRenderer, canvas: Canvas, graph: SceneG
   const sections = r.labelCache.getSections(graph, r.worldViewport)
   if (sections.length === 0) return
 
-  const font = r.sectionTitleFont
+  const baseFont = r.sectionTitleFont
   const ellipsis = '…'
-  const ellipsisGlyphs = font.getGlyphIDs(ellipsis)
-  const ellipsisWidth = font.getGlyphWidths(ellipsisGlyphs)[0]
+  const ellipsisGlyphs = baseFont.getGlyphIDs(ellipsis)
+  const ellipsisWidth = baseFont.getGlyphWidths(ellipsisGlyphs)[0]
 
   for (const { node, absX, absY, nested } of sections) {
+    const font = pickLabelFont(baseFont, r.cjkSectionTitleFont, node.name)
     drawSectionTitle(r, canvas, font, node, graph, absX, absY, nested, ellipsis, ellipsisWidth)
   }
 }
@@ -107,7 +108,7 @@ export function drawComponentLabels(r: SkiaRenderer, canvas: Canvas, graph: Scen
   const components = r.labelCache.getComponents(graph, r.worldViewport)
   if (components.length === 0) return
 
-  const font = r.componentLabelFont
+  const baseFont = r.componentLabelFont
   const compColor = r.compColor()
   const iconS = COMPONENT_LABEL_ICON_SIZE
 
@@ -123,6 +124,7 @@ export function drawComponentLabels(r: SkiaRenderer, canvas: Canvas, graph: Scen
       labelY = screenY - COMPONENT_LABEL_GAP
     }
 
+    const font = pickLabelFont(baseFont, r.cjkComponentLabelFont, node.name)
     const maxTextWidth = node.width * r.zoom - iconS - COMPONENT_LABEL_ICON_GAP
     const displayText = ellipsizeLabelText(font, node.name, maxTextWidth)
     if (!displayText) continue

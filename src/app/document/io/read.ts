@@ -6,6 +6,7 @@ import { yieldToUI } from '@/app/document/io/browser'
 import { applyImportedDocument } from '@/app/document/io/imported-document'
 import { readReloadSource } from '@/app/document/io/reload-source'
 import { captureReloadState, restoreReloadState } from '@/app/document/io/reload-state'
+import { getPendingAiOps, journalDocPathForBinding, withAiOpsLock } from '@/app/bridge/op-journal'
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
 import { toast } from '@/app/shell/ui'
 
@@ -74,15 +75,32 @@ export function createReloadActions({
   setSavedVersion
 }: ReloadActionsOptions) {
   async function reloadFromDisk() {
+    const storageBinding = getStorageBinding()
+    const docPath = journalDocPathForBinding(storageBinding)
+    // 重建期间与 AI 操作共用同一文档级 FIFO 锁：AI 操作在途时等待其完成，
+    // 重建期间新到的 AI 操作也会排队，杜绝「重建 + 操作」交错导致 id 错乱。
+    await withAiOpsLock(docPath, async () => {
+      // 有未落盘的 AI 操作（journal 非空）时跳过磁盘重载——磁盘是旧状态，
+      // 重载会覆盖内存里更新的 AI 结果（SKILL §4.13 的文档重建根因）。
+      if (docPath) {
+        const pending = await getPendingAiOps(docPath)
+        if (pending.length > 0) return
+      }
+      await reloadFromDiskLocked()
+    })
+  }
+
+  async function reloadFromDiskLocked() {
     const snapshot = captureReloadState(state)
     const filePath = getFilePath()
     const fileHandle = getFileHandle()
+    const storageBinding = getStorageBinding()
 
     const imported = await readReloadSource({
       documentName: state.documentName,
       filePath,
       fileHandle,
-      storageBinding: getStorageBinding()
+      storageBinding
     })
     if (!imported) return
     const pageId = imported.getNode(snapshot.pageId) ? snapshot.pageId : imported.getPages()[0]?.id
@@ -93,6 +111,7 @@ export function createReloadActions({
     restoreReloadState(editor, state, snapshot)
     editor.requestRender()
     setSavedVersion(state.sceneVersion)
+    toast.info('文档已从磁盘重新加载，节点 id 可能已更新')
   }
 
   return { reloadFromDisk }

@@ -44,9 +44,9 @@
   --color-muted: #888888;
   --color-input: #1e1e1e;
   --color-component: #9747ff;
-  --color-warning-bg: rgb(245 158 11 / 0.1);
-  --color-warning-border: rgb(245 158 11 / 0.3);
-  --color-warning-text: #fde68a;
+  --color-warning-bg: rgb(245 158 11 / 0.12);
+  --color-warning-border: rgb(245 158 11 / 0.45);
+  --color-warning-text: #fbbf24;
   --color-warning-action: #fcd34d;
   --color-success: #4ade80;
   --color-error: #f87171;

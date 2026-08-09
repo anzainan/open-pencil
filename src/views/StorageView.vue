@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@open-pencil/vue'
 
@@ -15,6 +15,7 @@ import {
 import { openSettingsDialog, settingsDialogOpen } from '@/app/settings/dialog'
 import type { CredentialStatus } from '@/app/settings/credentials/types'
 import { loadWorkspaceFonts } from '@/app/editor/fonts'
+import { bridgeClient, type BridgeFileEvent } from '@/app/bridge/client'
 import { reconcileStorageDocuments } from '@/app/storage/reconcile'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
 import { getLocalCanvasStore } from '@/app/storage/local-store'
@@ -110,8 +111,32 @@ watch(settingsDialogOpen, (open, wasOpen) => {
   if (wasOpen && !open) void refresh()
 })
 
+let sseUnsubscribe: (() => void) | null = null
+let sseRefreshTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 工作区文件变化（NAS 侧增删）实时刷新列表：只监听 bridge provider 的文件事件。 */
+function onBridgeFileEvent(event: BridgeFileEvent): void {
+  if (activeStorageProviderID.value !== BRIDGE_STORAGE_PROVIDER.id) return
+  if (event.type !== 'file.created' && event.type !== 'file.deleted') return
+  if (sseRefreshTimer) return
+  sseRefreshTimer = setTimeout(() => {
+    sseRefreshTimer = null
+    void refresh()
+  }, 200)
+}
+
 onMounted(() => {
+  sseUnsubscribe = bridgeClient.subscribe(onBridgeFileEvent)
   void refresh()
+})
+
+onUnmounted(() => {
+  sseUnsubscribe?.()
+  sseUnsubscribe = null
+  if (sseRefreshTimer) {
+    clearTimeout(sseRefreshTimer)
+    sseRefreshTimer = null
+  }
 })
 </script>
 

@@ -7,6 +7,7 @@ import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import { PEN_HANDLE_RADIUS, PEN_VERTEX_RADIUS, PEN_CLOSE_RADIUS_BOOST } from '#core/constants'
 
+import { pickLabelFont } from './labels/text'
 import type { SkiaRenderer, RenderOverlays } from './renderer'
 
 type ToScreenFn = (x: number, y: number) => Vector
@@ -266,8 +267,9 @@ export function drawRemoteCursors(
     path.delete()
 
     if (cursor.name) {
-      const font = r.labelFont
-      if (font) {
+      const primaryFont = r.labelFont
+      if (primaryFont) {
+        const font = pickLabelFont(primaryFont, r.cjkLabelFont, cursor.name)
         font.setSize(LABEL_FONT_SIZE)
         const labelX = screenX + LABEL_OFFSET_X
         const labelY = screenY + LABEL_OFFSET_Y

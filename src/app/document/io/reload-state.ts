@@ -24,7 +24,10 @@ export function restoreReloadState(
   snapshot: ReloadStateSnapshot
 ) {
   editor.clearSelection()
-  if (editor.graph.getNode(snapshot.pageId)) {
+  // 只有快照页仍是真实 PAGE（CANVAS）才恢复指针，否则回退第一个页面，
+  // 防止重建后 currentPageId 指向非 PAGE 节点（P0-3）。
+  const snapNode = editor.graph.getNode(snapshot.pageId)
+  if (snapNode?.type === 'CANVAS') {
     state.currentPageId = snapshot.pageId
   } else {
     state.currentPageId = editor.graph.getPages()[0]?.id ?? editor.graph.rootId

@@ -4,6 +4,7 @@ import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import type { RenderOverlays, SkiaRenderer } from '#core/canvas/renderer'
+import { pickLabelFont } from '#core/canvas/labels/text'
 import {
   AUTO_LAYOUT_HOVER_BLUE,
   AUTO_LAYOUT_HOVER_BLUE_FILL,
@@ -105,6 +106,7 @@ function drawStripedRect(
 
 function drawValuePill(r: SkiaRenderer, canvas: Canvas, text: string, x: number, y: number) {
   if (!r.labelFont) return
+  const font = pickLabelFont(r.labelFont, r.cjkLabelFont, text)
   const width = Math.max(24, text.length * 8 + AUTO_LAYOUT_HOVER_VALUE_PILL_PADDING_X * 2)
   const height = AUTO_LAYOUT_HOVER_VALUE_PILL_HEIGHT
   const rect = r.ck.RRectXY(
@@ -120,7 +122,7 @@ function drawValuePill(r: SkiaRenderer, canvas: Canvas, text: string, x: number,
     x - width / 2 + AUTO_LAYOUT_HOVER_VALUE_PILL_PADDING_X,
     y + 5,
     r.auxFill,
-    r.labelFont
+    font
   )
 }
 

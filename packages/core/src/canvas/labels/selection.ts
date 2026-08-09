@@ -14,7 +14,7 @@ import {
   SIZE_PILL_TEXT_OFFSET_Y
 } from '#core/constants'
 
-import { ellipsizeLabelText } from './text'
+import { ellipsizeLabelText, pickLabelFont } from './text'
 
 function getOverlayRotation(node: SceneNode, overlays?: RenderOverlays): number {
   return overlays?.rotationPreview?.nodeId === node.id
@@ -78,13 +78,14 @@ function drawSingleFrameTitle(
 
   r.auxFill.setColor(r.selColor())
 
-  const displayText = ellipsizeLabelText(labelFont, node.name, node.width * r.zoom)
+  const drawFont = pickLabelFont(labelFont, r.cjkLabelFont, node.name)
+  const displayText = ellipsizeLabelText(drawFont, node.name, node.width * r.zoom)
   if (!displayText) return
 
   canvas.save()
   canvas.translate(origin[0] * r.zoom + r.panX, origin[1] * r.zoom + r.panY)
   if (overlayRotation !== 0) canvas.rotate(overlayRotation, 0, 0)
-  canvas.drawText(displayText, 0, -LABEL_OFFSET_Y, r.auxFill, labelFont)
+  canvas.drawText(displayText, 0, -LABEL_OFFSET_Y, r.auxFill, drawFont)
   canvas.restore()
 }
 
@@ -105,7 +106,8 @@ function drawSizePill(
   y: number,
   color: ReturnType<SkiaRenderer['selColor']>
 ): void {
-  const pillW = measureTextWidth(sizeFont, text) + SIZE_PILL_PADDING_X * 2
+  const drawFont = pickLabelFont(sizeFont, r.cjkSizeFont, text)
+  const pillW = measureTextWidth(drawFont, text) + SIZE_PILL_PADDING_X * 2
   const pillX = x - pillW / 2
   const pillY = y + SIZE_PILL_PADDING_Y
   r.auxFill.setColor(color)
@@ -122,7 +124,7 @@ function drawSizePill(
     pillX + SIZE_PILL_PADDING_X,
     pillY + SIZE_PILL_TEXT_OFFSET_Y,
     r.auxFill,
-    sizeFont
+    drawFont
   )
 }
 

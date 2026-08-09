@@ -75,6 +75,10 @@ components.d.ts
 # Agent scratch space (reviews, plans, test artifacts)
 scratch/
 
+# Crash dumps (core dumps from process crashes can contain memory fragments)
+core
+core.*
+
 # OpenCode
 .opencode/
 src/app/bridge/*.js

@@ -1,4 +1,5 @@
-import { statSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { renameSync, rmSync, statSync } from 'node:fs'
 
 import { scanDesignRoot, fileMeta } from './lib/design'
 import { isSafeRelativePath, resolveDesignPath } from './lib/paths'
@@ -189,7 +190,19 @@ async function handleMessage(msg: JsonRpcRequest, deps: McpDeps, authHeader: str
             if (!full) return rpcResult(id, textContent('ERROR: unsafe path'))
             try {
               const bytes = Buffer.from(data, 'base64')
-              await Bun.write(full, bytes)
+              // 原子写盘：临时文件 + rename，避免写坏已存在的设计文件。
+              const tmp = `${full}.tmp-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}`
+              try {
+                await Bun.write(tmp, bytes)
+                renameSync(tmp, full)
+              } catch (writeError) {
+                try {
+                  rmSync(tmp, { force: true })
+                } catch (cleanupError) {
+                  console.warn('[file-bridge] temp cleanup failed', cleanupError)
+                }
+                throw writeError
+              }
               const meta = fileMeta(deps.designRoot, rel)
               return rpcResult(id, textContent(JSON.stringify({ path: rel, size: meta?.size ?? bytes.length })))
             } catch (error) {

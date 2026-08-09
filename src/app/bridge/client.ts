@@ -74,6 +74,11 @@ export class BridgeClient {
   private connected = false
   private seenSeqs = new Set<number>()
   private lastHandledAt = new Map<string, number>()
+  /** 本会话发起的写（PUT）目标路径：在途 + 刚完成（recentWriteMs 内）时抑制 reload 自刷。 */
+  private selfWriteInFlight = new Set<string>()
+  private selfWriteFinishedAt = new Map<string, number>()
+  /** 同一路径的 PUT 串行队列：杜绝同一浏览器内 autosave/手动/兜底 PUT 并发覆写。 */
+  private putQueues = new Map<string, Promise<void>>()
 
   constructor(options?: { apiBase?: string; pollMs?: number; recentWriteMs?: number }) {
     this.apiBase = options?.apiBase ?? DEFAULT_API_BASE
@@ -129,18 +134,43 @@ export class BridgeClient {
   }
 
   async putFile(path: string, bytes: Uint8Array): Promise<void> {
+    // 同一路径的写串行化（autosave / 手动保存 / MCP save_file / 兜底 PUT 共用）。
+    // 避免多个写路径同时 PUT 同一文件导致服务端交错写坏（配合服务端原子写+队列）。
+    const previous = this.putQueues.get(path) ?? Promise.resolve()
+    const run = previous
+      .catch(() => undefined)
+      .then(() => this.putFileNow(path, bytes))
+    const tail = run.then(
+      () => undefined,
+      () => undefined
+    )
+    this.putQueues.set(path, tail)
+    void tail.then(() => {
+      if (this.putQueues.get(path) === tail) this.putQueues.delete(path)
+      return undefined
+    })
+    await run
+  }
+
+  private async putFileNow(path: string, bytes: Uint8Array): Promise<void> {
     // Exact ArrayBuffer so fetch/UA can set Content-Length reliably.
     const payload = bytes.buffer.slice(
       bytes.byteOffset,
       bytes.byteOffset + bytes.byteLength
     ) as ArrayBuffer
-    const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/octet-stream', ...(await this.authHeaders()) },
-      body: payload
-    })
-    if (!response.ok) {
-      throw new Error(`Bridge write failed (${response.status}): ${path}`)
+    this.selfWriteInFlight.add(path)
+    try {
+      const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/octet-stream', ...(await this.authHeaders()) },
+        body: payload
+      })
+      if (!response.ok) {
+        throw new Error(`Bridge write failed (${response.status}): ${path}`)
+      }
+    } finally {
+      this.selfWriteInFlight.delete(path)
+      this.selfWriteFinishedAt.set(path, Date.now())
     }
   }
 
@@ -287,6 +317,13 @@ export class BridgeClient {
     return false
   }
 
+  /** 本会话自己的写是否「在途或刚完成（recentWriteMs 内）」。是则跳过文件变化重载。 */
+  private isSelfWrite(path: string): boolean {
+    if (this.selfWriteInFlight.has(path)) return true
+    const finishedAt = this.selfWriteFinishedAt.get(path) ?? 0
+    return Date.now() - finishedAt < this.recentWriteMs
+  }
+
   /**
    * 订阅单个文档的外部变化并触发重载：SSE 为主；SSE 断线时回退到
    * mtime 轮询。getLastWriteTime 用于「本会话自己写过则忽略」防自刷。
@@ -302,6 +339,8 @@ export class BridgeClient {
     const handleEvent = (event: BridgeFileEvent): void => {
       if (event.type !== 'file.changed' && event.type !== 'file.created') return
       if (event.path !== path) return
+      // 本会话自己的写（在途或刚完成）不回读重载，避免 AI 操作过程中文档被重建。
+      if (this.isSelfWrite(path)) return
       if (Date.now() - getLastWriteTime() < this.recentWriteMs) return
       if (this.isThrottled(path)) return
       reloadFromDisk()
@@ -328,6 +367,7 @@ export class BridgeClient {
           const mtime = meta?.mtime ?? ''
           if (!mtime || mtime === lastMtime) return mtime
           lastMtime = mtime
+          if (this.isSelfWrite(path)) return mtime
           if (Date.now() - getLastWriteTime() < this.recentWriteMs) return mtime
           reloadFromDisk()
           return mtime

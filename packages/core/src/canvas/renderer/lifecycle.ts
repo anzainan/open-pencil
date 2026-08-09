@@ -10,6 +10,11 @@ function clearRetainedSceneState(r: SkiaRenderer): void {
   r.sceneBackingBuild = null
 }
 
+/** 释放一批可空 CanvasKit 对象（可选链 delete 会计入复杂度，抽到 helper 里）。 */
+function deleteAll(fonts: Array<{ delete(): void } | null | undefined>): void {
+  for (const font of fonts) font?.delete()
+}
+
 export function destroyRenderer(r: SkiaRenderer): void {
   if (r.destroyed) return
   r.destroyed = true
@@ -36,12 +41,19 @@ export function destroyRenderer(r: SkiaRenderer): void {
   r.auxFill.delete()
   r.auxStroke.delete()
   r.opacityPaint.delete()
-  r.textFont?.delete()
-  r.labelFont?.delete()
-  r.sizeFont?.delete()
-  r.sectionTitleFont?.delete()
-  r.componentLabelFont?.delete()
-  r.fontMgr?.delete()
+  deleteAll([
+    r.textFont,
+    r.labelFont,
+    r.sizeFont,
+    r.sectionTitleFont,
+    r.componentLabelFont,
+    r.cjkTextFont,
+    r.cjkLabelFont,
+    r.cjkSizeFont,
+    r.cjkSectionTitleFont,
+    r.cjkComponentLabelFont,
+    r.fontMgr
+  ])
   const fontProvider = r.fontProvider
   fontProvider?.delete()
   r.fontProvider = null

@@ -83,6 +83,12 @@ export class SkiaRenderer {
   sizeFont: Font | null = null
   sectionTitleFont: Font | null = null
   componentLabelFont: Font | null = null
+  /** CJK 兜底字体（思源黑体/得意黑等已注册字体的 typeface），标签缺字形时替换使用。 */
+  cjkTextFont: Font | null = null
+  cjkLabelFont: Font | null = null
+  cjkSizeFont: Font | null = null
+  cjkSectionTitleFont: Font | null = null
+  cjkComponentLabelFont: Font | null = null
   fontMgr: FontMgr | null = null
   fontProvider: TypefaceFontProvider | null = null
   fontsLoaded = false
@@ -427,6 +433,11 @@ export class SkiaRenderer {
 
   async loadFonts(onFallbackFontsLoaded?: () => void): Promise<void> {
     await RendererFonts.loadFonts(this, onFallbackFontsLoaded)
+  }
+
+  /** 工作区字体加载完成后重建 CJK 标签字体（loadFonts 早于工作区字体就绪时兜底）。 */
+  async refreshCjkLabelFonts(): Promise<void> {
+    await RendererFonts.refreshCjkLabelFonts(this)
   }
 
   syncFontGeneration(): void {

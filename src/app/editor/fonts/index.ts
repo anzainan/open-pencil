@@ -24,6 +24,7 @@ import {
   workspaceFontFamilies
 } from '@/app/editor/fonts/workspace'
 import { toast } from '@/app/shell/ui'
+import { getActiveEditorStoreOrNull } from '@/app/editor/active-store'
 import { isTauri } from '@/app/tauri/env'
 import { tauriFetch } from '@/app/tauri/http'
 
@@ -115,7 +116,18 @@ let workspaceFontsLoaded = false
 /** 扫描并注册工作区 fonts/ 字体（成功一次后不再重复扫描；bridge 不可达时下次重试）。 */
 export async function ensureWorkspaceFonts(): Promise<void> {
   if (workspaceFontsLoaded) return
-  if (await loadWorkspaceFonts()) workspaceFontsLoaded = true
+  if (await loadWorkspaceFonts()) {
+    workspaceFontsLoaded = true
+    // 工作区字体（思源黑体/得意黑）晚于画布初始化到达时，补建画布 UI 标签的 CJK 字体。
+    refreshCanvasCjkLabelFonts()
+  }
+}
+
+/** 让活动画布 renderer 重建 CJK 标签字体（幂等，无 CJK 字体时静默）。 */
+function refreshCanvasCjkLabelFonts(): void {
+  const renderer = getActiveEditorStoreOrNull()?.renderer
+  if (!renderer) return
+  void renderer.refreshCjkLabelFonts().catch(() => undefined)
 }
 
 export function localFontAccessState(): LocalFontAccessState {

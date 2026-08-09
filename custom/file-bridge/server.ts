@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { dirname, join, resolve, sep } from 'node:path'
 
 import { fileMeta, scanDesignRoot, scanFontsRoot } from './lib/design'
@@ -147,6 +148,41 @@ async function writeRequestBody(full: string, request: Request): Promise<void> {
   }
 }
 
+/** 原子写盘：先写同目录临时文件，再 rename 覆盖目标。中途失败/并发时目标文件始终完整。 */
+async function writeFileAtomic(full: string, request: Request): Promise<void> {
+  const tmp = `${full}.tmp-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}`
+  try {
+    await writeRequestBody(tmp, request)
+    renameSync(tmp, full)
+  } catch (error) {
+    try {
+      rmSync(tmp, { force: true })
+    } catch (cleanupError) {
+      console.warn('[file-bridge] temp cleanup failed', cleanupError)
+    }
+    throw error
+  }
+}
+
+/** 每个目标文件一把 FIFO 写锁：并发 PUT 串行化，杜绝交错写坏文件。 */
+const writeQueues = new Map<string, Promise<unknown>>()
+
+function withWriteQueue<T>(full: string, fn: () => Promise<T>): Promise<T> {
+  const key = full
+  const previous = writeQueues.get(key) ?? Promise.resolve()
+  const run = previous.catch(() => undefined).then(fn)
+  const tail = run.then(
+    () => undefined,
+    () => undefined
+  )
+  writeQueues.set(key, tail)
+  void tail.then(() => {
+    if (writeQueues.get(key) === tail) writeQueues.delete(key)
+    return undefined
+  })
+  return run
+}
+
 function decodeRelPath(raw: string): string | null {
   try {
     return raw
@@ -281,7 +317,7 @@ export function startServer(options: BridgeServerOptions) {
 
     try {
       mkdirSync(dirname(full), { recursive: true })
-      await writeRequestBody(full, request)
+      await withWriteQueue(full, () => writeFileAtomic(full, request))
     } catch (error) {
       return json({ ok: false, error: `write failed: ${String(error)}` }, 500)
     }
@@ -296,7 +332,7 @@ export function startServer(options: BridgeServerOptions) {
     }
     try {
       mkdirSync(dirname(full), { recursive: true })
-      await writeRequestBody(full, request)
+      await withWriteQueue(full, () => writeFileAtomic(full, request))
     } catch (error) {
       return json({ ok: false, error: `write failed: ${String(error)}` }, 500)
     }

@@ -27,3 +27,26 @@ export function ellipsizeLabelText(font: Font, text: string, maxWidth: number): 
   }
   return text.slice(0, end) + ellipsis
 }
+
+/** 文本在 `font` 里是否有缺失字形（glyph id 为 0 = 无此字形，如 Inter 缺中文）。 */
+export function fontMissingGlyphs(font: Font, text: string): boolean {
+  if (!text) return false
+  const glyphIds = font.getGlyphIDs(text)
+  for (const id of glyphIds) {
+    if (id === 0) return true
+  }
+  return false
+}
+
+/**
+ * 选择绘制标签的字体：主字体（Inter）缺字形（如中文）且存在 CJK 兜底字体时，
+ * 改用 CJK 变体；否则保持主字体（西文样式不退化）。
+ */
+export function pickLabelFont(
+  primary: Font,
+  cjk: Font | null | undefined,
+  text: string
+): Font {
+  if (cjk && fontMissingGlyphs(primary, text)) return cjk
+  return primary
+}

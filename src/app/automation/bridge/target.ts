@@ -30,6 +30,14 @@ export function stripAutomationTargetArgs(args: UnknownRecord): UnknownRecord {
   return rest
 }
 
+/** 取当前文档「有效」的页面 id：currentPageId 指向 CANVAS 才用，否则回退第一个页面。 */
+export function effectiveCurrentPageId(store: EditorStore): string {
+  const current = store.state.currentPageId
+  const node = current ? store.graph.getNode(current) : undefined
+  if (node?.type === 'CANVAS') return current
+  return store.graph.getPages()[0]?.id ?? store.graph.rootId
+}
+
 export function targetToResult(target: AutomationTarget): AutomationTargetResult {
   return {
     documentId: target.documentId,
@@ -55,14 +63,15 @@ export function listAutomationDocuments(activeStore: EditorStore): AutomationDoc
   const activeTab = getTabForStore(activeStore)
   return getTabsSnapshot().map((tab) => {
     const pages = tab.store.graph.getPages().map((page) => ({ id: page.id, name: page.name }))
-    const currentPage = tab.store.graph.getNode(tab.store.state.currentPageId)
+    const currentPageId = effectiveCurrentPageId(tab.store)
+    const currentPage = tab.store.graph.getNode(currentPageId)
     const path = tab.store.getDocumentFilePath()
     return {
       id: tab.id,
       name: tab.store.state.documentName,
       ...(path ? { path } : {}),
       active: tab.id === activeTab?.id,
-      current_page_id: tab.store.state.currentPageId,
+      current_page_id: currentPageId,
       current_page_name: currentPage?.name ?? '',
       pages
     }
@@ -88,7 +97,7 @@ export function resolveAutomationTarget(
   }
 
   const requestedPageId = readString(args?.page_id)
-  const pageId = requestedPageId ?? tab.store.state.currentPageId
+  const pageId = requestedPageId ?? effectiveCurrentPageId(tab.store)
   const page = tab.store.graph.getNode(pageId)
   if (page?.type !== 'CANVAS') {
     throw new Error(`Page "${pageId}" not found in document "${tab.id}"`)

@@ -102,10 +102,66 @@ export async function loadFonts(
     r.fontMgr = r.ck.FontMgr.FromData(fontData) ?? null
   }
 
+  await loadCjkLabelFonts(r)
+
   r.fontsLoaded = true
   syncFontGeneration(r)
   r.invalidateAllPictures()
 }
+
+/** 重建 CJK 标签字体（工作区字体晚到/刷新时用）。幂等，无 CJK 字体时静默保持 Inter。 */
+export async function refreshCjkLabelFonts(r: SkiaRenderer): Promise<void> {
+  if (r.isDestroyed() || !r.fontProvider) return
+  await loadCjkLabelFonts(r)
+  syncFontGeneration(r)
+  r.invalidateAllPictures()
+}
+
+/**
+ * 为画布 UI 标签创建 CJK 兜底字体：从 fontManager 已注册（含工作区 fonts/）的字体里
+ * 找一个覆盖中文的 typeface，创建与西文标签字体同尺寸的 CJK 变体。找不到时静默跳过，
+ * 标签绘制用缺字形检测在 Inter 与 CJK 变体间切换（见 canvas/labels/text.ts）。
+ */
+async function loadCjkLabelFonts(r: SkiaRenderer): Promise<void> {
+  const typeface = await resolveCjkLabelTypeface(r)
+  if (r.isDestroyed() || !typeface) return
+  r.cjkTextFont?.delete()
+  r.cjkLabelFont?.delete()
+  r.cjkSizeFont?.delete()
+  r.cjkSectionTitleFont?.delete()
+  r.cjkComponentLabelFont?.delete()
+  r.cjkTextFont = new r.ck.Font(typeface, DEFAULT_FONT_SIZE)
+  r.cjkLabelFont = new r.ck.Font(typeface, LABEL_FONT_SIZE)
+  r.cjkSizeFont = new r.ck.Font(typeface, SIZE_FONT_SIZE)
+  r.cjkSectionTitleFont = new r.ck.Font(typeface, SECTION_TITLE_FONT_SIZE)
+  r.cjkComponentLabelFont = new r.ck.Font(typeface, COMPONENT_LABEL_FONT_SIZE)
+}
+
+/** 取第一个能覆盖中文字形的已注册 typeface；无则 null（保持现状 Inter 单字体）。 */
+async function resolveCjkLabelTypeface(r: SkiaRenderer) {
+  const families = new Set<string>([
+    ...fontManager.getCJKFallbackFamilies(),
+    ...fontManager.loadedFamilyNames()
+  ])
+  // 工作区 fonts/ 是首选中文来源（用户已放思源黑体/得意黑），中文字形检测兜底其他族。
+  // 只用「已加载」的字体数据，避免 loadFont 触发在线字体拉取拖慢首帧。
+  for (const family of families) {
+    const data = fontManager.loadedData(family, 'Regular')
+    if (r.isDestroyed() || !data) continue
+    const typeface = r.ck.Typeface.MakeFreeTypeFaceFromData(data)
+    if (!typeface) continue
+    const probe = new r.ck.Font(typeface, LABEL_FONT_SIZE)
+    const glyphIds = probe.getGlyphIDs(CJK_PROBE_TEXT)
+    probe.delete()
+    const missing = glyphIds.some((id) => id === 0)
+    if (!missing) return typeface
+    typeface.delete()
+  }
+  return null
+}
+
+/** 用于检测 typeface 是否覆盖中文的最小探测串（页面/登录/中文）。 */
+const CJK_PROBE_TEXT = '页面中文'
 
 export async function prepareForExport(
   r: SkiaRenderer,

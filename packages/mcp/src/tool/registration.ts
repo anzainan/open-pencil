@@ -233,4 +233,120 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
     },
     async () => ok({ prompt: CODEGEN_PROMPT })
   )
+
+  register(
+    'batch',
+    {
+      description:
+        'Run multiple tools sequentially in one session. Each step may reference the previous step result id via "$1"/"$2"... in string args (1-based step number). Returns ordered results including ids. Steps that fail are reported individually and do not abort later steps.',
+      inputSchema: z.object({
+        steps: z
+          .array(
+            z.object({
+              tool: z.string().describe('Tool name, e.g. create_shape'),
+              args: z
+                .record(z.string(), z.unknown())
+                .describe('Tool arguments. Use "$N" to reference the id returned by step N (1-based).')
+                .default({})
+            })
+          )
+          .min(1)
+          .describe('Ordered list of tool calls to run'),
+        ...automationTargetSchema
+      })
+    },
+    async (args) => {
+      const { target, args: rest } = splitAutomationTarget(args)
+      const steps = Array.isArray(rest.steps) ? (rest.steps as unknown[]) : []
+      const results: unknown[] = []
+      try {
+        for (let index = 0; index < steps.length; index++) {
+          const candidate = steps[index]
+          if (!isBatchStep(candidate)) {
+            results.push({ index, tool: '', ok: false, error: 'invalid step' })
+            continue
+          }
+          const step: BatchStep = candidate
+          const tool = typeof step.tool === 'string' ? step.tool : ''
+          const stepArgs = isBatchStep(step.args) ? step.args : {}
+          if (!tool) {
+            results.push({ index, tool: '', ok: false, error: 'missing "tool"' })
+            continue
+          }
+          const resolvedArgs = resolveStepReferences(stepArgs, results)
+          const result = await sendRpc({
+            command: 'tool',
+            args: { ...target, name: tool, args: resolvedArgs }
+          })
+          const res = result as { ok?: boolean; result?: unknown; error?: string }
+          if (res.ok === false) {
+            results.push({ index, tool, ok: false, error: res.error ?? 'tool failed' })
+            continue
+          }
+          const r = res.result as RpcJsonObject | undefined
+          results.push({ index, tool, ok: true, id: extractResultId(r), result: r })
+        }
+        return ok({ results })
+      } catch (e) {
+        return fail(e)
+      }
+    }
+  )
+}
+
+interface BatchStep {
+  tool?: unknown
+  args?: unknown
+}
+
+/** args 里的 "$N" 引用替换依赖工具结果的 id（见 batch 工具）。 */
+function isBatchStep(value: unknown): value is BatchStep {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+/** 提取工具结果里的节点 id（与 apply.ts extractNodeIds 同形）。 */
+function extractResultId(result: RpcJsonObject | undefined): string | undefined {
+  if (!result || typeof result !== 'object') return undefined
+  if (typeof result.id === 'string') return result.id
+  if (Array.isArray(result.results)) {
+    for (const item of result.results) {
+      if (item && typeof item === 'object' && typeof (item as RpcJsonObject).id === 'string') {
+        return (item as RpcJsonObject).id as string
+      }
+    }
+  }
+  return undefined
+}
+
+/** 把 args 里的 "$N"（N=步骤序号，1 起）替换成该步结果 id。只替换字符串值。 */
+function resolveStepReferences(
+  args: BatchStep,
+  results: unknown[]
+): Record<string, unknown> {
+  const byIndex = new Map<number, string | undefined>()
+  results.forEach((result, index) => {
+    const r = result as { ok?: boolean; id?: string }
+    byIndex.set(index, r.ok ? r.id : undefined)
+  })
+  const substitute = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      return value.replace(/\$(\d+)/g, (match, num: string) => {
+        const stepIndex = Number(num) - 1
+        const id = byIndex.get(stepIndex)
+        return id ?? match
+      })
+    }
+    if (Array.isArray(value)) return value.map(substitute)
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {}
+      for (const [key, child] of Object.entries(value)) {
+        out[key] = substitute(child)
+      }
+      return out
+    }
+    return value
+  }
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(args)) out[key] = substitute(value)
+  return out
 }

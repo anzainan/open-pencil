@@ -14,6 +14,7 @@ import { figmaBlendModeToSkia, needsIsolatedBlendLayer } from './blend'
 import { renderBooleanOperation } from './boolean'
 import { drawVectorMultiStyleFills, paintFills } from './fills'
 import { drawLayoutGrids } from './layout-grids'
+import { pickLabelFont } from './labels/text'
 import { renderMaskedChildIds } from './masks'
 import type { SkiaRenderer, RenderOverlays } from './renderer'
 import { makeSmoothRRectPath, nodeHasRadius, nodeHasSmoothCorners } from './shapes'
@@ -714,12 +715,13 @@ export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode, fil
   } else if (r.textFont) {
     const fontSize = node.fontSize || r.DEFAULT_FONT_SIZE
     const paragraphY = textVerticalOffset(node, fontSize)
+    const drawFont = pickLabelFont(r.textFont, r.cjkTextFont, text)
     canvas.drawText(
       transformTextCase(text, node.textCase),
       0,
       paragraphY + fontSize,
       r.fillPaint,
-      r.textFont
+      drawFont
     )
   }
 
