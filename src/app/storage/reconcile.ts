@@ -25,7 +25,10 @@ export function reconcileStorageDocuments(
 
   for (const metadata of local) {
     if (metadata.tombstoned) continue
-    if (metadata.syncStatus === 'synced' && merged.has(metadata.id)) continue
+    // A synced row missing from the remote listing means the remote file was
+    // deleted on the storage side (e.g. NAS). It must not be revived as local
+    // work — only non-synced rows carry durable pending changes.
+    if (metadata.syncStatus === 'synced') continue
     merged.set(metadata.id, {
       id: metadata.id,
       name: metadata.name,
@@ -40,7 +43,11 @@ export function reconcileStorageDocuments(
     ),
     remoteDocumentsToSeed: remote.filter((document) => !localById.has(document.id)),
     localIdsToPurge: local
-      .filter((metadata) => metadata.tombstoned && !remoteIds.has(metadata.id))
+      .filter(
+        (metadata) =>
+          !remoteIds.has(metadata.id) &&
+          (metadata.tombstoned || metadata.syncStatus === 'synced')
+      )
       .map((metadata) => metadata.id)
   }
 }
