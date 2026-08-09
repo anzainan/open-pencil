@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- JSX prop override mapping is a cohesive single-file domain */
 import type {
   Effect,
   Fill,

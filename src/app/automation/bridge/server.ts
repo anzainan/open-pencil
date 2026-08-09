@@ -33,7 +33,7 @@ export function connectAutomation(
     if (graphReplacedPending) {
       graphReplacedPending = false
       if (result && typeof result === 'object' && !Array.isArray(result)) {
-        return { ...(result as object), graphReplaced: true }
+        return { ...result, graphReplaced: true }
       }
       return { result, graphReplaced: true }
     }

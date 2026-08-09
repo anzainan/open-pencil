@@ -378,7 +378,9 @@ export class BridgeClient {
         console.warn('[bridge] watchPath handleEvent failed', error)
       }
     }
-    const unsubscribe = this.subscribe(handleEvent)
+    const unsubscribe = this.subscribe((event) => {
+      void handleEvent(event)
+    })
 
     // SSE 断线轮询是 BridgeClient 自有的 service-owned 定时器（AGENTS.md：
     // 此类重连/兜底定时器可手写 interval，client.ts 保持零外部依赖可直接单测），

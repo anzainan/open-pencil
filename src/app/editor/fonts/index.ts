@@ -142,7 +142,7 @@ function refreshCanvasTextCjkFonts(): void {
   if (!store || !renderer) return
   const added = renderer.refreshTextCjkFallbacks()
   if (!added) return
-  const page = store.graph.getPages()[0]
+  const page = store.graph.getPages().at(0)
   if (!page) return
   clearTextPictures(store.graph, page.childIds)
   store.requestRender()
