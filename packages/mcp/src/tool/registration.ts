@@ -255,7 +255,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
         ...automationTargetSchema
       })
     },
-    async (args) => {
+    async (args: { steps?: unknown; document_id?: string; page_id?: string }) => {
       const { target, args: rest } = splitAutomationTarget(args)
       const steps = Array.isArray(rest.steps) ? (rest.steps as unknown[]) : []
       const results: unknown[] = []
