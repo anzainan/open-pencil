@@ -8,8 +8,10 @@
  * (see `replayPendingAiOps` in tabs). This is the IndexedDB half of the
  * "double insurance" against losing AI work.
  *
- * Keyed by the bridge document path (e.g. `PixelMob/login.fig`); non-bridge
- * documents are not journaled (their save semantics differ).
+ * Keyed by the bridge document path (e.g. `PixelMob/login.fig`). Documents bound
+ * only to a writable web filePath are keyed by its workspace-relative equivalent
+ * (same derivation the writer uses to PUT); other non-bridge documents are not
+ * journaled (their save semantics differ).
  *
  * Serialization (anti-race): all journal mutations — append, clear, and the
  * single-op range remove on undo — are mutually exclusive per document through a
@@ -25,7 +27,8 @@
  */
 import { openIdb, reqToPromise, txDone } from '@/app/storage/idb-util'
 import type { EditorStore } from '@/app/editor/active-store'
-import { BRIDGE_PROVIDER_ID } from '@/app/bridge/client'
+import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
+import { webFilePathToWorkspaceRel } from '@/app/bridge/workspace-path'
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
 
 const DB_NAME = 'open-pencil-collab-journal'
@@ -33,7 +36,7 @@ const DB_VERSION = 1
 const STORE = 'ops'
 const INDEX_DOC = 'byDoc'
 /** Cap journal entries per document to bound IndexedDB usage (ux-live-collab §11-9). */
-const MAX_OPS_PER_DOC = 200
+const MAX_OPS_PER_DOC = 500
 
 export interface AiOpRecord {
   /** `${docPath}\u0000${seq}` — unique across documents. */
@@ -91,9 +94,30 @@ export function journalDocPathForBinding(binding: StorageDocumentBinding | null)
   return binding.documentId
 }
 
-/** Journal key for a store: its bridge document path, or null when not bridge-bound. */
-export function journalDocPath(store: EditorStore): string | null {
-  return journalDocPathForBinding(store.getStorageBinding())
+/** Journal key for a writable web filePath, converted to a workspace-relative bridge
+ *  path (same derivation the writer uses to PUT). Null when not convertible. */
+export async function journalDocPathForFilePath(
+  filePath: string | null
+): Promise<string | null> {
+  if (!filePath) return null
+  const designRoot = await bridgeClient.getDesignRoot()
+  return webFilePathToWorkspaceRel(filePath, designRoot)
+}
+
+/** Journal key for a writable source: bridge binding first, then filePath fallback. */
+export async function journalDocPathForSource(
+  binding: StorageDocumentBinding | null,
+  filePath: string | null
+): Promise<string | null> {
+  const bound = journalDocPathForBinding(binding)
+  if (bound) return bound
+  return journalDocPathForFilePath(filePath)
+}
+
+/** Journal key for a store: its bridge document path, or the workspace-relative
+ *  path derived from its filePath; null when there is no writable bridge target. */
+export async function journalDocPath(store: EditorStore): Promise<string | null> {
+  return journalDocPathForSource(store.getStorageBinding(), store.getDocumentFilePath())
 }
 
 function recordId(docPath: string, seq: number): string {
@@ -110,7 +134,7 @@ async function docEntries(docPath: string): Promise<AiOpRecord[]> {
 
 /**
  * Append one applied AI op to the journal for the given store. No-op when the
- * store is not bound to a bridge document.
+ * store has no journalable target (no bridge binding and no convertible filePath).
  *
  * Must be called while holding the document lock (inside `withAiOpsLock`) so the
  * append cannot interleave with the covering autosave write. Returns the seq
@@ -121,7 +145,7 @@ export async function journalAppendAiOp(
   tool: string,
   args: Record<string, unknown>
 ): Promise<number> {
-  const docPath = journalDocPath(store)
+  const docPath = await journalDocPath(store)
   if (!docPath) return 0
   const database = await openDb()
   const tx = database.transaction(STORE, 'readwrite')

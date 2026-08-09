@@ -123,7 +123,7 @@ export async function applyAutomationTool(
   const store = target.store
   // Journaling ops hold the document lock for the whole "mutate + append" span so
   // no autosave write can serialize/clear in the middle (see op-journal header).
-  const docPath = options.journal ? journalDocPath(store) : null
+  const docPath = options.journal ? await journalDocPath(store) : null
 
   const apply = async (): Promise<ApplyToolResult> => {
     if (name === 'render' && toolArgs.tree !== undefined) {

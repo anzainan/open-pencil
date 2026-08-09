@@ -2,6 +2,7 @@ import type { EditorState } from '@open-pencil/core/editor'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { clearAiOps, journalMaxSeq } from '@/app/bridge/op-journal'
+import { webFilePathToWorkspaceRel } from '@/app/bridge/workspace-path'
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
 import { persistStorageCanvasLocally } from '@/app/storage/sync/persist'
 import { isTauri } from '@/app/tauri/env'
@@ -58,6 +59,9 @@ export function createDocumentWriter({
       const { writeFile: tauriWrite } = await import('@tauri-apps/plugin-fs')
       await tauriWrite(filePath, data)
       setSavedVersion(state.sceneVersion)
+      // filePath-only 文档的 journal 键由 filePath 换算（与键控同一条逻辑），
+      // 落盘成功即按水位清空，避免重放时重复应用。
+      await clearJournalForFilePath(filePath)
       return true
     }
     if (fileHandle) {
@@ -76,33 +80,18 @@ export function createDocumentWriter({
       if (rel) {
         await bridgeClient.putFile(rel, data)
         setSavedVersion(state.sceneVersion)
+        await clearAiOps(rel, await journalMaxSeq(rel))
         return true
       }
     }
     return false
   }
-}
 
-/** 把 web 版存下的 filePath 换算成工作区相对路径：designRoot 绝对路径或同源 URL（如 http://host:8082/PixelMob/login.fig）。 */
-function webFilePathToWorkspaceRel(filePath: string, designRoot: string | null): string | null {
-  if (!filePath || filePath.startsWith('blob:') || filePath.startsWith('data:')) return null
-  let rel = filePath
-  if (designRoot) {
-    const normalizedRoot = designRoot.replace(/[\\/]+$/, '')
-    if (rel.startsWith(normalizedRoot)) rel = rel.slice(normalizedRoot.length)
+  /** 落盘成功后清空 filePath 键控的防丢失日志（Tauri 原生写路径）。 */
+  async function clearJournalForFilePath(filePath: string): Promise<void> {
+    const designRoot = await bridgeClient.getDesignRoot()
+    const rel = webFilePathToWorkspaceRel(filePath, designRoot)
+    if (!rel) return
+    await clearAiOps(rel, await journalMaxSeq(rel))
   }
-  if (rel.startsWith('http://') || rel.startsWith('https://')) {
-    let url: URL
-    try {
-      url = new URL(rel)
-    } catch {
-      return null
-    }
-    if (url.origin !== window.location.origin) return null
-    rel = url.pathname
-  }
-  rel = rel.replace(/^[\\/]+/, '')
-  if (!/\.(fig|pen)$/i.test(rel)) return null
-  if (!rel || rel === '..' || rel.startsWith('../') || rel.includes('/../')) return null
-  return rel
 }

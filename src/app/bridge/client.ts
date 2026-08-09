@@ -4,6 +4,8 @@ const DEFAULT_API_BASE = '/api/v1'
 const RECENT_WRITE_MS = 1000
 const POLL_MS = 2000
 const PATH_THROTTLE_MS = 400
+/** fetch keepalive 单请求载荷上限（超出时退回普通 fetch，见 putFileNow）。 */
+const KEEPALIVE_MAX_BYTES = 64 * 1024
 
 export interface BridgeFileInfo {
   path: string
@@ -161,10 +163,15 @@ export class BridgeClient {
     ) as ArrayBuffer
     this.selfWriteInFlight.add(path)
     try {
+      // keepalive 让「关页/刷新瞬间的 beforeunload flush」尽量送达而不被卸载掐断
+      // （C1）。浏览器对 keepalive 请求有 64KiB 载荷上限，超出时退回普通 fetch，
+      // 避免超限 TypeError 中断正常保存（autosave/手动保存不受影响）。
+      const keepalive = payload.byteLength <= KEEPALIVE_MAX_BYTES
       const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/octet-stream', ...(await this.authHeaders()) },
-        body: payload
+        body: payload,
+        keepalive
       })
       if (!response.ok) {
         throw new Error(`Bridge write failed (${response.status}): ${path}`)

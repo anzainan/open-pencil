@@ -7,7 +7,7 @@ import { yieldToUI } from '@/app/document/io/browser'
 import { applyImportedDocument } from '@/app/document/io/imported-document'
 import { readReloadSource } from '@/app/document/io/reload-source'
 import { captureReloadState, restoreReloadState } from '@/app/document/io/reload-state'
-import { getPendingAiOps, journalDocPathForBinding, withAiOpsLock } from '@/app/bridge/op-journal'
+import { getPendingAiOps, journalDocPathForSource, withAiOpsLock } from '@/app/bridge/op-journal'
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
 import { toast } from '@/app/shell/ui'
 
@@ -79,7 +79,7 @@ export function createReloadActions({
 }: ReloadActionsOptions) {
   async function reloadFromDisk() {
     const storageBinding = getStorageBinding()
-    const docPath = journalDocPathForBinding(storageBinding)
+    const docPath = await journalDocPathForSource(storageBinding, getFilePath())
     // 重建期间与 AI 操作共用同一文档级 FIFO 锁：AI 操作在途时等待其完成，
     // 重建期间新到的 AI 操作也会排队，杜绝「重建 + 操作」交错导致 id 错乱。
     await withAiOpsLock(docPath, async () => {

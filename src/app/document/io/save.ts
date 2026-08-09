@@ -1,7 +1,7 @@
 import type { EditorState } from '@open-pencil/core/editor'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
-import { journalDocPathForBinding, withAiOpsLock } from '@/app/bridge/op-journal'
+import { journalDocPathForSource, withAiOpsLock } from '@/app/bridge/op-journal'
 import { rememberWorkspaceFile } from '@/app/bridge/restore'
 import { resolveUniqueWorkspacePath, sanitizeWorkspaceFileName } from '@/app/bridge/workspace-name'
 import { downloadBlob } from '@/app/document/io/browser'
@@ -54,7 +54,10 @@ export function createSaveActions({
     const storageBinding = getStorageBinding()
     const downloadName = getDownloadName()
     if (storageBinding || filePath || fileHandle) {
-      const docPath = journalDocPathForBinding(storageBinding)
+      // 一旦确认有可写源（storageBinding || filePath || fileHandle）就打开 autosave，
+      // 覆盖 MCP new_document/save_file、UI 新建、Tauri 打开等全部写路径。
+      state.autosaveEnabled = true
+      const docPath = await journalDocPathForSource(storageBinding, filePath)
       const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildFigFile()))
       if (wrote && !storageBinding) setSourceIdentity({ handle: fileHandle, path: filePath })
       if (wrote) toast.info('文件已保存')
@@ -123,6 +126,7 @@ export function createSaveActions({
       setFilePath(path)
       setFileHandle(null)
       state.documentName = documentNameFromFigPath(path)
+      state.autosaveEnabled = true
       if (await writeFile(data)) setSourceIdentity({ handle: null, path })
       startWatchingFile()
       return
@@ -135,6 +139,7 @@ export function createSaveActions({
       setFileHandle(handle)
       setFilePath(null)
       state.documentName = documentNameFromFigPath(handle.name)
+      state.autosaveEnabled = true
       if (await writeFile(data)) setSourceIdentity({ handle, path: null })
       startWatchingFile()
       return
