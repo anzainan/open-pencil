@@ -18,7 +18,7 @@ export const getCollection = defineTool({
   },
   execute: (figma, { id }) => {
     const collection = figma.getVariableCollectionById(id)
-    if (!collection) return { error: `Collection "${id}" not found` }
+    if (!collection) throw new Error(`Collection "${id}" not found`)
     return {
       ...collection,
       activeModeId: figma.graph.getActiveModeId(id)

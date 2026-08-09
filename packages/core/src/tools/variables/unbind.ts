@@ -23,10 +23,10 @@ export const unbindVariable = defineTool({
   execute: (figma, args) => {
     // Access raw scene node for boundVariables (not exposed on the proxy)
     const rawNode = figma.graph.getNode(args.node_id)
-    if (!rawNode) return { error: `Node "${args.node_id}" not found` }
+    if (!rawNode) throw new Error(`Node "${args.node_id}" not found`)
     const boundValue = rawNode.boundVariables[args.field]
     if (!boundValue) {
-      return { error: `No binding found for field "${args.field}" on node "${args.node_id}"` }
+      throw new Error(`No binding found for field "${args.field}" on node "${args.node_id}"`)
     }
     figma.unbindVariable(args.node_id, args.field)
     return { unbound: true, node_id: args.node_id, field: args.field }

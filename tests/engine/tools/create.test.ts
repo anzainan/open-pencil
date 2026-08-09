@@ -192,14 +192,13 @@ describe('create_vector', () => {
     })
   })
 
-  test('rejects invalid supplied paths before creating a node', () => {
+  test('rejects invalid supplied paths before creating a node (P0-3: failures throw)', () => {
     const { figma, graph } = setupToolTest()
     const tool = getTool('create_vector')
     const before = graph.nodes.size
 
     for (const path of ['', 'not a path', 'null', 'M0 0 L']) {
-      const result = tool.execute(figma, { x: 0, y: 0, name: 'Ghost', path }) as ToolResult
-      expect(result.error).toBeDefined()
+      expect(() => tool.execute(figma, { x: 0, y: 0, name: 'Ghost', path })).toThrow()
       expect(graph.nodes.size).toBe(before)
     }
   })

@@ -47,9 +47,9 @@ export const setLayout = defineTool({
 
     const raw = figma.graph.getNode(args.id)
     if (!args.direction && raw?.layoutMode === 'NONE') {
-      return {
-        error: 'Frame has no auto-layout. Pass direction ("HORIZONTAL" or "VERTICAL") to enable it.'
-      }
+      throw new Error(
+        'Frame has no auto-layout. Pass direction ("HORIZONTAL" or "VERTICAL") to enable it.'
+      )
     }
 
     const wasNone = raw?.layoutMode === 'NONE'

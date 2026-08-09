@@ -24,7 +24,7 @@ export const describe = defineTool({
       }
     }
 
-    if (!args.id) return { error: 'Provide id (string) or ids (string[])' }
+    if (!args.id) throw new Error('Provide id (string) or ids (string[])')
     const depth = Math.min(args.depth ?? autoDepth(figma.graph, args.id), 5)
     return describeOneNode(figma, args.id, depth, gridSize)
   }

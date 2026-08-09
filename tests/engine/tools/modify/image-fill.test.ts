@@ -53,12 +53,11 @@ describe('set_image_fill tool', () => {
     expect(fills[0].imageScaleMode).toBe('FILL')
   })
 
-  test('returns error for non-existent node', () => {
+  test('throws for non-existent node (P0-3: failures throw)', () => {
     const { figma } = setup()
-    const result = tool.execute(figma, { id: 'nonexistent', image_data: PNG_MAGIC.toBase64() }) as {
-      error: string
-    }
-    expect(result.error).toContain('not found')
+    expect(() =>
+      tool.execute(figma, { id: 'nonexistent', image_data: PNG_MAGIC.toBase64() })
+    ).toThrow(/not found/)
   })
 
   test('default scale mode is FILL', () => {

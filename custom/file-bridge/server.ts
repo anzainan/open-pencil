@@ -337,7 +337,10 @@ export function startServer(options: BridgeServerOptions) {
       return json({ ok: false, error: `write failed: ${String(error)}` }, 500)
     }
     const meta = fileMeta(designRoot, rel)
-    return json({ path: rel, size: meta?.size ?? 0 }, overwrite ? 200 : 201)
+    return json(
+      { path: rel, size: meta?.size ?? 0, mtime: meta?.mtime ?? null, updatedAt: meta?.mtime ?? null },
+      overwrite ? 200 : 201
+    )
   }
 
   function deleteFile(rel: string): Response {

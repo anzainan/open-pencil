@@ -560,6 +560,24 @@ describe('renderJSX (string → scene graph)', () => {
     expect(node.childIds.length).toBe(1)
   })
 
+  it('supports JSX {/* */} comments (standalone child + inline in text)', async () => {
+    const g = makeSceneGraph()
+    const jsx = `
+      <Frame name="JsxComments" w={50} h={50}>
+        {/* standalone child comment */}
+        <Text color="#000">A{/* inline note */}B</Text>
+        <Text color="#111">tail</Text>
+      </Frame>
+    `
+    const [result] = await renderJSX(g, jsx)
+    const node = getNodeOrThrow(g, result.id)
+    const text = getNodeOrThrow(g, childIdAt(node, 0))
+
+    expect(node.name).toBe('JsxComments')
+    expect(node.childIds.length).toBe(2)
+    expect(text.text).toBe('AB')
+  })
+
   it('warns about unsupported props', async () => {
     const g = makeSceneGraph()
     const [result] = await renderJSX(g, '<Frame name="Warn" w={50} h={50} mt={8} />')

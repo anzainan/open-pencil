@@ -122,7 +122,7 @@ export const designToComponentMap = defineTool({
     if (args.page) {
       const target = figma.root.children.find((page) => page.name === args.page)
       if (target) figma.currentPage = target
-      else return { error: `Page "${args.page}" not found` }
+      else throw new Error(`Page "${args.page}" not found`)
     }
 
     const page = figma.currentPage

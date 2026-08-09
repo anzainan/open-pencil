@@ -12,8 +12,8 @@ export const reparentNode = defineTool({
   execute: (figma, { id, parent_id }) => {
     const node = figma.getNodeById(id)
     const parent = figma.getNodeById(parent_id)
-    if (!node) return { error: `Node "${id}" not found` }
-    if (!parent) return { error: `Parent "${parent_id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
+    if (!parent) throw new Error(`Parent "${parent_id}" not found`)
     parent.appendChild(node)
     return { id, parent_id }
   }
@@ -30,7 +30,7 @@ export const groupNodes = defineTool({
     const nodes = ids
       .map((id) => figma.getNodeById(id))
       .filter((node): node is FigmaNodeProxy => node !== null)
-    if (nodes.length < 2) return { error: 'Need at least 2 nodes to group' }
+    if (nodes.length < 2) throw new Error('Need at least 2 nodes to group')
     const parent = nodes[0].parent ?? figma.currentPage
     const group = figma.group(nodes, parent)
     return nodeSummary(group)
@@ -46,7 +46,7 @@ export const ungroupNode = defineTool({
   },
   execute: (figma, { id }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     figma.ungroup(node)
     return { ungrouped: id }
   }

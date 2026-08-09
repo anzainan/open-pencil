@@ -118,8 +118,10 @@ export async function ensureWorkspaceFonts(): Promise<void> {
   if (workspaceFontsLoaded) return
   if (await loadWorkspaceFonts()) {
     workspaceFontsLoaded = true
-    // 工作区字体（思源黑体/得意黑）晚于画布初始化到达时，补建画布 UI 标签的 CJK 字体。
+    // 工作区字体（思源黑体/得意黑）晚于画布初始化到达时，补建画布 UI 标签的 CJK 字体，
+    // 并把覆盖中文的族注册为 TEXT 段落兜底，重绘已打开的 TEXT 节点（P0-4）。
     refreshCanvasCjkLabelFonts()
+    refreshCanvasTextCjkFonts()
   }
 }
 
@@ -128,6 +130,22 @@ function refreshCanvasCjkLabelFonts(): void {
   const renderer = getActiveEditorStoreOrNull()?.renderer
   if (!renderer) return
   void renderer.refreshCjkLabelFonts().catch(() => undefined)
+}
+
+/**
+ * 工作区 CJK 字体就绪后：把覆盖中文的族注册为 TEXT 段落 CJK 兜底，
+ * 新增时清掉已缓存 TEXT 图片并触发重绘（Inter 输中文 → 思源黑体，西文仍 Inter）。
+ */
+function refreshCanvasTextCjkFonts(): void {
+  const store = getActiveEditorStoreOrNull()
+  const renderer = store?.renderer
+  if (!store || !renderer) return
+  const added = renderer.refreshTextCjkFallbacks()
+  if (!added) return
+  const page = store.graph.getPages()[0]
+  if (!page) return
+  clearTextPictures(store.graph, page.childIds)
+  store.requestRender()
 }
 
 export function localFontAccessState(): LocalFontAccessState {

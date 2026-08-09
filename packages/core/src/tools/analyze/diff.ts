@@ -132,8 +132,8 @@ export const diffCreate = defineTool({
     const maxDepth = args.depth ?? 10
     const fromNode = figma.graph.getNode(args.from)
     const toNode = figma.graph.getNode(args.to)
-    if (!fromNode) return { error: `Node "${args.from}" not found` }
-    if (!toNode) return { error: `Node "${args.to}" not found` }
+    if (!fromNode) throw new Error(`Node "${args.from}" not found`)
+    if (!toNode) throw new Error(`Node "${args.to}" not found`)
 
     const fromNodes = collectNodeTree(figma, args.from, '', 0, maxDepth)
     const toNodes = collectNodeTree(figma, args.to, '', 0, maxDepth)
@@ -188,7 +188,7 @@ export const diffShow = defineTool({
   },
   execute: (figma, args) => {
     const raw = figma.graph.getNode(args.id)
-    if (!raw) return { error: `Node "${args.id}" not found` }
+    if (!raw) throw new Error(`Node "${args.id}" not found`)
 
     const oldContent = serializeNodeProps(raw)
 
@@ -196,7 +196,7 @@ export const diffShow = defineTool({
     try {
       newProps = safeDestr<Record<string, unknown>>(args.props)
     } catch {
-      return { error: 'Invalid JSON in props' }
+      throw new Error('Invalid JSON in props')
     }
 
     const modified: SceneNode = structuredClone(raw)

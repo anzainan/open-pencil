@@ -9,7 +9,7 @@ export const deleteNode = defineTool({
   },
   execute: (figma, { id }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     node.remove()
     return { deleted: id }
   }
@@ -24,7 +24,7 @@ export const cloneNode = defineTool({
   },
   execute: (figma, { id }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     const clone = node.clone()
     return nodeSummary(clone)
   }
@@ -40,7 +40,7 @@ export const renameNode = defineTool({
   },
   execute: (figma, { id, name }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     node.name = name
     return { id, name }
   }
@@ -54,7 +54,7 @@ export const nodeBounds = defineTool({
   },
   execute: (figma, { id }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     return { id, bounds: node.absoluteBoundingBox }
   }
 })

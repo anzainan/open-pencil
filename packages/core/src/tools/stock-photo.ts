@@ -32,13 +32,12 @@ export const stockPhoto = defineTool({
   execute: async (figma, { requests }) => {
     const provider = getActiveProvider()
     if (!provider) {
-      return {
-        error: `No stock photo provider configured. Ask the user to add an API key in AI chat settings. Available providers: Pexels, Unsplash.`
-      }
+      throw new Error(
+        `No stock photo provider configured. Ask the user to add an API key in AI chat settings. Available providers: Pexels, Unsplash.`
+      )
     }
 
     const reqs = parsePhotoRequests(requests)
-    if ('error' in reqs) return reqs
 
     const results = await Promise.all(reqs.map((request) => applyPhoto(figma, provider, request)))
     const ok = results.filter((result) => result.photo).length

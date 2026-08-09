@@ -25,7 +25,7 @@ export const fetchIconsTool = defineTool({
       if (notFound.length > 0) result.not_found = notFound
       return result
     } catch (e) {
-      return { error: (e as Error).message }
+      throw new Error((e as Error).message)
     }
   }
 })
@@ -50,11 +50,21 @@ export const insertIcon = defineTool({
       type: 'color',
       description: 'Icon color hex (replaces currentColor). Default: #000000'
     },
+    x: {
+      type: 'number',
+      description:
+        'Icon left position — relative to parent node local coordinates (page absolute when parent_id is omitted). Default: parent top-left (0,0).'
+    },
+    y: {
+      type: 'number',
+      description:
+        'Icon top position — relative to parent node local coordinates (page absolute when parent_id is omitted). Default: parent top-left (0,0).'
+    },
     parent_id: { type: 'string', description: 'Parent node ID for all icons' }
   },
   execute: async (figma, args) => {
     const names = args.names ?? (args.name ? [args.name] : [])
-    if (names.length === 0) return { error: 'Provide "names" (array) or "name" (string)' }
+    if (names.length === 0) throw new Error('Provide "names" (array) or "name" (string)')
 
     const size = args.size ?? 24
     const color = args.color ?? '#000000'
@@ -64,7 +74,7 @@ export const insertIcon = defineTool({
     try {
       icons = await fetchIcons(names, size)
     } catch (e) {
-      return { error: (e as Error).message }
+      throw new Error((e as Error).message)
     }
 
     const inserted: { id: string; name: string; icon: string }[] = []
@@ -77,7 +87,11 @@ export const insertIcon = defineTool({
         continue
       }
       const parentId = args.parent_id ?? figma.currentPage.id
-      const frame = createIconFromPaths(figma.graph, icon, name, size, parsedColor, parentId)
+      const overrides =
+        args.x !== undefined || args.y !== undefined
+          ? { x: args.x ?? 0, y: args.y ?? 0 }
+          : undefined
+      const frame = createIconFromPaths(figma.graph, icon, name, size, parsedColor, parentId, overrides)
       inserted.push({ id: frame.id, name: frame.name, icon: name })
     }
 
@@ -116,7 +130,7 @@ export const searchIconsTool = defineTool({
       }
       return output
     } catch (e) {
-      return { error: (e as Error).message }
+      throw new Error((e as Error).message)
     }
   }
 })

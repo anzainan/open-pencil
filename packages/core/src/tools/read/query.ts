@@ -29,7 +29,7 @@ Examples:
         nodes: nodes.map((node) => ({ id: node.id, name: node.name, type: node.type }))
       }
     } catch (err) {
-      return { error: `XPath error: ${err instanceof Error ? err.message : String(err)}` }
+      throw new Error(`XPath error: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 })

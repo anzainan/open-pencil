@@ -21,11 +21,10 @@ describe('set_fill', () => {
     expect(fills[0].color.b).toBeCloseTo(0)
   })
 
-  test('returns error for missing node', () => {
+  test('throws for missing node (P0-3: failures throw)', () => {
     const { figma } = setupToolTest()
     const tool = getTool('set_fill')
-    const result = tool.execute(figma, { id: 'nonexistent', color: '#ff0000' }) as ToolResult
-    expect(result.error).toContain('not found')
+    expect(() => tool.execute(figma, { id: 'nonexistent', color: '#ff0000' })).toThrow(/not found/)
   })
 })
 

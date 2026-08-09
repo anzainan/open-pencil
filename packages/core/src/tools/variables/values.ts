@@ -47,7 +47,7 @@ export const setVariable = defineTool({
   },
   execute: (figma, args) => {
     const variable = figma.getVariableById(args.id)
-    if (!variable) return { error: `Variable "${args.id}" not found` }
+    if (!variable) throw new Error(`Variable "${args.id}" not found`)
     const parsedValue = parseVariableValue(variable.type, args.value)
     figma.setVariableValue(args.id, args.mode, parsedValue)
     return { id: args.id, mode: args.mode, value: parsedValue }

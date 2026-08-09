@@ -18,7 +18,7 @@ export const getJsx = defineTool({
   },
   execute: (figma, { id }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     const jsx = sceneNodeToJSX(id, figma.graph)
     if (jsx.length > MAX_JSX_LENGTH) {
       return {
@@ -43,9 +43,9 @@ export const diffJsx = defineTool({
   },
   execute: (figma, { from, to }) => {
     const fromNode = figma.getNodeById(from)
-    if (!fromNode) return { error: `Node "${from}" not found` }
+    if (!fromNode) throw new Error(`Node "${from}" not found`)
     const toNode = figma.getNodeById(to)
-    if (!toNode) return { error: `Node "${to}" not found` }
+    if (!toNode) throw new Error(`Node "${to}" not found`)
 
     const fromJsx = sceneNodeToJSX(from, figma.graph)
     const toJsx = sceneNodeToJSX(to, figma.graph)

@@ -21,12 +21,35 @@ export function connectAutomation(
   let ws: WebSocket | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined
   let intentionalDisconnect = false
+  /** 本次连接是否已广播 graph:replaced（重建后首个响应带标记，提醒 AI 重取 id 表）。 */
+  let graphReplacedPending = false
 
   const { handleRequest: handleAutomationRequest } =
     createAutomationCommandHandlers(makeFigmaFromStore)
 
   async function handleRequest(_id: string, command: string, args: unknown): Promise<unknown> {
-    return handleAutomationRequest(getStore(), command, args)
+    const result = await handleAutomationRequest(getStore(), command, args)
+    // 重建后首个响应通知 MCP 侧：旧 id 缓存已失效，AI 应重取 get_page_tree。
+    if (graphReplacedPending) {
+      graphReplacedPending = false
+      if (result && typeof result === 'object' && !Array.isArray(result)) {
+        return { ...(result as object), graphReplaced: true }
+      }
+      return { result, graphReplaced: true }
+    }
+    return result
+  }
+
+  function broadcastGraphReplaced() {
+    if (!ws || ws.readyState !== ws.OPEN) return
+    graphReplacedPending = true
+    ws.send(JSON.stringify({ type: 'graph:replaced' }))
+  }
+
+  let unsubscribeGraphReplaced: (() => void) | null = null
+  function watchGraphReplacements() {
+    const store = getStore()
+    unsubscribeGraphReplaced = store.onEditorEvent('graph:replaced', broadcastGraphReplaced)
   }
 
   function connect() {
@@ -95,11 +118,14 @@ export function connectAutomation(
 
   function disconnect() {
     intentionalDisconnect = true
+    unsubscribeGraphReplaced?.()
+    unsubscribeGraphReplaced = null
     clearTimeout(reconnectTimer)
     ws?.close()
     ws = null
   }
 
+  watchGraphReplacements()
   connect()
   return { disconnect, token }
 }

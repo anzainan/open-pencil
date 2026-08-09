@@ -17,12 +17,10 @@ interface ParsedVectorPath {
   size: { width: number; height: number } | null
 }
 
-type VectorPathResult = ParsedVectorPath | { error: string }
-
-function parseSVGVectorPath(path: string): VectorPathResult {
+function parseSVGVectorPath(path: string): ParsedVectorPath {
   const network = parseSVGPath(path)
   if (network.segments.length === 0) {
-    return { error: 'SVG path data must contain at least one drawable segment' }
+    throw new Error('SVG path data must contain at least one drawable segment')
   }
 
   const bounds = computeAccurateBounds(network)
@@ -32,21 +30,21 @@ function parseSVGVectorPath(path: string): VectorPathResult {
   }
 }
 
-function parseVectorNetworkJSON(path: string): VectorPathResult {
+function parseVectorNetworkJSON(path: string): ParsedVectorPath {
   let parsed: unknown
   try {
     parsed = safeDestr(path)
   } catch {
-    return { error: 'Invalid VectorNetwork JSON' }
+    throw new Error('Invalid VectorNetwork JSON')
   }
 
   const errors = validateVectorNetwork(parsed)
-  if (errors.length > 0) return { error: `Invalid VectorNetwork: ${errors.join('; ')}` }
+  if (errors.length > 0) throw new Error(`Invalid VectorNetwork: ${errors.join('; ')}`)
 
   return { network: normalizeVectorNetwork(parsed as VectorNetwork), size: null }
 }
 
-function parseVectorPath(path: string): VectorPathResult {
+function parseVectorPath(path: string): ParsedVectorPath {
   const trimmed = path.trim()
   if (/^[Mm]/.test(trimmed)) return parseSVGVectorPath(trimmed)
   return parseVectorNetworkJSON(trimmed)
@@ -73,9 +71,7 @@ export const createVector = defineTool({
   execute: (figma, args) => {
     let parsedPath: ParsedVectorPath | null = null
     if (args.path !== undefined) {
-      const parsed = parseVectorPath(args.path)
-      if ('error' in parsed) return parsed
-      parsedPath = parsed
+      parsedPath = parseVectorPath(args.path)
     }
 
     const node = figma.createVector()

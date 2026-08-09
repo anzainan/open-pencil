@@ -10,7 +10,7 @@ export const setVisible = defineTool({
   },
   execute: (figma, { id, value }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     node.visible = value
     return { id, visible: value }
   }
@@ -48,7 +48,7 @@ export const setBlend = defineTool({
   },
   execute: (figma, { id, mode }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     node.blendMode = mode
     return { id, blendMode: mode }
   }
@@ -64,7 +64,7 @@ export const setLocked = defineTool({
   },
   execute: (figma, { id, value }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     node.locked = value
     return { id, locked: value }
   }
@@ -85,7 +85,7 @@ export const setStrokeAlign = defineTool({
   },
   execute: (figma, { id, align }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     node.strokeAlign = align
     return { id, strokeAlign: align }
   }

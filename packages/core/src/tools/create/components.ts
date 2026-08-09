@@ -9,7 +9,7 @@ export const createComponent = defineTool({
   },
   execute: (figma, { id }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     const component = figma.createComponentFromNode(node)
     return nodeSummary(component)
   }
@@ -26,7 +26,7 @@ export const createInstance = defineTool({
   },
   execute: (figma, args) => {
     const component = figma.getNodeById(args.component_id)
-    if (!component) return { error: `Component "${args.component_id}" not found` }
+    if (!component) throw new Error(`Component "${args.component_id}" not found`)
     const instance = component.createInstance()
     if (args.x !== undefined) instance.x = args.x
     if (args.y !== undefined) instance.y = args.y

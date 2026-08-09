@@ -15,6 +15,16 @@ export function resultTooLargeMessage(kind: string, bytes: number, hint: string)
 }
 
 export function ok(data: unknown, toolName?: string): MCPResult {
+  // 空结果（undefined/null/空对象/空数组）一律走 fail，杜绝「成功但无内容」的静默空响应（P0-3）。
+  if (data === undefined || data === null) {
+    return fail(new Error(`Tool "${toolName ?? 'unknown'}" returned no result`))
+  }
+  if (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0) {
+    return fail(new Error(`Tool "${toolName ?? 'unknown'}" returned an empty result`))
+  }
+  if (Array.isArray(data) && data.length === 0) {
+    return fail(new Error(`Tool "${toolName ?? 'unknown'}" returned an empty list`))
+  }
   const text = JSON.stringify(data, null, 2)
   const bytes = Buffer.byteLength(text, 'utf8')
   if (bytes > MAX_RESULT_BYTES) {

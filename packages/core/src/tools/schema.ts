@@ -65,22 +65,25 @@ export class NodeNotFoundError extends Error {
   }
 }
 
+/** 统一工具错误构造：execute 失败一律 throw，由 MCP 层转 isError:true（P0-3）。 */
+export function toolError(message: string): never {
+  throw new Error(message)
+}
+
 export function requireNode(figma: FigmaAPI, id: string): ReturnType<FigmaAPI['getNodeById']> {
   const node = figma.getNodeById(id)
   if (!node) throw new NodeNotFoundError(id)
   return node
 }
 
-export function nodeNotFound(id: string): { error: string } {
-  return { error: `Node "${id}" not found` }
+export function nodeNotFound(id: string): never {
+  throw new NodeNotFoundError(id)
 }
 
-export function getRawNodeOrError(
-  figma: FigmaAPI,
-  id: string
-): { node: SceneNode } | { error: string } {
+export function getRawNodeOrError(figma: FigmaAPI, id: string): SceneNode {
   const node = figma.graph.getNode(id)
-  return node ? { node } : nodeNotFound(id)
+  if (!node) throw new NodeNotFoundError(id)
+  return node
 }
 
 export function nodeToResult(node: FigmaNodeProxy, maxDepth?: number): Record<string, unknown> {

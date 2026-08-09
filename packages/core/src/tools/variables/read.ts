@@ -24,7 +24,7 @@ export const getVariable = defineTool({
   },
   execute: (figma, { id }) => {
     const variable = figma.getVariableById(id)
-    if (!variable) return { error: `Variable "${id}" not found` }
+    if (!variable) throw new Error(`Variable "${id}" not found`)
     return variable
   }
 })

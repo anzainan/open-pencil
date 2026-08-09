@@ -10,7 +10,7 @@ export const nodeAncestors = defineTool({
   },
   execute: (figma, args) => {
     const node = figma.getNodeById(args.id)
-    if (!node) return { error: `Node "${args.id}" not found` }
+    if (!node) throw new Error(`Node "${args.id}" not found`)
     const ancestors: { id: string; name: string; type: string }[] = []
     let current = node.parent
     let depth = 0
@@ -45,7 +45,7 @@ export const nodeTree = defineTool({
   },
   execute: (figma, args) => {
     const node = figma.getNodeById(args.id)
-    if (!node) return { error: `Node "${args.id}" not found` }
+    if (!node) throw new Error(`Node "${args.id}" not found`)
     function buildTree(current: FigmaNodeProxy, depth: number): Record<string, unknown> {
       const result: Record<string, unknown> = {
         id: current.id,
@@ -70,8 +70,7 @@ export const nodeBindings = defineTool({
     id: { type: 'string', description: 'Node ID', required: true }
   },
   execute: (figma, { id }) => {
-    const result = getRawNodeOrError(figma, id)
-    if ('error' in result) return result
-    return { id, bindings: result.node.boundVariables }
+    const node = getRawNodeOrError(figma, id)
+    return { id, bindings: node.boundVariables }
   }
 })

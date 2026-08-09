@@ -301,10 +301,9 @@ describe('MCP tool execution', () => {
     expect(result.pages[0].name).toBe('Page 1')
   })
 
-  test('error on missing node', () => {
+  test('throws on missing node (P0-3: failures throw, never silent {error})', () => {
     const { api } = setup()
-    const result = findTool('get_node').execute(api, { id: 'nonexistent' }) as { error: string }
-    expect(result.error).toContain('not found')
+    expect(() => findTool('get_node').execute(api, { id: 'nonexistent' })).toThrow(/not found/)
   })
 
   test('open and query .fig file', async () => {

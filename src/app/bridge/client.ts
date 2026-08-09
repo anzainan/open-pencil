@@ -74,11 +74,12 @@ export class BridgeClient {
   private connected = false
   private seenSeqs = new Set<number>()
   private lastHandledAt = new Map<string, number>()
-  /** 本会话发起的写（PUT）目标路径：在途 + 刚完成（recentWriteMs 内）时抑制 reload 自刷。 */
+  /** 本会话发起的写（PUT）目标路径：在途时抑制 reload 自刷。 */
   private selfWriteInFlight = new Set<string>()
-  private selfWriteFinishedAt = new Map<string, number>()
+  /** 本会话最近一次 PUT 成功落盘后的服务器 mtime 水印（path → mtime）。用于精确自刷抑制，取代 1s 时间窗。 */
+  private selfWriteMtime = new Map<string, string>()
   /** 同一路径的 PUT 串行队列：杜绝同一浏览器内 autosave/手动/兜底 PUT 并发覆写。 */
-  private putQueues = new Map<string, Promise<void>>()
+  private putQueues = new Map<string, Promise<BridgeFileInfo | null>>()
 
   constructor(options?: { apiBase?: string; pollMs?: number; recentWriteMs?: number }) {
     this.apiBase = options?.apiBase ?? DEFAULT_API_BASE
@@ -133,7 +134,7 @@ export class BridgeClient {
     return (await response.json()) as BridgeFileInfo
   }
 
-  async putFile(path: string, bytes: Uint8Array): Promise<void> {
+  async putFile(path: string, bytes: Uint8Array): Promise<BridgeFileInfo | null> {
     // 同一路径的写串行化（autosave / 手动保存 / MCP save_file / 兜底 PUT 共用）。
     // 避免多个写路径同时 PUT 同一文件导致服务端交错写坏（配合服务端原子写+队列）。
     const previous = this.putQueues.get(path) ?? Promise.resolve()
@@ -141,18 +142,18 @@ export class BridgeClient {
       .catch(() => undefined)
       .then(() => this.putFileNow(path, bytes))
     const tail = run.then(
-      () => undefined,
-      () => undefined
+      () => null,
+      () => null
     )
     this.putQueues.set(path, tail)
     void tail.then(() => {
       if (this.putQueues.get(path) === tail) this.putQueues.delete(path)
-      return undefined
+      return null
     })
-    await run
+    return run
   }
 
-  private async putFileNow(path: string, bytes: Uint8Array): Promise<void> {
+  private async putFileNow(path: string, bytes: Uint8Array): Promise<BridgeFileInfo | null> {
     // Exact ArrayBuffer so fetch/UA can set Content-Length reliably.
     const payload = bytes.buffer.slice(
       bytes.byteOffset,
@@ -168,9 +169,23 @@ export class BridgeClient {
       if (!response.ok) {
         throw new Error(`Bridge write failed (${response.status}): ${path}`)
       }
+      // PUT 响应带回服务器落盘后的 mtime，作为本会话自写水印：后续该路径
+      // 的任何「文件已变更」echo，只要 mtime 仍等于本次自写值就被视为本会话
+      // 自己的写回而忽略（reloadFromDisk / watchPath 均校验此水印）。
+      let meta: BridgeFileInfo | null = null
+      try {
+        const data = (await response.json()) as BridgeFileInfo | null
+        if (data && typeof data.mtime === 'string') {
+          meta = data
+          this.selfWriteMtime.set(path, data.mtime)
+        }
+      } catch {
+        // 旧服务端/非 JSON 响应：不解析 meta，保留时间窗兜底（不静默吞错）。
+        console.warn('[bridge] PUT meta parse failed, falling back to time window', path)
+      }
+      return meta
     } finally {
       this.selfWriteInFlight.delete(path)
-      this.selfWriteFinishedAt.set(path, Date.now())
     }
   }
 
@@ -317,16 +332,28 @@ export class BridgeClient {
     return false
   }
 
-  /** 本会话自己的写是否「在途或刚完成（recentWriteMs 内）」。是则跳过文件变化重载。 */
+  /** 本会话自己的写是否「在途或刚完成」。是则跳过文件变化重载。 */
   private isSelfWrite(path: string): boolean {
-    if (this.selfWriteInFlight.has(path)) return true
-    const finishedAt = this.selfWriteFinishedAt.get(path) ?? 0
-    return Date.now() - finishedAt < this.recentWriteMs
+    return this.selfWriteInFlight.has(path)
+  }
+
+  /**
+   * 精确自写水印校验：磁盘当前 mtime 是否等于本会话最近一次 PUT 成功落盘的 mtime。
+   * 相等 → 该变更事件是本会话自己的写回 echo，应忽略（不再依赖 1s 时间窗；
+   * NAS/WebDAV 上 fs.watch echo 延迟超过 1s 也能正确识别）。
+   */
+  async isSelfWriteEcho(path: string): Promise<boolean> {
+    const expected = this.selfWriteMtime.get(path)
+    if (!expected) return false
+    // 无法读取 meta（网络/桥接瞬时失败）时按「非自写」处理（不抑制），避免 unhandled rejection。
+    const meta = await this.getFileMeta(path).catch(() => null)
+    return meta?.mtime === expected
   }
 
   /**
    * 订阅单个文档的外部变化并触发重载：SSE 为主；SSE 断线时回退到
-   * mtime 轮询。getLastWriteTime 用于「本会话自己写过则忽略」防自刷。
+   * mtime 轮询。自刷抑制用「mtime 水印」精确比对（isSelfWriteEcho），
+   * 时间窗（getLastWriteTime + recentWriteMs）仅作为非 bridge 写路径兜底。
    */
   watchPath(path: string, getLastWriteTime: () => number, reloadFromDisk: () => void): () => void {
     this.ensureConnection()
@@ -336,14 +363,20 @@ export class BridgeClient {
       return lastMtime
     })
 
-    const handleEvent = (event: BridgeFileEvent): void => {
-      if (event.type !== 'file.changed' && event.type !== 'file.created') return
-      if (event.path !== path) return
-      // 本会话自己的写（在途或刚完成）不回读重载，避免 AI 操作过程中文档被重建。
-      if (this.isSelfWrite(path)) return
-      if (Date.now() - getLastWriteTime() < this.recentWriteMs) return
-      if (this.isThrottled(path)) return
-      reloadFromDisk()
+    const handleEvent = async (event: BridgeFileEvent): Promise<void> => {
+      try {
+        if (event.type !== 'file.changed' && event.type !== 'file.created') return
+        if (event.path !== path) return
+        // 本会话自己的写（在途）不回读重载。
+        if (this.isSelfWrite(path)) return
+        // 精确水印：磁盘 mtime 与本会话最近一次自写一致 → 自己的 echo，忽略。
+        if (await this.isSelfWriteEcho(path)) return
+        if (Date.now() - getLastWriteTime() < this.recentWriteMs) return
+        if (this.isThrottled(path)) return
+        reloadFromDisk()
+      } catch (error) {
+        console.warn('[bridge] watchPath handleEvent failed', error)
+      }
     }
     const unsubscribe = this.subscribe(handleEvent)
 
@@ -363,11 +396,12 @@ export class BridgeClient {
       // oxlint-disable-next-line open-pencil/prefer-vueuse-intervals
       pollTimer = setInterval(() => {
         if (this.connected) return
-        void this.getFileMeta(path).then((meta) => {
+        void this.getFileMeta(path).then(async (meta) => {
           const mtime = meta?.mtime ?? ''
           if (!mtime || mtime === lastMtime) return mtime
           lastMtime = mtime
           if (this.isSelfWrite(path)) return mtime
+          if (await this.isSelfWriteEcho(path)) return mtime
           if (Date.now() - getLastWriteTime() < this.recentWriteMs) return mtime
           reloadFromDisk()
           return mtime

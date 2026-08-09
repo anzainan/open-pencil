@@ -10,7 +10,7 @@ export const setRotation = defineTool({
   },
   execute: (figma, { id, angle }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     node.rotation = angle
     return { id, rotation: angle }
   }
@@ -26,7 +26,7 @@ export const setOpacity = defineTool({
   },
   execute: (figma, { id, value }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     node.opacity = value
     return { id, opacity: value }
   }

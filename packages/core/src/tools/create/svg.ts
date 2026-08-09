@@ -22,7 +22,7 @@ export const importSvg = defineTool({
     y: { type: 'number', description: 'Y position' }
   },
   execute: async (figma, args) => {
-    if (!args.svg || typeof args.svg !== 'string') return { error: 'svg parameter is required' }
+    if (!args.svg || typeof args.svg !== 'string') throw new Error('svg parameter is required')
 
     const frame = createSVGNodes(figma.graph, args.parent_id ?? figma.currentPage.id, args.svg, {
       name: args.name,
@@ -30,7 +30,7 @@ export const importSvg = defineTool({
       x: args.x,
       y: args.y
     })
-    if (!frame) return { error: 'No supported SVG elements found in the markup' }
+    if (!frame) throw new Error('No supported SVG elements found in the markup')
     return { id: frame.id, name: frame.name, type: frame.type }
   }
 })

@@ -45,7 +45,7 @@ export const viewportZoomToFit = defineTool({
       maxX = Math.max(maxX, bounds.x + bounds.width)
       maxY = Math.max(maxY, bounds.y + bounds.height)
     }
-    if (minX === Infinity) return { error: 'No valid nodes found' }
+    if (minX === Infinity) throw new Error('No valid nodes found')
     const centerX = (minX + maxX) / 2
     const centerY = (minY + maxY) / 2
     figma.viewport = { center: { x: centerX, y: centerY }, zoom: 1 }

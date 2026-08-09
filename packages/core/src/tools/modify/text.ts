@@ -15,7 +15,7 @@ export const setText = defineTool({
   },
   execute: (figma, { id, text }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     node.characters = text
     return { id, text }
   }
@@ -74,7 +74,7 @@ export const setFontRange = defineTool({
       override.fills = [{ type: 'SOLID', color: parseColor(args.color), opacity: 1, visible: true }]
     }
     const raw = figma.graph.getNode(node.id)
-    if (!raw) return { error: `Node "${args.id}" not found` }
+    if (!raw) throw new Error(`Node "${args.id}" not found`)
     const runs = applyStyleToRange(raw.styleRuns, args.start, args.end, override, raw.text.length)
     figma.graph.updateNode(node.id, { styleRuns: runs })
     return { id: args.id, range: { start: args.start, end: args.end } }
@@ -96,7 +96,7 @@ export const setTextResize = defineTool({
   },
   execute: (figma, { id, mode }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     node.textAutoResize = mode
     return { id, textAutoResize: mode }
   }
@@ -138,7 +138,7 @@ export const setTextProperties = defineTool({
   execute: (figma, args) => {
     const node = figma.getNodeById(args.id)
     if (!node) return nodeNotFound(args.id)
-    if (node.type !== 'TEXT') return { error: `Node "${args.id}" is not a TEXT node` }
+    if (node.type !== 'TEXT') throw new Error(`Node "${args.id}" is not a TEXT node`)
     const updated: string[] = []
     if (args.align_horizontal !== undefined) {
       node.textAlignHorizontal = args.align_horizontal

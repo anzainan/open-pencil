@@ -21,7 +21,7 @@ export const exportSvg = defineTool({
     const ids =
       args.ids && args.ids.length > 0 ? args.ids : figma.currentPage.children.map((node) => node.id)
     const svg = renderNodesToSVG(figma.graph, pageId, ids)
-    if (!svg) return { error: 'No visible nodes to export' }
+    if (!svg) throw new Error('No visible nodes to export')
     return { svg }
   }
 })
@@ -47,7 +47,7 @@ export const exportPdf = defineTool({
     const ids =
       args.ids && args.ids.length > 0 ? args.ids : figma.currentPage.children.map((node) => node.id)
     const data = await renderNodesToPDF(figma.graph, pageId, ids)
-    if (!data || data.length === 0) return { error: 'No visible nodes to export' }
+    if (!data || data.length === 0) throw new Error('No visible nodes to export')
     const base64 = encodeBase64(data)
     return { mimeType: 'application/pdf', base64, byteLength: data.length }
   }
@@ -83,7 +83,7 @@ export const exportImage = defineTool({
   },
   execute: async (figma, args) => {
     if (!figma.exportImage) {
-      return { error: 'Image export is not available in this environment' }
+      throw new Error('Image export is not available in this environment')
     }
     const ids =
       args.ids && args.ids.length > 0 ? args.ids : figma.currentPage.children.map((node) => node.id)
@@ -92,7 +92,7 @@ export const exportImage = defineTool({
       scale: args.scale ?? 1,
       format
     })
-    if (!data || data.length === 0) return { error: 'No visible nodes to export' }
+    if (!data || data.length === 0) throw new Error('No visible nodes to export')
     const base64 = encodeBase64(data)
     const mimeMap = { PNG: 'image/png', JPG: 'image/jpeg', WEBP: 'image/webp' } as const
     return {

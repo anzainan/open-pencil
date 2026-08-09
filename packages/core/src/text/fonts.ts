@@ -336,6 +336,15 @@ export class FontManager {
     return this.loadedFamilies.get(`${family}|${style}`) ?? null
   }
 
+  /** 该 family 任意样式已加载的字体数据（工作区 fonts/ 常只注册一种字重，P0-4 探测用）。 */
+  loadedDataForFamily(family: string): ArrayBuffer | null {
+    for (const [key, data] of this.loadedFamilies) {
+      const sep = key.indexOf('|')
+      if (sep > 0 && key.slice(0, sep) === family) return data
+    }
+    return null
+  }
+
   /** 已加载字体家族名（含工作区 fonts/ 注册的字体），用于画布 UI 标签的中文兜底 typeface。 */
   loadedFamilyNames(): string[] {
     const names = new Set<string>()

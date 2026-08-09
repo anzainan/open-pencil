@@ -248,13 +248,18 @@ function resolveParagraphFontFamilies(
   const renderCJKFallbacks = cjkFallbacks.map((family) =>
     fontManager.renderFamily(family, 'Regular')
   )
-  const key = `${renderPrimary}\0${renderArabicFallbacks.join('\0')}\0${renderCJKFallbacks.join('\0')}`
+  // P0-4 统一：已加载（含工作区 fonts/）的族兜底进段落栈，与标签链路同源；
+  // 覆盖「工作区字体晚到但段落先构建」的窗口期（去重交给 uniq）。
+  const loaded = fontManager.loadedFamilyNames()
+  const key = `${renderPrimary}\0${renderArabicFallbacks.join('\0')}\0${renderCJKFallbacks.join(
+    '\0'
+  )}\0${loaded.join('\0')}`
   const cached = fontFamilyCache.get(key)
   if (cached) return cached
 
   const families = [renderPrimary]
   if (primary !== DEFAULT_FONT_FAMILY) families.push(DEFAULT_FONT_FAMILY)
-  families.push(...renderArabicFallbacks, ...renderCJKFallbacks)
+  families.push(...renderArabicFallbacks, ...renderCJKFallbacks, ...loaded)
 
   const resolved = uniq(families)
   fontFamilyCache.set(key, resolved)

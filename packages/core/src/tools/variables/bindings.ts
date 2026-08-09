@@ -24,13 +24,13 @@ export const bindVariable = defineTool({
   },
   execute: (figma, args) => {
     const node = figma.getNodeById(args.node_id)
-    if (!node) return { error: `Node "${args.node_id}" not found` }
+    if (!node) throw new Error(`Node "${args.node_id}" not found`)
     const variable = figma.getVariableById(args.variable_id)
-    if (!variable) return { error: `Variable "${args.variable_id}" not found` }
+    if (!variable) throw new Error(`Variable "${args.variable_id}" not found`)
     try {
       figma.bindVariable(args.node_id, args.field, args.variable_id)
     } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) }
+      throw new Error(err instanceof Error ? err.message : String(err))
     }
     return { node_id: args.node_id, field: args.field, variable_id: args.variable_id }
   }

@@ -81,12 +81,12 @@ describe('query_nodes', () => {
     expect(result.nodes?.every((n) => n.name.includes('Label'))).toBe(true)
   })
 
-  test('returns error for invalid xpath', async () => {
+  test('throws for invalid xpath (P0-3: failures throw)', async () => {
     const { figma } = setupToolTest()
     const tool = getTool('query_nodes')
-    const result = (await tool.execute(figma, { selector: '///invalid[[[[' })) as ToolResult
-    expect(result.error).toBeTruthy()
-    expect(result.error).toContain('XPath error')
+    await expect(tool.execute(figma, { selector: '///invalid[[[[' })).rejects.toThrow(
+      'XPath error'
+    )
   })
 
   test('respects limit param', async () => {

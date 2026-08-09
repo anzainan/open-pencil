@@ -7,6 +7,10 @@ interface TreeEntry {
   name: string
   w: number
   h: number
+  x?: number
+  y?: number
+  ax?: number
+  ay?: number
   children?: TreeEntry[]
 }
 
@@ -14,12 +18,13 @@ function nodeToTreeEntry(
   node: FigmaNodeProxy,
   level: number,
   maxDepth?: number,
-  typeFilter?: Set<string>
+  typeFilter?: Set<string>,
+  includePosition?: boolean
 ): TreeEntry | null {
   const children: TreeEntry[] = []
   if ((maxDepth === undefined || level < maxDepth) && node.children.length > 0) {
     for (const child of node.children) {
-      const entry = nodeToTreeEntry(child, level + 1, maxDepth, typeFilter)
+      const entry = nodeToTreeEntry(child, level + 1, maxDepth, typeFilter, includePosition)
       if (entry) children.push(entry)
     }
   }
@@ -33,6 +38,15 @@ function nodeToTreeEntry(
     name: node.name,
     w: node.width,
     h: node.height
+  }
+  if (includePosition) {
+    // x/y = 相对父节点的局部坐标（与 get_node / node_move 语义一致，见手册 §4.7）；
+    // ax/ay = 页面绝对坐标（top-level 节点与 x/y 相同），供按绝对坐标规划布局。
+    entry.x = node.x
+    entry.y = node.y
+    const bounds = node.absoluteBoundingBox
+    entry.ax = bounds.x
+    entry.ay = bounds.y
   }
   if (children.length > 0) entry.children = children
   return entry
@@ -55,21 +69,29 @@ export const getPageTree = defineTool({
     node_types: {
       type: 'string[]',
       description: 'Keep only these node types and their ancestors, for example FRAME or TEXT'
+    },
+    include_position: {
+      type: 'boolean',
+      description:
+        'Include x/y (relative to parent) and ax/ay (page absolute) coordinates on every node. Default: false.'
     }
   },
-  execute: (figma, { depth, root_id, node_types }) => {
+  execute: (figma, { depth, root_id, node_types, include_position }) => {
     const typeFilter = node_types && node_types.length > 0 ? new Set(node_types) : undefined
 
     if (root_id !== undefined) {
       const root = figma.getNodeById(root_id)
-      if (!root) return { error: `Node "${root_id}" not found` }
-      return { root: root.id, tree: nodeToTreeEntry(root, 1, depth, typeFilter) }
+      if (!root) throw new Error(`Node "${root_id}" not found`)
+      return {
+        root: root.id,
+        tree: nodeToTreeEntry(root, 1, depth, typeFilter, include_position)
+      }
     }
 
     const page = figma.currentPage
     const children: TreeEntry[] = []
     for (const child of page.children) {
-      const entry = nodeToTreeEntry(child, 1, depth, typeFilter)
+      const entry = nodeToTreeEntry(child, 1, depth, typeFilter, include_position)
       if (entry) children.push(entry)
     }
     return { page: page.name, children }
@@ -89,7 +111,7 @@ export const getNode = defineTool({
   },
   execute: (figma, { id, depth }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
     return nodeToResult(node, depth)
   }
 })

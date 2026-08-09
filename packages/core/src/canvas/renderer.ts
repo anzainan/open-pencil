@@ -440,6 +440,14 @@ export class SkiaRenderer {
     await RendererFonts.refreshCjkLabelFonts(this)
   }
 
+  /**
+   * 工作区 CJK 字体就绪后，把覆盖中文的已加载族注册为 TEXT 段落兜底并重绘（P0-4）。
+   * 返回是否新增了兜底族（调用方据此决定是否清 TEXT 图片缓存）。
+   */
+  refreshTextCjkFallbacks(): boolean {
+    return RendererFonts.registerTextCjkFallbackFamilies(this)
+  }
+
   syncFontGeneration(): void {
     RendererFonts.syncFontGeneration(this)
   }

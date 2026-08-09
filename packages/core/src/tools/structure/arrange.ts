@@ -31,7 +31,7 @@ export const arrangeNodes = defineTool({
       nodes = [...page.children]
     }
 
-    if (nodes.length === 0) return { error: 'No nodes to arrange' }
+    if (nodes.length === 0) throw new Error('No nodes to arrange')
     const first = nodes[0]
 
     if (mode === 'row') {

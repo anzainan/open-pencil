@@ -4,13 +4,10 @@ import type { SceneNode, VectorNetwork } from '@open-pencil/scene-graph'
 import type { FigmaAPI } from '#core/figma-api'
 import { defineTool } from '#core/tools/schema'
 
-function getVectorNode(
-  figma: FigmaAPI,
-  id: string
-): { node: SceneNode; vn: VectorNetwork } | { error: string } {
+function getVectorNode(figma: FigmaAPI, id: string): { node: SceneNode; vn: VectorNetwork } {
   const node = figma.graph.getNode(id)
-  if (!node) return { error: `Node "${id}" not found` }
-  if (!node.vectorNetwork) return { error: `Node "${id}" has no vector data` }
+  if (!node) throw new Error(`Node "${id}" not found`)
+  if (!node.vectorNetwork) throw new Error(`Node "${id}" has no vector data`)
   return { node, vn: cloneVectorNetwork(node.vectorNetwork) }
 }
 
@@ -22,9 +19,10 @@ export const pathGet = defineTool({
   },
   execute: (figma, { id }) => {
     const raw = figma.graph.getNode(id)
-    if (!raw) return { error: `Node "${id}" not found` }
+    if (!raw) throw new Error(`Node "${id}" not found`)
     const vectorNetwork = raw.vectorNetwork
-    return vectorNetwork ? { id, vectorNetwork } : { error: `Node "${id}" has no vector data` }
+    if (!vectorNetwork) throw new Error(`Node "${id}" has no vector data`)
+    return { id, vectorNetwork }
   }
 })
 
@@ -38,7 +36,7 @@ export const pathSet = defineTool({
   },
   execute: (figma, args) => {
     const raw = figma.graph.getNode(args.id)
-    if (!raw) return { error: `Node "${args.id}" not found` }
+    if (!raw) throw new Error(`Node "${args.id}" not found`)
     const network = JSON.parse(args.path)
     figma.graph.updateNode(args.id, { vectorNetwork: network })
     return { id: args.id }
@@ -54,9 +52,7 @@ export const pathScale = defineTool({
     factor: { type: 'number', description: 'Scale factor (e.g. 2 for double)', required: true }
   },
   execute: (figma, { id, factor }) => {
-    const result = getVectorNode(figma, id)
-    if ('error' in result) return result
-    const { node: raw, vn } = result
+    const { node: raw, vn } = getVectorNode(figma, id)
     const centerX = raw.width / 2
     const centerY = raw.height / 2
     for (const vertex of vn.vertices) {
@@ -89,9 +85,7 @@ export const pathFlip = defineTool({
     }
   },
   execute: (figma, { id, axis }) => {
-    const result = getVectorNode(figma, id)
-    if ('error' in result) return result
-    const { node: raw, vn } = result
+    const { node: raw, vn } = getVectorNode(figma, id)
     const width = raw.width
     const height = raw.height
     for (const vertex of vn.vertices) {
@@ -120,9 +114,7 @@ export const pathMove = defineTool({
     dy: { type: 'number', description: 'Y offset', required: true }
   },
   execute: (figma, { id, dx, dy }) => {
-    const result = getVectorNode(figma, id)
-    if ('error' in result) return result
-    const { vn } = result
+    const { vn } = getVectorNode(figma, id)
     for (const vertex of vn.vertices) {
       vertex.x += dx
       vertex.y += dy

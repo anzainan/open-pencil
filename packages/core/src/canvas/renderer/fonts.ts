@@ -163,6 +163,33 @@ async function resolveCjkLabelTypeface(r: SkiaRenderer) {
 /** 用于检测 typeface 是否覆盖中文的最小探测串（页面/登录/中文）。 */
 const CJK_PROBE_TEXT = '页面中文'
 
+/**
+ * 把已加载（含工作区 fonts/）且覆盖中文字形的字体族注册为 TEXT 段落 CJK 兜底（P0-4）。
+ * 与 resolveCjkLabelTypeface 同一探测手法；幂等（已注册的族跳过）。返回是否新增了兜底族。
+ * 调用方应在新增后 invalidateAllPictures + syncFontGeneration 让已打开 TEXT 重绘。
+ */
+export function registerTextCjkFallbackFamilies(r: SkiaRenderer): boolean {
+  if (r.isDestroyed() || !r.fontProvider) return false
+  let added = false
+  for (const family of fontManager.loadedFamilyNames()) {
+    if (fontManager.getCJKFallbackFamilies().includes(family)) continue
+    const data = fontManager.loadedDataForFamily(family)
+    if (!data) continue
+    const typeface = r.ck.Typeface.MakeFreeTypeFaceFromData(data)
+    if (!typeface) continue
+    const probe = new r.ck.Font(typeface, LABEL_FONT_SIZE)
+    const glyphIds = probe.getGlyphIDs(CJK_PROBE_TEXT)
+    probe.delete()
+    typeface.delete()
+    const missing = glyphIds.some((id) => id === 0)
+    if (!missing) {
+      fontManager.setCJKFallbackFamily(family)
+      added = true
+    }
+  }
+  return added
+}
+
 export async function prepareForExport(
   r: SkiaRenderer,
   graph: SceneGraph,

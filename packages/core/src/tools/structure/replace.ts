@@ -10,7 +10,7 @@ export const nodeReplaceWith = defineTool({
   },
   execute: async (figma, args) => {
     const node = figma.getNodeById(args.id)
-    if (!node) return { error: `Node "${args.id}" not found` }
+    if (!node) throw new Error(`Node "${args.id}" not found`)
     const parentId = node.parent?.id ?? figma.currentPageId
     const x = node.x
     const y = node.y

@@ -25,7 +25,7 @@ export const switchPage = defineTool({
   execute: (figma, { page }) => {
     const target =
       figma.root.children.find((candidate) => candidate.name === page) ?? figma.getNodeById(page)
-    if (!target) return { error: `Page "${page}" not found` }
+    if (!target) throw new Error(`Page "${page}" not found`)
     figma.currentPage = target
     return { page: target.name, id: target.id }
   }

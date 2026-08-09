@@ -26,7 +26,7 @@ export const setFill = defineTool({
   },
   execute: (figma, { id, color, color_end, gradient }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
 
     const c = parseColor(color)
 
@@ -76,7 +76,7 @@ export const setStroke = defineTool({
   },
   execute: (figma, { id, color, weight, align }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
+    if (!node) throw new Error(`Node "${id}" not found`)
 
     const c = parseColor(color)
     node.strokes = [
@@ -100,8 +100,13 @@ export const setImageFill = defineTool({
     id: { type: 'string', description: 'Node ID', required: true },
     image_data: {
       type: 'string',
-      description: 'Base64-encoded image bytes (PNG, JPEG, or WEBP)',
-      required: true
+      description:
+        'Base64-encoded image bytes (PNG, JPEG, or WEBP). Omit when using image_path. For large images prefer image_path (server-side file read avoids SSH command-line truncation).'
+    },
+    image_path: {
+      type: 'string',
+      description:
+        'Path to an image file inside the MCP root (e.g. "assets/bg.png"). Server-side read — no base64 over the wire, safe for large images. Overrides image_data.'
     },
     scale_mode: {
       type: 'string',
@@ -112,8 +117,8 @@ export const setImageFill = defineTool({
   },
   execute: (figma, { id, image_data, scale_mode }) => {
     const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
-    const bytes = decodeBase64(image_data)
+    if (!node) throw new Error(`Node "${id}" not found`)
+    const bytes = decodeBase64(image_data ?? '')
     const image = figma.createImage(bytes)
     const mode = (scale_mode ?? 'FILL') as 'FILL' | 'FIT' | 'CROP' | 'TILE'
     node.fills = [

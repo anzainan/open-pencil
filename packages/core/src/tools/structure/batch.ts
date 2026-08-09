@@ -107,9 +107,9 @@ export const batchUpdate = defineTool({
     try {
       ops = safeDestr<BatchOp[]>(String(operations))
     } catch {
-      return { error: 'Invalid JSON in operations' }
+      throw new Error('Invalid JSON in operations')
     }
-    if (!Array.isArray(ops)) return { error: 'operations must be a JSON array' }
+    if (!Array.isArray(ops)) throw new Error('operations must be a JSON array')
 
     const results: Array<{ id: string; updated: string[] }> = []
     const errors: string[] = []

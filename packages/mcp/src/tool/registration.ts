@@ -1,17 +1,69 @@
 import { Buffer } from 'node:buffer'
+import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
+import { encodeBase64 } from '@open-pencil/core/bytes'
 import { ALL_TOOLS, CODEGEN_PROMPT } from '@open-pencil/core/tools'
 
 import type { RpcJsonObject } from '#mcp/json'
 import { MAX_RESULT_BYTES, fail, ok, resultTooLargeMessage } from '#mcp/result'
+import type { MCPResult } from '#mcp/result'
 import { resolveSafePath, writeToolOutput } from '#mcp/tool/output'
 import { paramToZod } from '#mcp/tool/schema'
 
 export type RpcSender = (body: Record<string, unknown>) => Promise<unknown>
+
+/** RPC 响应中的 graphReplaced 标记：浏览器 replaceGraph 重建后首个响应带它（P0-1 方案 b）。 */
+interface RpcResponse {
+  ok?: boolean
+  result?: unknown
+  error?: string
+  graphReplaced?: boolean
+}
+
+/** 兼容旧工具的双保险：sendRpc 成功但 result 是纯 {error} 对象时转 fail（P0-3）。 */
+function isPureErrorResult(value: unknown): value is { error: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const keys = Object.keys(value)
+  if (keys.length === 0) return false
+  if (keys.length !== 1 || keys[0] !== 'error') return false
+  return typeof (value as { error: unknown }).error === 'string'
+}
+
+/**
+ * set_image_fill 的 image_path 模式：服务端从 MCP root 读图文件转 base64，
+ * 绕开「base64 经 SSH 命令行内联传参」的截断限制（P1）。返回替换后的 args。
+ */
+async function resolveImagePathArg(
+  toolArgs: Record<string, unknown>,
+  root: string | null
+): Promise<Record<string, unknown>> {
+  if (toolArgs.image_path === undefined || !root) return toolArgs
+  const imagePath = toolArgs.image_path
+  if (typeof imagePath !== 'string') return toolArgs
+  const { realPath } = await resolveSafePath(imagePath, root)
+  const bytes = await readFile(realPath)
+  const base64 = encodeBase64(bytes)
+  const { image_path: _omit, ...rest } = toolArgs
+  return { ...rest, image_data: base64 }
+}
+
+/** 重建通知：把 graphReplaced 提示拼进 ok() 结果，提醒 AI 重取 id 表。 */
+function withGraphReplacedNotice(result: MCPResult): MCPResult {
+  const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
+  return {
+    ...result,
+    content: [
+      {
+        type: 'text' as const,
+        text: `${text}\n\n⚠️ graph:replaced — 文档已重建，节点 id 已重排。请重新调用 get_page_tree 获取最新 id，再引用节点。`
+      }
+    ]
+  }
+}
 
 const automationTargetSchema = {
   document_id: z.string().describe('Optional OpenPencil document/tab ID to target').optional(),
@@ -58,13 +110,19 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
       async (args: Record<string, unknown>) => {
         try {
           const { target, args: toolArgs } = splitAutomationTarget(args)
+          const resolvedArgs =
+            def.name === 'set_image_fill'
+              ? await resolveImagePathArg(toolArgs, resolvedRoot)
+              : toolArgs
           const result = await sendRpc({
             command: 'tool',
-            args: { ...target, name: def.name, args: toolArgs }
+            args: { ...target, name: def.name, args: resolvedArgs }
           })
-          const res = result as { ok?: boolean; result?: unknown; error?: string }
-          if (res.ok === false) return fail(new Error(res.error))
+          const res = result as RpcResponse
+          if (res.ok === false) return fail(new Error(res.error ?? 'Tool failed'))
           const r = res.result as RpcJsonObject | undefined
+          // 双保险：旧工具仍可能返回纯 {error} 对象 → 转 fail（P0-3）。
+          if (isPureErrorResult(r)) return fail(new Error(r.error))
           const filePath = typeof toolArgs.path === 'string' ? toolArgs.path : null
           if (r && filePath && resolvedRoot) {
             const written = await writeToolOutput(def.name, r, filePath, resolvedRoot)
@@ -94,7 +152,9 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
               ]
             }
           }
-          return ok(r, def.name)
+          const out = ok(r, def.name)
+          if (res.graphReplaced) return withGraphReplacedNotice(out)
+          return out
         } catch (e) {
           return fail(e)
         }
@@ -274,17 +334,31 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
             continue
           }
           const resolvedArgs = resolveStepReferences(stepArgs, results)
+          const toolArgs =
+            tool === 'set_image_fill' ? await resolveImagePathArg(resolvedArgs, resolvedRoot) : resolvedArgs
           const result = await sendRpc({
             command: 'tool',
-            args: { ...target, name: tool, args: resolvedArgs }
+            args: { ...target, name: tool, args: toolArgs }
           })
-          const res = result as { ok?: boolean; result?: unknown; error?: string }
+          const res = result as RpcResponse
           if (res.ok === false) {
             results.push({ index, tool, ok: false, error: res.error ?? 'tool failed' })
             continue
           }
           const r = res.result as RpcJsonObject | undefined
+          if (isPureErrorResult(r)) {
+            results.push({ index, tool, ok: false, error: r.error })
+            continue
+          }
           results.push({ index, tool, ok: true, id: extractResultId(r), result: r })
+          if (res.graphReplaced) {
+            results.push({
+              index,
+              tool: 'graph:replaced',
+              ok: false,
+              error: '文档已重建，节点 id 已重排。请停止当前 batch，重新 get_page_tree 获取最新 id 后再继续。'
+            })
+          }
         }
         return ok({ results })
       } catch (e) {
