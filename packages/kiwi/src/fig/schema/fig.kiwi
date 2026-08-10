@@ -188,6 +188,7 @@ enum ImageScaleMode {
   FIT = 1;
   FILL = 2;
   TILE = 3;
+  CROP = 4;
 }
 
 enum EffectType {

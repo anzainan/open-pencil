@@ -64,8 +64,10 @@ describe('fig export/import with images', () => {
 
     const bytes1 = new Uint8Array([11, 22, 33, 44, 55])
     const bytes2 = new Uint8Array([66, 77, 88, 99])
+    const bytes3 = new Uint8Array([66, 77, 88, 99, 101])
     const { hash: hash1 } = figma.createImage(bytes1)
     const { hash: hash2 } = figma.createImage(bytes2)
+    const { hash: hash3 } = figma.createImage(bytes3)
 
     graph.createNode('RECTANGLE', page.id, {
       name: 'Img1',
@@ -97,16 +99,34 @@ describe('fig export/import with images', () => {
         }
       ]
     })
+    graph.createNode('RECTANGLE', page.id, {
+      name: 'Img3',
+      width: 90,
+      height: 90,
+      fills: [
+        {
+          type: 'IMAGE',
+          color: { r: 0, g: 0, b: 0, a: 1 },
+          opacity: 1,
+          visible: true,
+          imageHash: hash3,
+          imageScaleMode: 'CROP'
+        }
+      ]
+    })
 
     const zip = await exportFigFile(graph)
     const restored = await parseFigFile(zip.buffer as ArrayBuffer)
 
-    expect(restored.images.size).toBe(2)
+    expect(restored.images.size).toBe(3)
     expect(new Uint8Array(expectDefined(restored.images.get(hash1), 'restored image 1'))).toEqual(
       bytes1
     )
     expect(new Uint8Array(expectDefined(restored.images.get(hash2), 'restored image 2'))).toEqual(
       bytes2
+    )
+    expect(new Uint8Array(expectDefined(restored.images.get(hash3), 'restored image 3'))).toEqual(
+      bytes3
     )
 
     const restoredImg1 = expectDefined(
@@ -117,7 +137,13 @@ describe('fig export/import with images', () => {
       [...restored.getAllNodes()].find((node) => node.name === 'Img2'),
       'restored image node 2'
     )
+    const restoredImg3 = expectDefined(
+      [...restored.getAllNodes()].find((node) => node.name === 'Img3'),
+      'restored image node 3'
+    )
     expect(restoredImg1.fills[0].imageHash).toBe(hash1)
     expect(restoredImg2.fills[0].imageHash).toBe(hash2)
+    expect(restoredImg3.fills[0].imageHash).toBe(hash3)
+    expect(restoredImg3.fills[0].imageScaleMode).toBe('CROP')
   })
 })

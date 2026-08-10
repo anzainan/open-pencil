@@ -70,4 +70,27 @@ describe('Figma Kiwi codec', () => {
 
     expect(encoded.length).toBeGreaterThan(0)
   })
+
+  test('round-trips IMAGE paint with CROP scale mode', async () => {
+    await initCodec()
+
+    const nodeChange: NodeChange = {
+      guid: { sessionID: 1, localID: 3 },
+      type: 'RECTANGLE',
+      fillPaints: [
+        {
+          type: 'IMAGE',
+          color: red,
+          image: { hash: new Uint8Array([1, 2, 3, 4]) },
+          imageScaleMode: 'CROP'
+        }
+      ]
+    }
+    const encoded = encodeMessage(createNodeChangesMessage(1, 0, [nodeChange]))
+    const decoded = decodeMessage(encoded)
+    const paint = decoded.nodeChanges?.[0]?.fillPaints?.[0]
+
+    expect(paint?.type).toBe('IMAGE')
+    expect(paint?.imageScaleMode).toBe('CROP')
+  })
 })
