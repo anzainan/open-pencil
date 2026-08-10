@@ -78,7 +78,6 @@
   "openProviderSettings": "プロバイダー設定を開く",
   "settings": "設定",
   "settingsDescription": "連携サービスとアプリの設定を管理します。",
-  "settingsAIAndAgents": "AIとエージェント",
   "models": "モデル",
   "modelsDescription": "再利用可能なモデルとプロバイダー接続を設定します。",
   "addModel": "モデルを追加",

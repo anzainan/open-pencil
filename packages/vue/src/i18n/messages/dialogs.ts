@@ -127,7 +127,6 @@ export const dialogMessageDefaults = {
   openProviderSettings: 'Open provider settings',
   settings: 'Settings',
   settingsDescription: 'Manage integrations and app preferences.',
-  settingsAIAndAgents: 'AI & agents',
   models: 'Models',
   modelsDescription: 'Configure reusable models and their provider connections.',
   addModel: 'Add model',

@@ -78,7 +78,6 @@
   "openProviderSettings": "Abrir opciones del proveedor",
   "settings": "Ajustes",
   "settingsDescription": "Gestiona integraciones y preferencias de la aplicación.",
-  "settingsAIAndAgents": "IA y agentes",
   "models": "Modelos",
   "modelsDescription": "Configura modelos reutilizables y sus conexiones de proveedor.",
   "addModel": "Añadir modelo",
