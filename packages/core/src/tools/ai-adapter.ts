@@ -51,7 +51,14 @@ export interface StepBudget {
 export interface AIAdapterOptions {
   getFigma: () => FigmaAPI
   onBeforeExecute?: (def: ToolDef) => void
-  onAfterExecute?: (def: ToolDef) => Promise<void> | void
+  /**
+   * Runs after execute (also on error). Receives the raw args and the final
+   * result; may return a replacement result (e.g. with post-layout warnings).
+   */
+  onAfterExecute?: (
+    def: ToolDef,
+    ctx: { args: Record<string, unknown>; execResult: unknown }
+  ) => Promise<unknown>
   onFlashNodes?: (nodeIds: string[]) => void
   onToolLog?: (entry: ToolLogEntry) => void
   getStepBudget?: () => StepBudget
@@ -158,7 +165,9 @@ export function toolsToAI(
 
     const toolOpts: Record<string, unknown> = {
       description: def.description,
-      inputSchema: valibotSchema(v.object(shape as Record<string, never>)),
+      inputSchema: valibotSchema(
+        v.looseObject(shape as Record<string, never>)
+      ),
       execute: async (args: Record<string, unknown>) => {
         const startTime = Date.now()
         const figma = options.getFigma()
@@ -166,8 +175,9 @@ export function toolsToAI(
           def.mutates && options.onToolLog ? captureNodeSnapshot(figma, args) : undefined
 
         options.onBeforeExecute?.(def)
+        let execResult: unknown
         try {
-          let execResult = await def.execute(options.getFigma(), args)
+          execResult = await def.execute(options.getFigma(), args)
           if (def.mutates && options.onFlashNodes) {
             const ids = extractNodeIds(execResult)
             if (ids.length > 0) options.onFlashNodes(ids)
@@ -176,14 +186,13 @@ export function toolsToAI(
           if (options.getStepBudget) {
             execResult = appendStepWarning(execResult, options.getStepBudget())
           }
-          return execResult
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err)
           emitToolLog(options, def, args, startTime, figma, nodeBefore, null, errorMsg)
-          return { error: errorMsg }
-        } finally {
-          await options.onAfterExecute?.(def)
+          execResult = { error: errorMsg }
         }
+        const after = await options.onAfterExecute?.(def, { args, execResult })
+        return after === undefined ? execResult : after
       }
     }
 

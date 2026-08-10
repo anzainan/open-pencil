@@ -115,6 +115,20 @@ describe('render', () => {
     expect(result.fontWeight).toBe(700)
     expect(result.textAlignHorizontal).toBe('CENTER')
   })
+
+  test('throws on multi-root JSX and leaves no orphan nodes', async () => {
+    const { figma, graph } = setupToolTest()
+    const tool = getTool('render')
+    const before = graph.nodes.size
+
+    await expect(
+      tool.execute(figma, {
+        jsx: '<><Frame name="A" /><Frame name="B" /></>'
+      })
+    ).rejects.toThrow(/只支持单根/)
+
+    expect(graph.nodes.size).toBe(before)
+  })
 })
 
 describe('create_vector', () => {

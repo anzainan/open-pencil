@@ -12,7 +12,7 @@
 import { renderTreeNode } from '@open-pencil/core/design-jsx'
 import type { FigmaAPI } from '@open-pencil/core/figma-api'
 import { computeAllLayouts } from '@open-pencil/core/layout'
-import { ALL_TOOLS } from '@open-pencil/core/tools'
+import { ALL_TOOLS, appendPostComputeWarnings } from '@open-pencil/core/tools'
 import type { JsonObject } from '@open-pencil/scene-graph/primitives'
 
 import {
@@ -57,18 +57,22 @@ function extractNodeIds(result: unknown): string[] {
 async function finishMutating(
   store: AutomationTarget['store'],
   pageId: string,
+  figma: FigmaAPI,
   result: unknown,
   name: string,
   toolArgs: Record<string, unknown>,
   options: ApplyToolOptions,
   beforeSnapshot: ReturnType<typeof store.snapshotPage> | null,
   docPath: string | null
-): Promise<void> {
+): Promise<unknown> {
   const pageNode = store.graph.getNode(pageId)
   if (pageNode) await ensureGraphFonts(store.graph, pageNode.childIds, store.renderer)
   computeAllLayouts(store.graph, pageId)
   store.requestRender()
   store.flashNodes(extractNodeIds(result))
+
+  // 布局重算可能把 resize 回写回 Yoga 计算值（flex HUG）→ 回读 diff 并追加 warning。
+  const verified = appendPostComputeWarnings(figma, name, toolArgs, result)
 
   // Append to the journal first (the caller holds the document lock, so this
   // cannot race the covering autosave write). The assigned seq is carried on the
@@ -107,6 +111,8 @@ async function finishMutating(
       }
     })
   }
+
+  return verified
 }
 
 /**
@@ -135,7 +141,17 @@ export async function applyAutomationTool(
           x: toolArgs.x as number | undefined,
           y: toolArgs.y as number | undefined
         })
-        await finishMutating(store, target.pageId, result, name, toolArgs, options, before, docPath)
+        await finishMutating(
+          store,
+          target.pageId,
+          makeFigma(store, target.pageId),
+          result,
+          name,
+          toolArgs,
+          options,
+          before,
+          docPath
+        )
         return {
           ok: true,
           result: { id: result.id, name: result.name, type: result.type, children: result.childIds }
@@ -151,9 +167,19 @@ export async function applyAutomationTool(
     const figma = makeFigma(store, target.pageId)
     const before = def.mutates && options.undo ? store.snapshotPage() : null
     try {
-      const result = await def.execute(figma, toolArgs)
+      let result = await def.execute(figma, toolArgs)
       if (def.mutates) {
-        await finishMutating(store, figma.currentPageId, result, name, toolArgs, options, before, docPath)
+        result = await finishMutating(
+          store,
+          figma.currentPageId,
+          figma,
+          result,
+          name,
+          toolArgs,
+          options,
+          before,
+          docPath
+        )
       }
       return { ok: true, result }
     } catch (e) {

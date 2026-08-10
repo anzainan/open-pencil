@@ -3,7 +3,7 @@ import { tool } from 'ai'
 import * as v from 'valibot'
 
 import { computeAllLayouts } from '@open-pencil/core/layout'
-import { CORE_TOOLS, toolsToAI } from '@open-pencil/core/tools'
+import { CORE_TOOLS, appendPostComputeWarnings, toolsToAI } from '@open-pencil/core/tools'
 import type { StepBudget, ToolLogEntry } from '@open-pencil/core/tools'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
@@ -95,7 +95,7 @@ export function createAITools(store: EditorStore) {
           beforeSnapshot = store.snapshotPage()
         }
       },
-      onAfterExecute: async (def) => {
+      onAfterExecute: async (def, ctx) => {
         if (def.mutates) {
           const pageId = store.state.currentPageId
           const pageNode = store.graph.getNode(pageId)
@@ -112,7 +112,15 @@ export function createAITools(store: EditorStore) {
             })
             beforeSnapshot = null
           }
+          // 布局重算可能把 resize 回写回 Yoga 计算值（flex HUG）→ 回读 diff 并追加 warning。
+          return appendPostComputeWarnings(
+            makeFigmaFromStore(store),
+            def.name,
+            ctx.args,
+            ctx.execResult
+          )
         }
+        return undefined
       },
       onFlashNodes: (nodeIds) => {
         store.renderer?.aiClearActive()

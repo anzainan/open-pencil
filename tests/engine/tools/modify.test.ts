@@ -118,6 +118,46 @@ describe('update_node', () => {
 
     expect(expectDefined(figma.getNodeById(rect.id), 'rectangle node').cornerRadius).toBe(12)
   })
+
+  test('warns for unsupported args instead of silently returning updated:[]', () => {
+    const { figma } = setupToolTest()
+    const rect = figma.createRectangle()
+    rect.resize(100, 100)
+
+    const tool = getTool('update_node')
+    const result = tool.execute(figma, { id: rect.id, gap: 24 }) as ToolResult
+
+    expect(result.updated).toEqual([])
+    const warnings = result.warnings as string[]
+    expect(warnings.length).toBe(1)
+    expect(warnings[0]).toMatch(/gap/)
+    expect(warnings[0]).toMatch(/update_node/)
+    expect(warnings[0]).toMatch(/已忽略/)
+  })
+
+  test('warns when no recognizable property is provided', () => {
+    const { figma } = setupToolTest()
+    const rect = figma.createRectangle()
+
+    const tool = getTool('update_node')
+    const result = tool.execute(figma, { id: rect.id, something_unknown: 1 }) as ToolResult
+
+    expect(result.updated).toEqual([])
+    expect((result.warnings as string[])[0]).toMatch(/something_unknown/)
+  })
+
+  test('does not warn for recognized props', () => {
+    const { figma } = setupToolTest()
+    const rect = figma.createRectangle()
+    rect.resize(100, 100)
+
+    const tool = getTool('update_node')
+    const result = tool.execute(figma, { id: rect.id, width: 200, opacity: 0.5 }) as ToolResult
+
+    expect(result.updated).toContain('size')
+    expect(result.updated).toContain('opacity')
+    expect(result.warnings).toBeUndefined()
+  })
 })
 
 describe('set_layout', () => {

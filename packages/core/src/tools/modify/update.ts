@@ -1,6 +1,44 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 
-import { defineTool, nodeNotFound } from '#core/tools/schema'
+import { defineTool, nodeNotFound, withWarnings } from '#core/tools/schema'
+
+/** 参数表（params）白名单；表外键会被忽略，需向调用方告警而不是静默丢弃。 */
+const UPDATE_NODE_KEYS = [
+  'id',
+  'x',
+  'y',
+  'width',
+  'height',
+  'opacity',
+  'corner_radius',
+  'visible',
+  'text',
+  'text_direction',
+  'flow_direction',
+  'font_size',
+  'font_weight',
+  'name'
+]
+
+function collectUpdateNodeWarnings(
+  args: Record<string, unknown>,
+  updated: string[]
+): string[] {
+  const warnings: string[] = []
+  const unknownKeys = Object.keys(args).filter(
+    (key) => key !== 'id' && !UPDATE_NODE_KEYS.includes(key)
+  )
+  if (unknownKeys.length > 0) {
+    warnings.push(
+      `属性 ${unknownKeys.join('、')} 不被 update_node 支持（白名单：${UPDATE_NODE_KEYS.join(
+        ', '
+      )}），已忽略`
+    )
+  } else if (updated.length === 0 && Object.keys(args).length > 1) {
+    warnings.push('没有任何可识别的属性被更新')
+  }
+  return warnings
+}
 
 export const updateNode = defineTool({
   name: 'update_node',
@@ -87,6 +125,6 @@ export const updateNode = defineTool({
       figma.graph.updateNode(node.id, { fontWeight: args.font_weight })
       updated.push('fontWeight')
     }
-    return { id: args.id, updated }
+    return withWarnings({ id: args.id, updated }, collectUpdateNodeWarnings(args, updated))
   }
 })

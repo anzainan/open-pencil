@@ -90,6 +90,22 @@ export const nodeResize = defineTool({
     const node = figma.getNodeById(id)
     if (!node) return nodeNotFound(id)
     node.resize(width, height)
+    // First line of defense: read back after write. The authoritative check
+    // runs in the app wrapper after computeAllLayouts (appendPostComputeWarnings),
+    // because Yoga may overwrite a flex HUG axis back to its computed size.
+    if (
+      Math.abs(node.width - width) > 0.001 ||
+      Math.abs(node.height - height) > 0.001
+    ) {
+      return {
+        id,
+        width,
+        height,
+        warnings: [
+          `尺寸被布局引擎覆盖（flex HUG），实际 width=${node.width} height=${node.height}`
+        ]
+      }
+    }
     return { id, width, height }
   }
 })

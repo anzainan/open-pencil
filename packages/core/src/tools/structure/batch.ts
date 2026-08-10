@@ -8,6 +8,25 @@ interface BatchOp {
   props: Record<string, unknown>
 }
 
+/** applyBatchProps 支持的白名单；表外键会被忽略，需向调用方告警而不是静默丢弃。 */
+const BATCH_PROP_KEYS = [
+  'spacing',
+  'padding',
+  'padding_horizontal',
+  'padding_vertical',
+  'counter_align',
+  'align',
+  'sizing_horizontal',
+  'sizing_vertical',
+  'grow',
+  'name',
+  'visible',
+  'corner_radius',
+  'opacity',
+  'auto_resize',
+  'direction'
+]
+
 function str(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
@@ -16,8 +35,12 @@ function num(value: unknown): number {
   return typeof value === 'number' ? value : 0
 }
 
-function applyBatchProps(node: FigmaNodeProxy, props: Record<string, unknown>): string[] {
+function applyBatchProps(
+  node: FigmaNodeProxy,
+  props: Record<string, unknown>
+): { updated: string[]; ignored: string[] } {
   const updated: string[] = []
+  const ignored = Object.keys(props).filter((key) => !BATCH_PROP_KEYS.includes(key))
 
   if (props.spacing !== undefined) {
     node.itemSpacing = num(props.spacing)
@@ -86,14 +109,14 @@ function applyBatchProps(node: FigmaNodeProxy, props: Record<string, unknown>): 
     updated.push('direction')
   }
 
-  return updated
+  return { updated, ignored }
 }
 
 export const batchUpdate = defineTool({
   name: 'batch_update',
   mutates: true,
   description:
-    'Execute multiple modifications in one call. Each operation is {id, props} where props can include: spacing, padding, padding_horizontal, padding_vertical, counter_align, sizing_horizontal, sizing_vertical, grow, name, visible, corner_radius, auto_resize (for text), direction. Runs all updates with one layout recompute.',
+    'Execute multiple modifications in one call. Each operation is {id, props} where props can include: spacing, padding, padding_horizontal, padding_vertical, counter_align, sizing_horizontal, sizing_vertical, grow, name, visible, corner_radius, auto_resize (for text), direction. Runs all updates with one layout recompute. Unsupported props are reported in warnings instead of being silently ignored.',
   params: {
     operations: {
       type: 'string',
@@ -113,6 +136,7 @@ export const batchUpdate = defineTool({
 
     const results: Array<{ id: string; updated: string[] }> = []
     const errors: string[] = []
+    const warnings: string[] = []
 
     for (const op of ops) {
       const node = figma.getNodeById(op.id)
@@ -120,13 +144,23 @@ export const batchUpdate = defineTool({
         errors.push(`Node "${op.id}" not found`)
         continue
       }
-      const updated = applyBatchProps(node, op.props)
+      const { updated, ignored } = applyBatchProps(node, op.props)
       if (updated.length > 0) results.push({ id: op.id, updated })
+      if (ignored.length > 0) {
+        warnings.push(
+          `操作 ${op.id} 的属性 ${ignored.join('、')} 不被 batch_update 支持（白名单：${BATCH_PROP_KEYS.join(
+            ', '
+          )}），已忽略`
+        )
+      } else if (updated.length === 0 && Object.keys(op.props).length > 0) {
+        warnings.push(`操作 ${op.id} 没有任何属性被更新`)
+      }
     }
 
     const out: Record<string, unknown> = { updated: results.length }
     if (results.length > 0) out.results = results
     if (errors.length > 0) out.errors = errors
+    if (warnings.length > 0) out.warnings = warnings
     return out
   }
 })

@@ -22,6 +22,18 @@ export interface ParamDef {
   max?: number
 }
 
+/**
+ * Tool execution result.
+ *
+ * Tools return plain objects; `warnings` is an optional array used to surface
+ * non-fatal problems (e.g. a property that was silently ignored, or a size
+ * that the layout engine overwrote) so the AI caller never sees fake success.
+ */
+export interface ToolResult {
+  [key: string]: unknown
+  warnings?: string[]
+}
+
 export interface ToolDef {
   name: string
   description: string
@@ -92,4 +104,81 @@ export function nodeToResult(node: FigmaNodeProxy, maxDepth?: number): Record<st
 
 export function nodeSummary(node: FigmaNodeProxy): { id: string; name: string; type: string } {
   return { id: node.id, name: node.name, type: node.type }
+}
+
+/**
+ * Merge `warnings` into a tool result object without losing existing fields.
+ * Returns a new object; keeps the original when there is nothing to add.
+ */
+export function withWarnings(result: unknown, warnings: string[]): unknown {
+  if (warnings.length === 0) return result
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    const existing = Array.isArray((result as ToolResult).warnings)
+      ? ((result as ToolResult).warnings as string[])
+      : []
+    return { ...result, warnings: [...existing, ...warnings] }
+  }
+  return { result, warnings }
+}
+
+function isPureErrorResult(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const keys = Object.keys(value)
+  return keys.length === 1 && keys[0] === 'error' && typeof (value as ToolResult).error === 'string'
+}
+
+/**
+ * Post-layout verification hook (second line of defense for fake success).
+ *
+ * `computeAllLayouts` runs after the tool's execute in the app wrapper layer
+ * and may overwrite a resize back to the Yoga-computed size (flex HUG axis).
+ * Call this after recompute to diff requested vs actual size for node_resize
+ * and update_node width/height, and surface any divergence as a warning.
+ */
+export function appendPostComputeWarnings(
+  figma: FigmaAPI,
+  defName: string,
+  args: Record<string, unknown>,
+  execResult: unknown
+): unknown {
+  if (isPureErrorResult(execResult)) return execResult
+  const warnings: string[] = []
+
+  if (defName === 'node_resize') {
+    const { id, width, height } = args
+    if (typeof id === 'string' && typeof width === 'number' && typeof height === 'number') {
+      const node = figma.getNodeById(id)
+      if (node) {
+        const actualWidth = node.width
+        const actualHeight = node.height
+        if (
+          Math.abs(actualWidth - width) > 0.001 ||
+          Math.abs(actualHeight - height) > 0.001
+        ) {
+          warnings.push(
+            `尺寸被布局引擎覆盖（flex HUG），实际 width=${actualWidth} height=${actualHeight}`
+          )
+        }
+      }
+    }
+  } else if (defName === 'update_node') {
+    const { id, width, height } = args
+    if (typeof id === 'string' && (typeof width === 'number' || typeof height === 'number')) {
+      const node = figma.getNodeById(id)
+      if (node) {
+        const requestedWidth = typeof width === 'number' ? width : node.width
+        const requestedHeight = typeof height === 'number' ? height : node.height
+        if (
+          Math.abs(node.width - requestedWidth) > 0.001 ||
+          Math.abs(node.height - requestedHeight) > 0.001
+        ) {
+          warnings.push(
+            `尺寸被布局引擎覆盖（flex HUG），实际 width=${node.width} height=${node.height}`
+          )
+        }
+      }
+    }
+  }
+
+  return withWarnings(execResult, warnings)
 }

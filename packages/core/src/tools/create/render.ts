@@ -4,7 +4,7 @@ export const render = defineTool({
   name: 'render',
   mutates: true,
   description:
-    'Render JSX to design nodes. Supports inline SVG paths, including open stroked paths: <svg viewBox="0 0 24 24" size={24}><path d="M2 12 L22 12" stroke="#000" fill="none" /></svg>. Use replace_id to replace a placeholder while preserving its position.',
+    'Render JSX to design nodes. Supports inline SVG paths, including open stroked paths: <svg viewBox="0 0 24 24" size={24}><path d="M2 12 L22 12" stroke="#000" fill="none" /></svg>. Use replace_id to replace a placeholder while preserving its position. Single-root only: JSX must return one container element (wrap multiple children in one Frame), otherwise an error is thrown.',
   params: {
     replace_id: {
       type: 'string',
@@ -41,6 +41,17 @@ export const render = defineTool({
       x: args.x,
       y: args.y
     })
+
+    // 设计圣经要求单根：多根 fragment 不再静默建到页面顶层，先清理已创建节点再抛错。
+    if (results.length > 1) {
+      for (const root of results) {
+        figma.graph.deleteNode(root.id)
+      }
+      throw new Error(
+        `render 只支持单根 JSX（设计圣经要求），当前有 ${results.length} 个根；如需多元素请用单个容器包起来（如 <div flex col> 内放多个子元素）`
+      )
+    }
+
     const result = results[0]
 
     if (args.replace_id && replaceIndex >= 0) {
@@ -55,14 +66,7 @@ export const render = defineTool({
       name: result.name,
       type: result.type,
       children: result.childIds,
-      ...(result.warnings ? { warnings: result.warnings } : {}),
-      ...(results.length > 1
-        ? {
-            siblings: results
-              .slice(1)
-              .map((node) => ({ id: node.id, name: node.name, type: node.type }))
-          }
-        : {})
+      ...(result.warnings ? { warnings: result.warnings } : {})
     }
   }
 })
