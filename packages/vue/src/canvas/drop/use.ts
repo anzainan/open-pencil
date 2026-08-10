@@ -43,7 +43,7 @@ async function placeStockImage(url: string, cx: number, cy: number, editor: Edit
       y: cy - 80,
       width: 200,
       height: 160,
-      fills: [{ type: 'SOLID', color: { r: 0.92, g: 0.92, b: 0.92 }, opacity: 0.6, visible: true }],
+      fills: [{ type: 'SOLID', color: { r: 0.92, g: 0.92, b: 0.92, a: 1 }, opacity: 0.6, visible: true }],
       name: '正在加载…'
     }
   )
