@@ -1,7 +1,7 @@
 import type { EditorState } from '@open-pencil/core/editor'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
-import { journalDocPathForSource, withAiOpsLock } from '@/app/bridge/op-journal'
+import { journalDocPathForFilePath, journalDocPathForSource, withAiOpsLock } from '@/app/bridge/op-journal'
 import { rememberWorkspaceFile } from '@/app/bridge/restore'
 import { resolveUniqueWorkspacePath, sanitizeWorkspaceFileName } from '@/app/bridge/workspace-name'
 import { downloadBlob } from '@/app/document/io/browser'
@@ -95,7 +95,6 @@ export function createSaveActions({
     const base = sanitizeWorkspaceFileName(requested)
     if (!base) return
 
-    const data = await buildFigFile()
     let path: string
     try {
       path = await resolveUniqueWorkspacePath(`${base}.fig`)
@@ -110,8 +109,7 @@ export function createSaveActions({
     setDownloadName(path)
     setSourceIdentity({ handle: null, path: null })
     state.autosaveEnabled = true
-    setSavedVersion(state.sceneVersion)
-    const wrote = await withAiOpsLock(path, () => writeFile(data))
+    const wrote = await withAiOpsLock(path, async () => writeFile(await buildFigFile()))
     if (wrote) {
       startWatchingFile()
       void bridgeClient.reportRecent(path)
@@ -126,15 +124,17 @@ export function createSaveActions({
     return window.prompt('保存到工作区根目录，请输入文件名：', defaultName)
   }
 
-  async function saveFigFileAs() {
-    let data: Uint8Array
+  /** 另存为/导出的快照序列化：失败统一提示「导出失败」并抛出（与落盘「保存失败」区分）。 */
+  async function buildExportData(): Promise<Uint8Array> {
     try {
-      data = await buildFigFile()
+      return await buildFigFile()
     } catch (error) {
       toast.error(`导出失败：${saveErrorMessage(error)}`)
       throw error
     }
+  }
 
+  async function saveFigFileAs() {
     // 另存为 = 一次性导出副本，不应改变文档的持久保存目标。执行前快照当前可写源，
     // 导出写盘后按「是否原有无源」决定是否恢复，避免绑定被销毁/downloadName 固化
     // 导致后续保存全变下载；仅当文档原本无任何可写源时才允许另存为建立新目标。
@@ -164,8 +164,10 @@ export function createSaveActions({
       setFileHandle(null)
       state.documentName = documentNameFromFigPath(path)
       state.autosaveEnabled = true
+      const docPath = await journalDocPathForFilePath(path)
       try {
-        if (await writeFile(data)) setSourceIdentity({ handle: null, path })
+        const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildExportData()))
+        if (wrote) setSourceIdentity({ handle: null, path })
       } catch (error) {
         toast.error(`保存失败：${saveErrorMessage(error)}`)
         throw error
@@ -182,8 +184,10 @@ export function createSaveActions({
       setFilePath(null)
       state.documentName = documentNameFromFigPath(handle.name)
       state.autosaveEnabled = true
+      const docPath = await journalDocPathForSource(null, null)
       try {
-        if (await writeFile(data)) setSourceIdentity({ handle, path: null })
+        const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildExportData()))
+        if (wrote) setSourceIdentity({ handle, path: null })
       } catch (error) {
         toast.error(`保存失败：${saveErrorMessage(error)}`)
         throw error
@@ -198,7 +202,7 @@ export function createSaveActions({
     setStorageBinding(null)
     setDownloadName(filename)
     state.documentName = documentNameFromFigPath(filename)
-    downloadBlob(new Uint8Array(data), filename, 'application/octet-stream')
+    downloadBlob(new Uint8Array(await buildExportData()), filename, 'application/octet-stream')
     if (hadWritableSource) restorePrevSource()
   }
 
