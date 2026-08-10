@@ -52,7 +52,6 @@ export function createSaveActions({
     const filePath = getFilePath()
     const fileHandle = getFileHandle()
     const storageBinding = getStorageBinding()
-    const downloadName = getDownloadName()
     if (storageBinding || filePath || fileHandle) {
       // 一旦确认有可写源（storageBinding || filePath || fileHandle）就打开 autosave，
       // 覆盖 MCP new_document/save_file、UI 新建、Tauri 打开等全部写路径。
@@ -61,10 +60,10 @@ export function createSaveActions({
       const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildFigFile()))
       if (wrote && !storageBinding) setSourceIdentity({ handle: fileHandle, path: filePath })
       if (wrote) toast.info('文件已保存')
-    } else if (downloadName) {
-      downloadBlob(new Uint8Array(await buildFigFile()), downloadName, 'application/octet-stream')
-      toast.info('文件已保存')
     } else {
+      // 无可写源（浏览器手动打开、无 handle/path/binding）：优先写工作区。
+      // downloadName 只应在用户显式「另存/下载」时作为目标，不在此作为保存路径，
+      // 避免「打开一个文件」这个动作把后续保存都钉成下载。
       await saveUntitledToWorkspace()
     }
   }
@@ -119,6 +118,23 @@ export function createSaveActions({
   async function saveFigFileAs() {
     const data = await buildFigFile()
 
+    // 另存为 = 一次性导出副本，不应改变文档的持久保存目标。执行前快照当前可写源，
+    // 导出写盘后按「是否原有无源」决定是否恢复，避免绑定被销毁/downloadName 固化
+    // 导致后续保存全变下载；仅当文档原本无任何可写源时才允许另存为建立新目标。
+    const prev = {
+      binding: getStorageBinding(),
+      path: getFilePath(),
+      handle: getFileHandle(),
+      name: getDownloadName()
+    }
+    const hadWritableSource = Boolean(prev.binding || prev.path || prev.handle)
+    const restorePrevSource = () => {
+      setStorageBinding(prev.binding)
+      setFilePath(prev.path)
+      setFileHandle(prev.handle)
+      setDownloadName(prev.name)
+    }
+
     if (IS_TAURI) {
       const path = await chooseTauriFigSavePath()
       if (!path) return
@@ -141,6 +157,7 @@ export function createSaveActions({
       state.documentName = documentNameFromFigPath(handle.name)
       state.autosaveEnabled = true
       if (await writeFile(data)) setSourceIdentity({ handle, path: null })
+      if (hadWritableSource) restorePrevSource()
       startWatchingFile()
       return
     }
@@ -151,6 +168,7 @@ export function createSaveActions({
     setDownloadName(filename)
     state.documentName = documentNameFromFigPath(filename)
     downloadBlob(new Uint8Array(data), filename, 'application/octet-stream')
+    if (hadWritableSource) restorePrevSource()
   }
 
   return { saveFigFile, saveFigFileAs, writeFile }

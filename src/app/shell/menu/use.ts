@@ -64,9 +64,6 @@ export function useMenu() {
     'export-fig': () => {
       if (store.state.selectedIds.size > 0) void store.exportSelection(1, 'fig')
     },
-    autosave: () => {
-      store.state.autosaveEnabled = !store.state.autosaveEnabled
-    },
     ...createSelectionMenuActions(store),
     'check-updates': () => void checkForAppUpdate({ messages: dialogs }),
     settings: openSettingsDialog,

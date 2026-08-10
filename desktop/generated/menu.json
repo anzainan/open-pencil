@@ -59,11 +59,6 @@
         "type": "separator"
       },
       {
-        "id": "autosave",
-        "label": "Autosave",
-        "checkbox": true
-      },
-      {
         "id": "close",
         "label": "Close Tab",
         "accelerator": "CmdOrCtrl+W"

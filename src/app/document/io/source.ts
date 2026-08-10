@@ -4,11 +4,7 @@ import { exportFigFile } from '@open-pencil/core/io/formats/fig'
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { journalDocPathForSource, withAiOpsLock } from '@/app/bridge/op-journal'
 import { createAutosave } from '@/app/document/autosave'
-import {
-  documentNameFromFigPath,
-  downloadNameFromPath,
-  figDownloadName
-} from '@/app/document/io/names'
+import { documentNameFromFigPath } from '@/app/document/io/names'
 import { createSaveActions } from '@/app/document/io/save'
 import { createDocumentSourceState } from '@/app/document/io/source-state'
 import type { DocumentSourceAccess } from '@/app/document/io/types'
@@ -86,7 +82,7 @@ export function createDocumentSourceActions({
   })
 
   function setDocumentSource(
-    fileName: string,
+    _fileName: string,
     sourceFormat: string,
     handle?: FileSystemFileHandle,
     path?: string
@@ -96,7 +92,8 @@ export function createDocumentSourceActions({
     const isFig = sourceFormat === 'fig'
     setFileHandle(isFig ? (handle ?? null) : null)
     setFilePath(isFig ? (path ?? null) : null)
-    setDownloadName(figDownloadName(fileName, sourceFormat))
+    // 打开动作不设 downloadName：仅「另存/下载」时才把保存目标钉到下载路径，
+    // 避免浏览器手动打开（无 handle/path）后 saveFigFile 被 downloadName 遮蔽成下载。
     setSourceIdentity({ handle: handle ?? null, path: path ?? null })
     setSavedVersion(state.sceneVersion)
     // 已建立文档源（fig 且有 handle/path 时为可写源；无可写源时 flushIfDirty 的
@@ -111,7 +108,6 @@ export function createDocumentSourceActions({
     stopWatchingFile()
     setFileHandle(null)
     setFilePath(null)
-    setDownloadName(`${documentName}.fig`)
     setSourceIdentity({ handle: null, path: null })
     setStorageBinding(binding)
     state.documentName = documentName
@@ -129,9 +125,7 @@ export function createDocumentSourceActions({
     setStorageBinding(null)
     setFileHandle(null)
     setFilePath(path)
-    const downloadName = downloadNameFromPath(path)
-    setDownloadName(downloadName)
-    state.documentName = documentNameFromFigPath(downloadName)
+    state.documentName = documentNameFromFigPath(path)
     // 计划落盘目标已建立（MCP new_document/save_file 路径）→ 打开 autosave，
     // 否则连续 AI 操作期间 3s debounce 与 60s 看门狗都会被 autosaveEnabled 闸死。
     state.autosaveEnabled = true

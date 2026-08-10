@@ -48,7 +48,6 @@ export function useAppMenu() {
     save: 'save',
     'save-as': 'saveAs',
     'export-selection': 'exportSelection',
-    autosave: 'autosave',
     close: 'closeTab',
     copy: 'copy',
     cut: 'cut',
@@ -120,8 +119,6 @@ export function useAppMenu() {
 
   function checked(item: AppMenuActionItem): boolean | undefined {
     switch (item.id) {
-      case 'autosave':
-        return store.state.autosaveEnabled
       case 'profiler':
         return store.renderer?.profiler.hudVisible ?? false
       case 'view-rulers':
@@ -141,10 +138,6 @@ export function useAppMenu() {
 
   function onCheckedChange(item: AppMenuActionItem): ((checked: boolean) => void) | undefined {
     switch (item.id) {
-      case 'autosave':
-        return (value: boolean) => {
-          store.state.autosaveEnabled = value
-        }
       case 'profiler':
         return () => store.toggleProfiler()
       case 'view-rulers':
