@@ -54,7 +54,7 @@ export function createEditorStoreModules(
   io: IORegistry,
   viewportSize: ViewportSize
 ) {
-  const flash = createFlashActions(editor, state)
+  const flash = createFlashActions(editor)
   const pen = createPenActions(editor, state)
   const vectorEdit = createVectorEditActions(editor, state)
   const documentIO = createDocumentIOActions(editor, state, viewportSize)
