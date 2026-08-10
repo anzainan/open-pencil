@@ -11,8 +11,8 @@ export const menuMessageDefaults = {
   new: 'New',
   open: 'Open…',
   openStorageWorkspace: 'Open storage workspace…',
-  save: 'Save',
-  saveAs: 'Save as…',
+  save: 'Save to cloud',
+  saveAs: 'Download to local…',
   exportSelection: 'Export selection…',
   closeTab: 'Close tab',
 

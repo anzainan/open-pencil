@@ -21,12 +21,12 @@
       },
       {
         "id": "save",
-        "label": "Save",
+        "label": "Save to cloud",
         "accelerator": "CmdOrCtrl+S"
       },
       {
         "id": "save-as",
-        "label": "Save As…",
+        "label": "Download to local…",
         "accelerator": "CmdOrCtrl+Shift+S"
       },
       {

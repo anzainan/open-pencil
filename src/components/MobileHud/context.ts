@@ -42,7 +42,7 @@ function createMobileHudContext() {
       action: () => void import('@/app/tabs').then((m) => m.createTab())
     },
     { icon: IconFolderOpen, label: 'Open…', action: () => void openFileDialog() },
-    { icon: IconSave, label: 'Save', action: () => void store.saveFigFile() },
+    { icon: IconSave, label: 'Save to cloud', action: () => void store.saveFigFile() },
     { icon: IconImageDown, label: 'Export…', action: () => void store.exportSelection(1, 'png') },
     { icon: IconZoomIn, label: 'Zoom to fit', action: () => getCommand('view.zoomFit').run() }
   ]
