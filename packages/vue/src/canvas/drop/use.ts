@@ -28,16 +28,42 @@ function dropPoint(e: DragEvent, canvas: HTMLCanvasElement, editor: Editor) {
   return editor.screenToCanvas(e.clientX - rect.left, e.clientY - rect.top)
 }
 
+let isPlacingStockImage = false  // 模块级防重复
+
 async function placeStockImage(url: string, cx: number, cy: number, editor: Editor) {
+  if (isPlacingStockImage) return  // 防重复拖拽
+  isPlacingStockImage = true
+
+  // 1. 先放矩形占位
+  const placeholder = editor.graph.createNode(
+    'RECTANGLE',
+    editor.state.currentPageId,
+    {
+      x: cx - 100,
+      y: cy - 80,
+      width: 200,
+      height: 160,
+      fills: [{ type: 'SOLID', color: { r: 0.92, g: 0.92, b: 0.92 }, opacity: 0.6, visible: true }],
+      name: '正在加载…'
+    }
+  )
+  editor.requestRender()
+
   try {
     const response = await fetch(url)
     if (!response.ok) throw new Error(`Failed to fetch stock image (${response.status})`)
     const file = new File([new Uint8Array(await response.arrayBuffer())], 'stock-photo.jpg', {
       type: response.headers.get('content-type') ?? 'image/jpeg'
     })
+    // 删占位，放真图
+    editor.graph.deleteNode(placeholder.id)
     await editor.placeFiles([file], cx, cy)
   } catch (error) {
     console.error('Failed to place stock image', error)
+    editor.graph.deleteNode(placeholder.id)  // 失败也删占位
+    editor.requestRender()
+  } finally {
+    isPlacingStockImage = false
   }
 }
 

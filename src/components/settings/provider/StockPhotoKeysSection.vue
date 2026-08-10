@@ -6,7 +6,7 @@ import { useAIChat } from '@/app/ai/chat/use'
 import ProviderSettingsKeyField from '@/components/settings/provider/ProviderSettingsKeyField.vue'
 
 const { dialogs } = useI18n()
-const { pexelsKeyStatus, setPexelsKey } = useAIChat()
+const { pexelsKeyStatus, serverPexelsConfigured, setPexelsKey } = useAIChat()
 const pexelsKeyInput = ref('')
 const hasExistingPexelsKey = computed(() => pexelsKeyStatus.value === 'configured')
 
@@ -35,4 +35,7 @@ async function clearPexelsKey(): Promise<void> {
     @clear="clearPexelsKey"
     @change="savePexelsKey"
   />
+  <p v-if="serverPexelsConfigured && !hasExistingPexelsKey" class="text-xs text-muted-foreground mt-1">
+    云端已配置（来自服务器）—— 本地可覆盖或清除
+  </p>
 </template>

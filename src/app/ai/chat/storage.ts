@@ -33,6 +33,7 @@ export const providerDef = designProviderDefinition
 
 export const apiKeyStatus = ref<CredentialStatus>('missing')
 export const pexelsKeyStatus = ref<CredentialStatus>('missing')
+export const serverPexelsConfigured = ref(false)
 export const unsplashKeyStatus = ref<CredentialStatus>('missing')
 const credentialRevision = ref(0)
 
@@ -62,17 +63,27 @@ export async function refreshAIProviderStatus(): Promise<void> {
 }
 
 async function refreshMediaCredentials(): Promise<void> {
-  const [pexelsStatus, unsplashStatus] = await Promise.all([
-    refreshStatus(PEXELS_CREDENTIAL),
-    refreshStatus(UNSPLASH_CREDENTIAL)
-  ])
-  pexelsKeyStatus.value = pexelsStatus
+  // 云端兜底：先从 file-bridge config 获取服务端配置的 key
+  try {
+    const res = await fetch('/api/v1/config')
+    if (res.ok) {
+      const cfg = await res.json()
+      if (cfg.pexelsKey) {
+        serverPexelsConfigured.value = true
+        // 本地未配置时，用云端 key
+        if ((await refreshStatus(PEXELS_CREDENTIAL)) !== 'configured') {
+          setPexelsApiKey(cfg.pexelsKey)
+          pexelsKeyStatus.value = 'configured'
+        }
+      }
+    }
+  } catch {
+    console.warn('file-bridge config unavailable, server Pexels key not applied')
+  }
+
+  // 原有逻辑：刷新 unsplash + 本地已配置的 pexels
+  const unsplashStatus = await refreshStatus(UNSPLASH_CREDENTIAL)
   unsplashKeyStatus.value = unsplashStatus
-  setPexelsApiKey(
-    pexelsStatus === 'configured'
-      ? await appCredentialServices.resolver.resolve(PEXELS_CREDENTIAL)
-      : null
-  )
   setUnsplashAccessKey(
     unsplashStatus === 'configured'
       ? await appCredentialServices.resolver.resolve(UNSPLASH_CREDENTIAL)

@@ -438,6 +438,7 @@ export function startServer(options: BridgeServerOptions) {
         version: VERSION,
         designRoot,
         token: token || null,
+        pexelsKey: process.env.PEXELS_API_KEY?.trim() || null,
         ...(mcpEnabled && mcpProxy.isReady()
           ? { mcpAuthToken, mcpWsPath: '/ws', mcpHealthPath: '/health', mcpMcpPath: mcpPath }
           : {})
