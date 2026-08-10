@@ -72,17 +72,26 @@ describe('storage workspace reconciliation', () => {
     expect(result.remoteDocumentsToSeed.map((document) => document.id)).toEqual(['remote'])
   })
 
-  test('does not purge non-synced pending local work absent from the remote listing', () => {
+  test('purges pending and error local work whose remote file was deleted on the storage side', () => {
     const result = reconcileStorageDocuments(
       [localMeta('pending', 'pending'), localMeta('error', 'error')],
       [remoteDocument('remote')]
     )
 
+    expect(result.documents.map((document) => document.id)).toEqual(['remote'])
+    expect(result.localIdsToPurge).toEqual(['pending', 'error'])
+  })
+
+  test('keeps pending local work when the remote file still exists, purges it once deleted', () => {
+    const result = reconcileStorageDocuments(
+      [localMeta('kept-pending', 'pending'), localMeta('deleted-pending', 'pending')],
+      [remoteDocument('kept-pending'), remoteDocument('remote')]
+    )
+
     expect(result.documents.map((document) => document.name)).toEqual([
-      'Local pending',
-      'Local error',
+      'Local kept-pending',
       'Remote remote'
     ])
-    expect(result.localIdsToPurge).toEqual([])
+    expect(result.localIdsToPurge).toEqual(['deleted-pending'])
   })
 })

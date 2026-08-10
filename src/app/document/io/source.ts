@@ -104,15 +104,24 @@ export function createDocumentSourceActions({
     }
   }
 
-  function setStorageDocumentSource(binding: StorageDocumentBinding, documentName: string) {
+  function setStorageDocumentSource(
+    binding: StorageDocumentBinding,
+    documentName: string,
+    opts?: { stale?: boolean }
+  ) {
+    const stale = opts?.stale === true
     stopWatchingFile()
     setFileHandle(null)
     setFilePath(null)
     setSourceIdentity({ handle: null, path: null })
-    setStorageBinding(binding)
+    // stale 打开（远端已删）：只读缓存快照，不建立 storage binding，
+    // 否则任何写路径（autosave/手动保存）都可能 PUT 写回把已删文件复活。
+    if (!stale) setStorageBinding(binding)
     state.documentName = documentName
-    state.autosaveEnabled = true
+    // stale 时保持 autosave 关闭（不置 true），杜绝自动写回。
+    state.autosaveEnabled = !stale
     setSavedVersion(state.sceneVersion)
+    if (stale) return
     if (binding.providerId === BRIDGE_PROVIDER_ID && binding.documentId) {
       void bridgeClient.reportRecent(binding.documentId)
       void bridgeClient.reportActive(binding.documentId)
