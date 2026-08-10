@@ -17,6 +17,10 @@ type SaveDocumentState = EditorState & {
   autosaveEnabled?: boolean
 }
 
+function saveErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 type SaveActionsOptions = Omit<DocumentSourceAccess, 'getSavedVersion'> & {
   state: SaveDocumentState
   buildFigFile: () => Uint8Array | Promise<Uint8Array>
@@ -49,22 +53,29 @@ export function createSaveActions({
   })
 
   async function saveFigFile() {
-    const filePath = getFilePath()
-    const fileHandle = getFileHandle()
-    const storageBinding = getStorageBinding()
-    if (storageBinding || filePath || fileHandle) {
-      // 一旦确认有可写源（storageBinding || filePath || fileHandle）就打开 autosave，
-      // 覆盖 MCP new_document/save_file、UI 新建、Tauri 打开等全部写路径。
-      state.autosaveEnabled = true
-      const docPath = await journalDocPathForSource(storageBinding, filePath)
-      const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildFigFile()))
-      if (wrote && !storageBinding) setSourceIdentity({ handle: fileHandle, path: filePath })
-      if (wrote) toast.info('文件已保存')
-    } else {
-      // 无可写源（浏览器手动打开、无 handle/path/binding）：优先写工作区。
-      // downloadName 只应在用户显式「另存/下载」时作为目标，不在此作为保存路径，
-      // 避免「打开一个文件」这个动作把后续保存都钉成下载。
-      await saveUntitledToWorkspace()
+    try {
+      const filePath = getFilePath()
+      const fileHandle = getFileHandle()
+      const storageBinding = getStorageBinding()
+      if (storageBinding || filePath || fileHandle) {
+        // 一旦确认有可写源（storageBinding || filePath || fileHandle）就打开 autosave，
+        // 覆盖 MCP new_document/save_file、UI 新建、Tauri 打开等全部写路径。
+        state.autosaveEnabled = true
+        const docPath = await journalDocPathForSource(storageBinding, filePath)
+        const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildFigFile()))
+        if (wrote && !storageBinding) setSourceIdentity({ handle: fileHandle, path: filePath })
+        if (wrote) toast.info('文件已保存到云端')
+      } else {
+        // 无可写源（浏览器手动打开、无 handle/path/binding）：优先写工作区。
+        // downloadName 只应在用户显式「另存/下载」时作为目标，不在此作为保存路径，
+        // 避免「打开一个文件」这个动作把后续保存都钉成下载。
+        await saveUntitledToWorkspace()
+      }
+    } catch (error) {
+      // 保存链路（序列化/落盘）失败绝不能静默——否则磁盘停在旧版，刷新即丢数据。
+      // 手动保存路径 toast 提示；MCP save_file 路径重新抛出以让工具返回错误。
+      toast.error(`保存失败：${saveErrorMessage(error)}`)
+      throw error
     }
   }
 
@@ -106,7 +117,7 @@ export function createSaveActions({
       void bridgeClient.reportRecent(path)
       void bridgeClient.reportActive(path)
       rememberWorkspaceFile(path)
-      toast.info('文件已保存')
+      toast.info('文件已保存到云端')
     }
   }
 
@@ -116,16 +127,25 @@ export function createSaveActions({
   }
 
   async function saveFigFileAs() {
-    const data = await buildFigFile()
+    let data: Uint8Array
+    try {
+      data = await buildFigFile()
+    } catch (error) {
+      toast.error(`导出失败：${saveErrorMessage(error)}`)
+      throw error
+    }
 
     // 另存为 = 一次性导出副本，不应改变文档的持久保存目标。执行前快照当前可写源，
     // 导出写盘后按「是否原有无源」决定是否恢复，避免绑定被销毁/downloadName 固化
     // 导致后续保存全变下载；仅当文档原本无任何可写源时才允许另存为建立新目标。
+    // documentName 同样参与快照恢复：另存为只是导出副本，画布标题应保持原文件名字，
+    // 直到刷新重载后才从磁盘文件取新名（a416ff16「另存为=一次性导出不切换目标」语义）。
     const prev = {
       binding: getStorageBinding(),
       path: getFilePath(),
       handle: getFileHandle(),
-      name: getDownloadName()
+      name: getDownloadName(),
+      documentName: state.documentName
     }
     const hadWritableSource = Boolean(prev.binding || prev.path || prev.handle)
     const restorePrevSource = () => {
@@ -133,6 +153,7 @@ export function createSaveActions({
       setFilePath(prev.path)
       setFileHandle(prev.handle)
       setDownloadName(prev.name)
+      state.documentName = prev.documentName
     }
 
     if (IS_TAURI) {
@@ -143,7 +164,12 @@ export function createSaveActions({
       setFileHandle(null)
       state.documentName = documentNameFromFigPath(path)
       state.autosaveEnabled = true
-      if (await writeFile(data)) setSourceIdentity({ handle: null, path })
+      try {
+        if (await writeFile(data)) setSourceIdentity({ handle: null, path })
+      } catch (error) {
+        toast.error(`保存失败：${saveErrorMessage(error)}`)
+        throw error
+      }
       startWatchingFile()
       return
     }
@@ -156,7 +182,12 @@ export function createSaveActions({
       setFilePath(null)
       state.documentName = documentNameFromFigPath(handle.name)
       state.autosaveEnabled = true
-      if (await writeFile(data)) setSourceIdentity({ handle, path: null })
+      try {
+        if (await writeFile(data)) setSourceIdentity({ handle, path: null })
+      } catch (error) {
+        toast.error(`保存失败：${saveErrorMessage(error)}`)
+        throw error
+      }
       if (hadWritableSource) restorePrevSource()
       startWatchingFile()
       return

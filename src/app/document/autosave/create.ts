@@ -2,6 +2,8 @@ import { useEventListener, useIntervalFn, watchDebounced } from '@vueuse/core'
 
 import type { EditorState } from '@open-pencil/core/editor'
 
+import { toast } from '@/app/shell/ui'
+
 /** 兜底落盘看门狗：覆盖「AI 连续小操作永不停、3s debounce 永不触发」场景。 */
 const WATCHDOG_MS = 60_000
 
@@ -27,7 +29,11 @@ export function createAutosave({
     try {
       await saveCurrentDocument()
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      // 自动保存失败绝不能静默：校验失败（如枚举不合法）会导致磁盘停留旧版，
+      // 用户刷新即丢数据。toast 去重机制保证同一错误不刷屏。
       console.warn('Autosave failed:', e)
+      toast.error(`自动保存失败：${message}`)
     }
   }
 
