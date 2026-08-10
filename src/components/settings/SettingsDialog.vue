@@ -7,7 +7,6 @@ import { IS_TAURI } from '@open-pencil/core/constants'
 import { useAIChat } from '@/app/ai/chat/use'
 import { appCredentialServices } from '@/app/settings/credentials/app'
 import { settingsDialogOpen, settingsDialogSection } from '@/app/settings/dialog'
-import ModelsPanel from '@/components/settings/models/ModelsPanel.vue'
 import StockPhotoKeysSection from '@/components/settings/provider/StockPhotoKeysSection.vue'
 import StorageSettingsPanel from '@/components/settings/storage/StorageSettingsPanel.vue'
 import VectorizeSettingsSection from '@/components/settings/vectorize/VectorizeSettingsSection.vue'
@@ -60,16 +59,6 @@ const navigationClass =
         <button
           type="button"
           :class="navigationClass"
-          :data-state="settingsDialogSection === 'ai' ? 'active' : 'inactive'"
-          data-test-id="settings-section-ai"
-          @click="settingsDialogSection = 'ai'"
-        >
-          <icon-lucide-sparkles class="size-3.5" />
-          {{ dialogs.settingsAIAndAgents }}
-        </button>
-        <button
-          type="button"
-          :class="navigationClass"
           :data-state="settingsDialogSection === 'media' ? 'active' : 'inactive'"
           data-test-id="settings-section-media"
           @click="settingsDialogSection = 'media'"
@@ -91,15 +80,7 @@ const navigationClass =
 
       <div class="min-h-0 flex-1 overflow-y-auto p-4">
         <section
-          v-if="settingsDialogSection === 'ai'"
-          class="flex h-full flex-col"
-          data-test-id="settings-ai-panel"
-        >
-          <ModelsPanel />
-        </section>
-
-        <section
-          v-else-if="settingsDialogSection === 'media'"
+          v-if="settingsDialogSection === 'media'"
           class="flex flex-col gap-2.5"
           data-test-id="settings-media-panel"
         >
