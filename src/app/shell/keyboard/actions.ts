@@ -1,5 +1,3 @@
-import type { Ref } from 'vue'
-
 import { opacityFromBuffer } from '@open-pencil/core/editor'
 import type { useEditorCommands, useViewportKind } from '@open-pencil/vue'
 
@@ -7,7 +5,6 @@ import type { EditorStore } from '@/app/editor/active-store'
 
 type KeyboardActionsOptions = {
   store: EditorStore
-  activeTab: Ref<'design' | 'code' | 'ai'>
   isMobile: ReturnType<typeof useViewportKind>['isMobile']
   runCommand: ReturnType<typeof useEditorCommands>['runCommand']
   setOpacityTarget: ReturnType<typeof useEditorCommands>['setOpacityTarget']
@@ -15,7 +12,6 @@ type KeyboardActionsOptions = {
 
 export function createKeyboardActions({
   store,
-  activeTab,
   isMobile,
   runCommand,
   setOpacityTarget
@@ -87,13 +83,13 @@ export function createKeyboardActions({
   }
 
   function toggleAI() {
+    // The desktop AI panel entry is hidden; only the mobile ribbon still surfaces
+    // the official AI chat (via the mobile drawer).
     if (isMobile.value) {
       store.state.activeRibbonTab = store.state.activeRibbonTab === 'ai' ? 'panels' : 'ai'
       if (store.state.mobileDrawerSnap === 'closed') {
         store.state.mobileDrawerSnap = 'half'
       }
-    } else {
-      activeTab.value = activeTab.value === 'ai' ? 'design' : 'ai'
     }
   }
 

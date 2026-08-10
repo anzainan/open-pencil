@@ -11,7 +11,9 @@ let canvas: CanvasHelper
 test.describe.configure({ mode: 'serial' })
 
 test.beforeAll(async ({ browser }) => {
-  page = await browser.newPage()
+  // The desktop AI panel tab is hidden; the official AI chat now lives in the
+  // mobile drawer, so these tests run on a mobile viewport.
+  page = await browser.newPage({ viewport: { width: 390, height: 844 } })
   await page.goto('/')
   canvas = new CanvasHelper(page)
   await canvas.waitForInit()
@@ -111,11 +113,11 @@ async function injectMockTransport(page: Page) {
 }
 
 function chatTab() {
-  return page.getByRole('tab', { name: 'AI' })
+  return page.getByTestId('mobile-ribbon-ai')
 }
 
 function designTab() {
-  return page.getByRole('tab', { name: 'Design' })
+  return page.getByTestId('mobile-ribbon-design')
 }
 
 function chatInput() {

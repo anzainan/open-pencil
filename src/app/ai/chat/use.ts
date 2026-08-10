@@ -28,7 +28,11 @@ import { createChatSessionManager } from '@/app/ai/chat/transports'
 import { exposeChatTransportOverride } from '@/app/browser-bridge'
 import { getActiveEditorStore } from '@/app/editor/active-store'
 
-const activeTab = ref<'design' | 'code' | 'ai'>('design')
+// The browser AI panel entry is intentionally hidden in this deployment (AI design
+// happens through the external opencode/MCP channel). The official AI chat remains
+// fully functional and reachable through the mobile drawer, so this tab state is
+// narrowed to the two panels still exposed in the desktop properties panel.
+const activeTab = ref<'design' | 'code'>('design')
 
 const chatSession = createChatSessionManager({
   isConfigured,
