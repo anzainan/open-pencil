@@ -2,6 +2,7 @@ import { ofetch } from 'ofetch'
 
 export interface StockPhotoResult {
   url: string
+  thumbnail?: string
   width: number
   height: number
   photographer: string
@@ -91,6 +92,7 @@ const pexelsProvider: StockPhotoProvider = {
     const data = response._data as { photos: PexelsPhoto[] }
     return data.photos.map((photo) => ({
       url: pickPexelsSize(photo.src, targetDim),
+      thumbnail: photo.src.small,
       width: photo.width,
       height: photo.height,
       photographer: photo.photographer,
@@ -145,6 +147,7 @@ const unsplashProvider: StockPhotoProvider = {
     const data = response._data as { results: UnsplashPhoto[] }
     return data.results.map((photo) => ({
       url: pickUnsplashSize(photo.urls, 1080),
+      thumbnail: photo.urls.thumb,
       width: photo.width,
       height: photo.height,
       photographer: photo.user.name,

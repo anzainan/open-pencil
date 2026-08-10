@@ -6,6 +6,7 @@ import { parsePhotoRequests } from './stock-photo/requests'
 export { applyPhoto, type PhotoRequest, type PhotoResult } from './stock-photo/apply'
 export { parsePhotoRequests } from './stock-photo/requests'
 export {
+  getActiveProvider,
   getStockPhotoProviders,
   registerStockPhotoProvider,
   setActiveStockPhotoProvider,

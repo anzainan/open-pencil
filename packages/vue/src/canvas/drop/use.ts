@@ -13,14 +13,32 @@ const RASTER_IMAGE_TYPES = new Set([
   'image/avif'
 ])
 const COMPONENT_MIME = 'application/x-openpencil-component'
+const STOCK_IMAGE_MIME = 'application/x-openpencil-stock-image'
 
 function hasComponentData(e: DragEvent): boolean {
   return e.dataTransfer?.types.includes(COMPONENT_MIME) ?? false
 }
 
+function hasStockImageData(e: DragEvent): boolean {
+  return e.dataTransfer?.types.includes(STOCK_IMAGE_MIME) ?? false
+}
+
 function dropPoint(e: DragEvent, canvas: HTMLCanvasElement, editor: Editor) {
   const rect = canvas.getBoundingClientRect()
   return editor.screenToCanvas(e.clientX - rect.left, e.clientY - rect.top)
+}
+
+async function placeStockImage(url: string, cx: number, cy: number, editor: Editor) {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`Failed to fetch stock image (${response.status})`)
+    const file = new File([new Uint8Array(await response.arrayBuffer())], 'stock-photo.jpg', {
+      type: response.headers.get('content-type') ?? 'image/jpeg'
+    })
+    await editor.placeFiles([file], cx, cy)
+  } catch (error) {
+    console.error('Failed to place stock image', error)
+  }
 }
 
 function componentDropPlacement(componentId: string, cx: number, cy: number, editor: Editor) {
@@ -44,14 +62,14 @@ export function useCanvasDrop(canvasRef: Ref<HTMLCanvasElement | null>, editor: 
   const isDraggingOver = ref(false)
 
   useEventListener(canvasRef, 'dragover', (e: DragEvent) => {
-    if (!hasComponentData(e) && !hasFileData(e)) return
+    if (!hasComponentData(e) && !hasFileData(e) && !hasStockImageData(e)) return
     e.preventDefault()
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
     isDraggingOver.value = true
   })
 
   useEventListener(canvasRef, 'dragenter', (e: DragEvent) => {
-    if (!hasComponentData(e) && !hasFileData(e)) return
+    if (!hasComponentData(e) && !hasFileData(e) && !hasStockImageData(e)) return
     e.preventDefault()
     isDraggingOver.value = true
   })
@@ -74,6 +92,12 @@ export function useCanvasDrop(canvasRef: Ref<HTMLCanvasElement | null>, editor: 
       if (!placement) return
       editor.createInstanceFromComponent(componentId, placement.x, placement.y, placement.parentId)
       editor.requestRender()
+      return
+    }
+
+    const stockUrl = e.dataTransfer?.getData(STOCK_IMAGE_MIME)
+    if (stockUrl) {
+      void placeStockImage(stockUrl, point.x, point.y, editor)
       return
     }
 

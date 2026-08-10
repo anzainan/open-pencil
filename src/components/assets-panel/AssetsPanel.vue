@@ -18,6 +18,7 @@ import { nodeIcon } from '@/app/editor/icons'
 import { useEditorStore } from '@/app/editor/active-store'
 import { openExternalLink } from '@/app/shell/ui'
 import AssetThumbnail from '@/components/assets-panel/AssetThumbnail.vue'
+import StockPhotoSearch from '@/components/assets-panel/StockPhotoSearch.vue'
 import { findAssetPage } from '@/components/assets-panel/page'
 import AppInput from '@/components/ui/AppInput.vue'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
@@ -29,6 +30,7 @@ import Tip from '@/components/ui/Tip.vue'
 import { ASSET_GRID_THUMBNAIL_SIZE, ASSET_LIST_THUMBNAIL_SIZE } from '@/constants'
 
 type AssetView = 'grid' | 'list'
+type AssetTab = 'local' | 'search'
 
 type LocalAsset = {
   id: string
@@ -55,6 +57,7 @@ const editor = useEditorStore()
 const { panels, commands } = useI18n()
 const query = ref('')
 const assetView = ref<AssetView>('grid')
+const assetTab = ref<AssetTab>('local')
 const detailsOpen = ref(false)
 const selectedAssetId = ref<string | null>(null)
 const previewBlob = shallowRef<Blob | null>(null)
@@ -70,6 +73,11 @@ const viewOptions = computed(() => [
   { value: 'list', label: panels.value.listView }
 ])
 const viewUI = { root: 'w-16', item: 'px-1' }
+const tabOptions = computed(() => [
+  { value: 'local', label: panels.value.localAssets },
+  { value: 'search', label: panels.value.imageSearch }
+])
+const tabUI = { root: 'w-full', item: 'px-1' }
 
 function componentSetVariantInfo(componentSetId: string) {
   return [...editor.collectVariantOptions(componentSetId)].map(([name, values]) => ({
@@ -250,30 +258,46 @@ function insertSelectedAsset() {
 
 <template>
   <section data-test-id="assets-panel" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-    <div class="flex shrink-0 items-center gap-2 px-2 py-2">
-      <AppInput
-        v-model="query"
-        type="search"
-        data-test-id="assets-search"
-        size="sm"
-        class="min-w-0 flex-1"
-        :placeholder="panels.searchLocalComponents"
-      />
+    <div class="flex shrink-0 items-center px-2 pt-2">
       <SegmentedControl
-        v-model="assetView"
-        data-test-id="assets-view-toggle"
-        :options="viewOptions"
-        :label="panels.assetView"
-        :ui="viewUI"
+        v-model="assetTab"
+        data-test-id="assets-tab-toggle"
+        :options="tabOptions"
+        :label="panels.assets"
+        :ui="tabUI"
       >
         <template #option="{ option }">
-          <icon-lucide-layout-grid v-if="option.value === 'grid'" class="size-3" />
-          <icon-lucide-list v-else class="size-3" />
+          <icon-lucide-box v-if="option.value === 'local'" class="size-3" />
+          <icon-lucide-search v-else class="size-3" />
         </template>
       </SegmentedControl>
     </div>
 
-    <div class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2">
+    <template v-if="assetTab === 'local'">
+      <div class="flex shrink-0 items-center gap-2 px-2 py-2">
+        <AppInput
+          v-model="query"
+          type="search"
+          data-test-id="assets-search"
+          size="sm"
+          class="min-w-0 flex-1"
+          :placeholder="panels.searchLocalComponents"
+        />
+        <SegmentedControl
+          v-model="assetView"
+          data-test-id="assets-view-toggle"
+          :options="viewOptions"
+          :label="panels.assetView"
+          :ui="viewUI"
+        >
+          <template #option="{ option }">
+            <icon-lucide-layout-grid v-if="option.value === 'grid'" class="size-3" />
+            <icon-lucide-list v-else class="size-3" />
+          </template>
+        </SegmentedControl>
+      </div>
+
+      <div class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2">
       <section v-for="group in assetGroups" :key="group.pageId" class="mb-3">
         <h2 class="mb-1 px-1 text-[10px] font-medium tracking-wide text-muted uppercase">
           {{ group.pageName }}
@@ -407,7 +431,10 @@ function insertSelectedAsset() {
           <icon-lucide-component class="size-4" />
         </template>
       </AppPlaceholder>
-    </div>
+      </div>
+    </template>
+
+    <StockPhotoSearch v-else class="min-h-0 flex-1" />
 
     <AppDialogRoot
       v-if="selectedAsset"
