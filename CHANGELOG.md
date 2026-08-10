@@ -12,6 +12,7 @@
 - Export selections, pages, and documents as editable PowerPoint (`.pptx`) files from the File menu, CLI, and SDK. Text, rectangles, ellipses, and lines remain editable; visually complex layers are embedded as images.
 - Import HTML, CSS, Tailwind, and JSX as editable documents from the app, CLI, and SDK, and export standalone browser-ready HTML with compiled CSS and optional external assets.
 - Drag image files into the desktop app and paste Figma layers with their remote image fills.
+- Search stock photos (Pexels) from an Image search tab in the Assets panel and insert them by clicking or dragging onto the canvas.
 - Import dropped SVG files as editable vector layers, preserving compatible multi-color fills and transparent paints. (#386, #392, #394, #446)
 - Convert image layers into editable vectors with Recraft or fal.ai from the canvas context menu. (#322)
 - Browse document components as thumbnails or a list in the Assets panel, group them by page, and drag instances directly onto the canvas. (#424)
@@ -46,6 +47,8 @@
 - Resolve fonts before text appears, with language-aware CJK and Arabic fallbacks, character-specific remote subsets, and more reliable rendering as fonts load.
 - Use MiniMax M3 as the default model for MiniMax AI connections. (#431)
 - Center empty and setup states consistently across panels, dialogs, and workspaces.
+- Clarify the File menu and mobile HUD labels: "Save" reads "Save to cloud", "Save As" reads "Download to local", and the save toast reports "saved to cloud".
+- Default the Settings media section to Pexels and hide the Unsplash key field.
 
 ### Fixed
 
@@ -63,6 +66,9 @@
 - Resume pending cloud saves after restarting the app or temporarily losing credentials, without reviving deleted documents or overwriting newer local changes.
 - Handle S3 object listings, pagination, and escaped names more reliably, and explain required CORS setup without modifying bucket rules.
 - Show HTML, CSS, Tailwind, and JSX import errors instead of failing silently.
+- Save image fills in `CROP` scale mode (and any other `ImageScaleMode`) to `.fig` instead of rejecting them, and surface save/autosave failures as visible errors instead of silently keeping the previous file on disk.
+- Play AI action flash/selection highlights reliably by driving repaints through the editor event loop.
+- Preserve the current document name when using Save As to download a copy, instead of showing Untitled.
 - Preserve inline SVG attributes, nested transforms, and explicit icon dimensions when rendering Design JSX artwork.
 - Save auto-layout frames that stretch their children to `.fig` without failing. (#427)
 - Preserve nested instance text, visibility, paint, geometry, clipping, variable modes, and component swaps in `.fig` files.
