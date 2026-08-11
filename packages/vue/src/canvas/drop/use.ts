@@ -30,64 +30,87 @@ function dropPoint(e: DragEvent, canvas: HTMLCanvasElement, editor: Editor) {
 
 let isPlacingStockImage = false // 模块级防重复
 
+async function decodeImageDimensions(blob: Blob): Promise<{ width: number; height: number } | null> {
+  try {
+    const bitmap = await createImageBitmap(blob)
+    const dimensions = { width: bitmap.width, height: bitmap.height }
+    bitmap.close()
+    return dimensions
+  } catch {
+    return null
+  }
+}
+
 async function placeStockImage(payload: string, cx: number, cy: number, editor: Editor) {
   if (isPlacingStockImage) return // 防重复拖拽
   isPlacingStockImage = true
 
-  // 解析拖拽数据（JSON：{url, width, height}），兼容旧格式（纯 url）
+  // 解析拖拽数据（JSON：{url, width, height}），兼容旧格式（纯 url）。
+  // width/height 仅作解码失败时的兜底初始值，实际占位尺寸以解码结果为准。
   let url: string
-  let width = 200
-  let height = 160
+  let fallbackWidth = 200
+  let fallbackHeight = 160
   try {
     const parsed = JSON.parse(payload) as { url: string; width?: number; height?: number }
     url = parsed.url
     if (parsed.width && parsed.height) {
-      width = parsed.width
-      height = parsed.height
+      fallbackWidth = parsed.width
+      fallbackHeight = parsed.height
     }
   } catch {
     url = payload
   }
 
-  // 1. 放真实尺寸占位矩形（半透明灰）
-  const placeholder = editor.graph.createNode('RECTANGLE', editor.state.currentPageId, {
-    x: cx - width / 2,
-    y: cy - height / 2,
-    width,
-    height,
-    fills: [
-      { type: 'SOLID', color: { r: 0.92, g: 0.92, b: 0.92, a: 1 }, opacity: 0.6, visible: true }
-    ],
-    name: '正在加载…'
-  })
-  // 2. 占位中间加「图片加载中」文字
-  const labelWidth = Math.min(120, width - 8)
-  editor.graph.createNode('TEXT', placeholder.id, {
-    name: '加载中',
-    text: '图片加载中',
-    x: (width - labelWidth) / 2,
-    y: (height - 20) / 2,
-    width: labelWidth,
-    height: 20,
-    textAlignHorizontal: 'CENTER',
-    textAlignVertical: 'CENTER'
-  })
-  // 3. 立即选中占位 → 显示选中态选框（蓝色虚线框 + 控制点 + 旋转手柄 + 尺寸标注）
-  editor.select([placeholder.id])
-  editor.requestRender()
-
+  let placeholderId: string | null = null
   try {
+    // 1. 先下载并解码实际像素尺寸，再按真实尺寸建占位（避免超大框/缩回）
     const response = await fetch(url)
     if (!response.ok) throw new Error(`Failed to fetch stock image (${response.status})`)
-    const file = new File([new Uint8Array(await response.arrayBuffer())], 'stock-photo.jpg', {
+    const blob = await response.blob()
+    const file = new File([blob], 'stock-photo.jpg', {
       type: response.headers.get('content-type') ?? 'image/jpeg'
     })
+    const decoded = await decodeImageDimensions(blob)
+    const width = decoded?.width ?? fallbackWidth
+    const height = decoded?.height ?? fallbackHeight
+
+    // 2. 放真实尺寸占位矩形（半透明灰）
+    const placeholder = editor.graph.createNode('RECTANGLE', editor.state.currentPageId, {
+      x: cx - width / 2,
+      y: cy - height / 2,
+      width,
+      height,
+      fills: [
+        { type: 'SOLID', color: { r: 0.92, g: 0.92, b: 0.92, a: 1 }, opacity: 0.6, visible: true }
+      ],
+      name: '正在加载…'
+    })
+    placeholderId = placeholder.id
+    // 3. 占位中间加「图片加载中」文字，字号随占位尺寸缩放保证清晰可读
+    const labelWidth = Math.min(120, width - 8)
+    const fontSize = Math.min(32, Math.max(16, Math.round(width / 40)))
+    editor.graph.createNode('TEXT', placeholder.id, {
+      name: '加载中',
+      text: '图片加载中',
+      x: (width - labelWidth) / 2,
+      y: (height - fontSize) / 2,
+      width: labelWidth,
+      height: fontSize,
+      fontSize,
+      textAlignHorizontal: 'CENTER',
+      textAlignVertical: 'CENTER'
+    })
+    // 4. 立即选中占位 → 显示选中态选框（蓝色虚线框 + 控制点 + 旋转手柄 + 尺寸标注）
+    editor.select([placeholder.id])
+    editor.requestRender()
+
     // 删占位，放真图（placeFiles 后新图会保持选中）
     editor.graph.deleteNode(placeholder.id)
+    placeholderId = null
     await editor.placeFiles([file], cx, cy)
   } catch (error) {
     console.error('Failed to place stock image', error)
-    editor.graph.deleteNode(placeholder.id) // 失败也删占位
+    if (placeholderId) editor.graph.deleteNode(placeholderId) // 失败也删占位
     editor.requestRender()
   } finally {
     isPlacingStockImage = false
