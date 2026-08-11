@@ -74,9 +74,17 @@ async function insertPhoto(photo: StockPhotoResult): Promise<void> {
 
 function onDragStart(event: DragEvent, photo: StockPhotoResult) {
   if (!event.dataTransfer) return
+  const displayWidth = Math.min(photo.width, 1200)
+  const displayHeight = Math.round((displayWidth * photo.height) / photo.width)
   event.dataTransfer.setData(
     STOCK_IMAGE_MIME,
-    JSON.stringify({ url: photo.url, width: photo.width, height: photo.height })
+    JSON.stringify({
+      url: photo.url,
+      width: photo.width,
+      height: photo.height,
+      displayWidth,
+      displayHeight
+    })
   )
   event.dataTransfer.effectAllowed = 'copy'
 }

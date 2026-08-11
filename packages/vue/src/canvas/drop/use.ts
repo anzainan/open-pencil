@@ -41,29 +41,75 @@ async function decodeImageDimensions(blob: Blob): Promise<{ width: number; heigh
   }
 }
 
+function estimateDisplaySize(payload: string): { width: number; height: number } {
+  try {
+    const parsed = JSON.parse(payload) as {
+      url: string
+      width?: number
+      height?: number
+      displayWidth?: number
+      displayHeight?: number
+    }
+    if (parsed.displayWidth && parsed.displayHeight) {
+      return { width: parsed.displayWidth, height: parsed.displayHeight }
+    }
+    if (parsed.width && parsed.height) {
+      const estW = Math.min(parsed.width, 1200)
+      return { width: estW, height: Math.round((estW * parsed.height) / parsed.width) }
+    }
+  } catch {
+    // 旧格式（纯 url）走 200×160 兜底
+  }
+  return { width: 200, height: 160 }
+}
+
 async function placeStockImage(payload: string, cx: number, cy: number, editor: Editor) {
   if (isPlacingStockImage) return // 防重复拖拽
   isPlacingStockImage = true
 
-  // 解析拖拽数据（JSON：{url, width, height}），兼容旧格式（纯 url）。
-  // width/height 仅作解码失败时的兜底初始值，实际占位尺寸以解码结果为准。
+  // 解析拖拽数据（JSON：{url, width, height, displayWidth, displayHeight}），兼容旧格式（纯 url）。
+  // 阶段 1 用估算尺寸立即建占位，阶段 2 解码后按真实尺寸校正。
   let url: string
-  let fallbackWidth = 200
-  let fallbackHeight = 160
   try {
-    const parsed = JSON.parse(payload) as { url: string; width?: number; height?: number }
-    url = parsed.url
-    if (parsed.width && parsed.height) {
-      fallbackWidth = parsed.width
-      fallbackHeight = parsed.height
-    }
+    url = (JSON.parse(payload) as { url: string }).url
   } catch {
     url = payload
   }
+  const estimate = estimateDisplaySize(payload)
 
   let placeholderId: string | null = null
   try {
-    // 1. 先下载并解码实际像素尺寸，再按真实尺寸建占位（避免超大框/缩回）
+    // 阶段 1：拖拽瞬间（fetch 之前）按估算尺寸立即建占位并选中，无空白期
+    const placeholder = editor.graph.createNode('RECTANGLE', editor.state.currentPageId, {
+      x: cx - estimate.width / 2,
+      y: cy - estimate.height / 2,
+      width: estimate.width,
+      height: estimate.height,
+      fills: [
+        { type: 'SOLID', color: { r: 0.92, g: 0.92, b: 0.92, a: 1 }, opacity: 0.6, visible: true }
+      ],
+      name: '正在加载…'
+    })
+    placeholderId = placeholder.id
+    // 占位中间加「图片加载中」文字，字号随占位尺寸缩放保证清晰可读
+    const labelWidth = Math.min(120, estimate.width - 8)
+    const fontSize = Math.min(32, Math.max(16, Math.round(estimate.width / 40)))
+    const textNode = editor.graph.createNode('TEXT', placeholder.id, {
+      name: '加载中',
+      text: '图片加载中',
+      x: (estimate.width - labelWidth) / 2,
+      y: (estimate.height - fontSize) / 2,
+      width: labelWidth,
+      height: fontSize,
+      fontSize,
+      textAlignHorizontal: 'CENTER',
+      textAlignVertical: 'CENTER'
+    })
+    // 立即选中占位 → 显示选中态选框（蓝色虚线框 + 控制点 + 旋转手柄 + 尺寸标注）
+    editor.select([placeholder.id])
+    editor.requestRender()
+
+    // 阶段 2：下载 → 解码 → 校正占位尺寸 → 换真图
     const response = await fetch(url)
     if (!response.ok) throw new Error(`Failed to fetch stock image (${response.status})`)
     const blob = await response.blob()
@@ -71,40 +117,31 @@ async function placeStockImage(payload: string, cx: number, cy: number, editor: 
       type: response.headers.get('content-type') ?? 'image/jpeg'
     })
     const decoded = await decodeImageDimensions(blob)
-    const width = decoded?.width ?? fallbackWidth
-    const height = decoded?.height ?? fallbackHeight
 
-    // 2. 放真实尺寸占位矩形（半透明灰）
-    const placeholder = editor.graph.createNode('RECTANGLE', editor.state.currentPageId, {
-      x: cx - width / 2,
-      y: cy - height / 2,
-      width,
-      height,
-      fills: [
-        { type: 'SOLID', color: { r: 0.92, g: 0.92, b: 0.92, a: 1 }, opacity: 0.6, visible: true }
-      ],
-      name: '正在加载…'
-    })
-    placeholderId = placeholder.id
-    // 3. 占位中间加「图片加载中」文字，字号随占位尺寸缩放保证清晰可读
-    const labelWidth = Math.min(120, width - 8)
-    const fontSize = Math.min(32, Math.max(16, Math.round(width / 40)))
-    editor.graph.createNode('TEXT', placeholder.id, {
-      name: '加载中',
-      text: '图片加载中',
-      x: (width - labelWidth) / 2,
-      y: (height - fontSize) / 2,
-      width: labelWidth,
-      height: fontSize,
-      fontSize,
-      textAlignHorizontal: 'CENTER',
-      textAlignVertical: 'CENTER'
-    })
-    // 4. 立即选中占位 → 显示选中态选框（蓝色虚线框 + 控制点 + 旋转手柄 + 尺寸标注）
-    editor.select([placeholder.id])
+    // 解码成功且与估算尺寸偏差 > 1px：updateNode 校正占位（保持中心点不变，不删除重建），
+    // 避免正在拖动的选框被破坏；同步校正 TEXT 子节点（x/y 相对父节点）。
+    if (decoded && (Math.abs(decoded.width - estimate.width) > 1 || Math.abs(decoded.height - estimate.height) > 1)) {
+      const width = decoded.width
+      const height = decoded.height
+      editor.graph.updateNode(placeholderId, {
+        x: cx - width / 2,
+        y: cy - height / 2,
+        width,
+        height
+      })
+      const resizedLabelWidth = Math.min(120, width - 8)
+      const resizedFontSize = Math.min(32, Math.max(16, Math.round(width / 40)))
+      editor.graph.updateNode(textNode.id, {
+        x: (width - resizedLabelWidth) / 2,
+        y: (height - resizedFontSize) / 2,
+        width: resizedLabelWidth,
+        height: resizedFontSize,
+        fontSize: resizedFontSize
+      })
+    }
     editor.requestRender()
 
-    // 删占位，放真图（placeFiles 后新图会保持选中）
+    // 删占位，放真图（真图落在解码尺寸，与校正后占位一致；placeFiles 后新图会保持选中）
     editor.graph.deleteNode(placeholder.id)
     placeholderId = null
     await editor.placeFiles([file], cx, cy)
