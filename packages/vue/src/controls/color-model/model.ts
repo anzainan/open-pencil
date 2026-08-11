@@ -181,11 +181,14 @@ export function okhclPatchChangesColor(color: OkHCLColor, patch: Partial<OkHCLCo
 }
 
 export function applySolidFillColor(fill: Fill, color: Color): Fill {
-  return { ...fill, color, opacity: color.a }
+  // [custom] alpha-fix: only write color — fill.opacity stays an independent multiplier and must
+  // not be coupled to color.a (that dual write caused alpha to be squared on the canvas).
+  return { ...fill, color }
 }
 
 export function applySolidStrokeColor(color: Color): Partial<Stroke> {
-  return { color, opacity: color.a }
+  // [custom] alpha-fix: only write color — stroke.opacity stays untouched.
+  return { color }
 }
 
 export function toPercent(value: number): number {
