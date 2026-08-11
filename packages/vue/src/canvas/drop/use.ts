@@ -57,8 +57,8 @@ function estimateDisplaySize(payload: string): { width: number; height: number }
       const estW = Math.min(parsed.width, 1200)
       return { width: estW, height: Math.round((estW * parsed.height) / parsed.width) }
     }
-  } catch {
-    // 旧格式（纯 url）走 200×160 兜底
+  } catch (error) {
+    console.warn('Invalid stock image drag payload, using fallback size', error)
   }
   return { width: 200, height: 160 }
 }
