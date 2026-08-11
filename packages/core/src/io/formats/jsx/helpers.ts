@@ -11,7 +11,8 @@ import type {
 import { colorToHex8 } from '#core/color'
 
 export function formatColor(color: Color, opacity = 1): string {
-  return colorToHex8(color, opacity)
+  // [custom] alpha-fix: effective alpha = color.a × opacity (was opacity-only, dropping color.a)
+  return colorToHex8(color, color.a * opacity)
 }
 
 export function solidFillColor(fills: Fill[]): string | null {
@@ -35,7 +36,8 @@ export function solidStroke(
 
 export function formatShadow(e: Effect): string | null {
   if (e.type !== 'DROP_SHADOW' && e.type !== 'INNER_SHADOW') return null
-  return `${e.offset.x} ${e.offset.y} ${e.radius} ${formatColor(e.color, e.color.a)}`
+  // [custom] alpha-fix: formatColor now multiplies color.a × opacity, so shadow alpha must pass 1
+  return `${e.offset.x} ${e.offset.y} ${e.radius} ${formatColor(e.color, 1)}`
 }
 
 const JSX_ENTITY: Record<string, string> = {

@@ -26,7 +26,8 @@ export function parseCSSColor(value: string | undefined): Color | null {
 
 export function fillToCSS(fill: Fill | undefined): string | undefined {
   if (fill?.type !== 'SOLID' || !fill.visible) return undefined
-  return colorToCSS({ ...fill.color, a: fill.opacity })
+  // [custom] alpha-fix: effective alpha = color.a × opacity (matches canvas/SVG/text projections)
+  return colorToCSS({ ...fill.color, a: fill.color.a * fill.opacity })
 }
 
 export function colorToFillFromCSS(value: string | undefined): Fill[] {
@@ -37,7 +38,8 @@ export function colorToFillFromCSS(value: string | undefined): Fill[] {
 
 export function strokeColorToCSS(stroke: Stroke | undefined): string | undefined {
   if (!stroke?.visible) return undefined
-  return colorToCSS({ ...stroke.color, a: stroke.opacity })
+  // [custom] alpha-fix: effective alpha = color.a × opacity (matches canvas/SVG/text projections)
+  return colorToCSS({ ...stroke.color, a: stroke.color.a * stroke.opacity })
 }
 
 export function strokeToCSS(stroke: Stroke | undefined): string | undefined {
