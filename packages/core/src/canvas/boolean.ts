@@ -299,7 +299,11 @@ export function renderBooleanOperation(
     for (let fillIndex = 0; fillIndex < node.fills.length; fillIndex++) {
       const fill = node.fills[fillIndex]
       if (!fill.visible || !r.applyFill(fill, node, graph, fillIndex)) continue
-      r.fillPaint.setAlphaf(fill.opacity)
+      // [custom] alpha-fix: SOLID/NOISE/CUSTOM alpha is baked into setColor by applyFill; only
+      // shader fills (gradient / image / pattern) keep paint-level opacity.
+      if (fill.type !== 'SOLID' && fill.type !== 'NOISE' && fill.type !== 'CUSTOM') {
+        r.fillPaint.setAlphaf(fill.opacity)
+      }
       try {
         canvas.drawPath(path, r.fillPaint)
       } finally {
@@ -312,7 +316,8 @@ export function renderBooleanOperation(
       const color = r.resolveStrokeColor(stroke, 0, node, graph)
       r.strokePaint.setColor(r.ck.Color4f(color.r, color.g, color.b, color.a))
       r.strokePaint.setStrokeWidth(stroke.weight)
-      r.strokePaint.setAlphaf(stroke.opacity)
+      // [custom] alpha-fix: boolean stroke alpha = color.a * opacity
+      r.strokePaint.setAlphaf(color.a * stroke.opacity)
       canvas.drawPath(path, r.strokePaint)
     }
   } finally {

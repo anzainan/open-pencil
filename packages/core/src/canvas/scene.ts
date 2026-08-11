@@ -394,7 +394,8 @@ function drawVectorStrokeGeometry(
   opacity: number
 ): void {
   r.fillPaint.setColor(r.ck.Color4f(sc.r, sc.g, sc.b, sc.a))
-  r.fillPaint.setAlphaf(opacity)
+  // [custom] alpha-fix: vector stroke alpha = color.a * opacity (setAlphaf overwrites, not multiplies)
+  r.fillPaint.setAlphaf(sc.a * opacity)
   r.fillPaint.setShader(null)
   for (const p of sg) canvas.drawPath(p, r.fillPaint)
 }
@@ -448,7 +449,8 @@ function drawVectorPathStrokes(
   const dash = stroke.dashPattern
   if (dash && dash.length > 0) {
     r.strokePaint.setColor(r.ck.Color4f(sc.r, sc.g, sc.b, sc.a))
-    r.strokePaint.setAlphaf(stroke.opacity)
+    // [custom] alpha-fix: vector stroke alpha = color.a * opacity
+    r.strokePaint.setAlphaf(sc.a * stroke.opacity)
     r.strokePaint.setStrokeWidth(stroke.weight)
     r.strokePaint.setStrokeCap(getStrokeCapEntity(r, stroke.cap ?? 'NONE'))
     r.strokePaint.setStrokeJoin(getStrokeJoinEntity(r, stroke.join ?? 'MITER'))
@@ -468,7 +470,8 @@ function drawVectorPathStrokes(
     join: getStrokeJoinEntity(r, stroke.join ?? 'MITER')
   }
   r.fillPaint.setColor(r.ck.Color4f(sc.r, sc.g, sc.b, sc.a))
-  r.fillPaint.setAlphaf(stroke.opacity)
+  // [custom] alpha-fix: vector stroke alpha = color.a * opacity
+  r.fillPaint.setAlphaf(sc.a * stroke.opacity)
   r.fillPaint.setShader(null)
 
   let outlines = outlineCacheKey ? r.vectorStrokeOutlineCache.get(outlineCacheKey) : undefined

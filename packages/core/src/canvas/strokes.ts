@@ -53,7 +53,8 @@ export function drawDashedRRectWithSolidCorners(
 
   r.strokePaint.setColor(r.ck.Color4f(color.r, color.g, color.b, color.a))
   r.strokePaint.setStrokeWidth(stroke.weight)
-  r.strokePaint.setAlphaf(stroke.opacity)
+  // [custom] alpha-fix: setAlphaf overwrites color.a (not multiply), so alpha = color.a * opacity
+  r.strokePaint.setAlphaf(color.a * stroke.opacity)
   r.strokePaint.setStrokeCap(r.ck.StrokeCap.Butt)
   r.strokePaint.setStrokeJoin(getStrokeJoinEntity(r, stroke.join ?? node.strokeJoin))
   r.strokePaint.setStrokeMiter(node.strokeMiterLimit)
@@ -104,7 +105,8 @@ export function configureStrokePaint(
 ): void {
   r.strokePaint.setColor(r.ck.Color4f(color.r, color.g, color.b, color.a))
   r.strokePaint.setStrokeWidth(stroke.weight)
-  r.strokePaint.setAlphaf(stroke.opacity)
+  // [custom] alpha-fix: setAlphaf overwrites color.a (not multiply), so alpha = color.a * opacity
+  r.strokePaint.setAlphaf(color.a * stroke.opacity)
   r.strokePaint.setStrokeCap(getStrokeCapEntity(r, stroke.cap ?? node.strokeCap))
   r.strokePaint.setStrokeJoin(getStrokeJoinEntity(r, stroke.join ?? node.strokeJoin))
   r.strokePaint.setStrokeMiter(node.strokeMiterLimit)

@@ -28,7 +28,12 @@ export function paintFills(
       ? applyFill(r, fill, node, graph, fillIndex, options.patternStack)
       : r.applyFill(fill, node, graph, fillIndex)
     if (!applied) continue
-    r.fillPaint.setAlphaf(fill.opacity)
+    // [custom] alpha-fix: SOLID (and solid fallback NOISE/CUSTOM) alpha is baked into setColor as
+    // color.a * opacity; setAlphaf would overwrite it (CanvasKit setAlphaf is a write, not a
+    // multiply), so only apply paint-level opacity to shader fills (gradient / image / pattern).
+    if (fill.type !== 'SOLID' && fill.type !== 'NOISE' && fill.type !== 'CUSTOM') {
+      r.fillPaint.setAlphaf(fill.opacity)
+    }
     r.fillPaint.setBlendMode(figmaBlendModeToSkia(r.ck, fill.blendMode))
     draw(fill)
     r.fillPaint.setShader(null)
@@ -135,7 +140,8 @@ export function applyFill(
 
   if (fill.type === 'SOLID') {
     const c = r.resolveFillColor(fill, fillIndex, node, graph)
-    r.fillPaint.setColor(r.ck.Color4f(c.r, c.g, c.b, c.a))
+    // [custom] alpha-fix: bake fill.opacity into paint alpha so setAlphaf cannot overwrite color.a
+    r.fillPaint.setColor(r.ck.Color4f(c.r, c.g, c.b, c.a * fill.opacity))
     return true
   }
 
@@ -152,7 +158,8 @@ export function applyFill(
 
   if (fill.type === 'PATTERN' || fill.type === 'NOISE' || fill.type === 'CUSTOM') {
     const c = r.resolveFillColor(fill, fillIndex, node, graph)
-    r.fillPaint.setColor(r.ck.Color4f(c.r, c.g, c.b, c.a))
+    // [custom] alpha-fix: same bake as SOLID — alpha = color.a * opacity for the solid fallback
+    r.fillPaint.setColor(r.ck.Color4f(c.r, c.g, c.b, c.a * fill.opacity))
     return true
   }
 
