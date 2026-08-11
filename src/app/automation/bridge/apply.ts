@@ -33,6 +33,24 @@ export interface ApplyToolOptions {
   undo?: boolean
 }
 
+/**
+ * AI 活跃窗口：最近一次 automation RPC 调用发生在多久以内视为「AI 在干活」。
+ * 期间挂起磁盘 reload（见 document/io/read.ts reloadFromDiskLocked），
+ * 避免 AI 批量操作 + autosave 回写 echo 的窄竞态触发画布重建屏闪。
+ */
+const AI_ACTIVE_WINDOW_MS = 10_000
+let lastAutomationRpcAt = 0
+
+/** 记录一次 automation RPC 调用（工具应用 / WS 请求）。 */
+export function markAutomationRpc(): void {
+  lastAutomationRpcAt = Date.now()
+}
+
+/** 当前是否处于 AI 活跃窗口（最近 windowMs 内有过 automation RPC 调用）。 */
+export function isAutomationRpcActive(windowMs: number = AI_ACTIVE_WINDOW_MS): boolean {
+  return Date.now() - lastAutomationRpcAt <= windowMs
+}
+
 export interface ApplyToolResult {
   ok: boolean
   result?: unknown
@@ -126,6 +144,7 @@ export async function applyAutomationTool(
   toolArgs: Record<string, unknown>,
   options: ApplyToolOptions = {}
 ): Promise<ApplyToolResult> {
+  markAutomationRpc()
   const store = target.store
   // Journaling ops hold the document lock for the whole "mutate + append" span so
   // no autosave write can serialize/clear in the middle (see op-journal header).

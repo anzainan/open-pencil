@@ -7,6 +7,7 @@
 import { AUTOMATION_HTTP_PORT } from '@open-pencil/core/constants'
 import { randomHex } from '@open-pencil/core/random'
 
+import { markAutomationRpc } from '@/app/automation/bridge/apply'
 import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { createAutomationCommandHandlers } from '@/app/automation/bridge/handlers'
 import type { EditorStore } from '@/app/editor/active-store'
@@ -28,6 +29,7 @@ export function connectAutomation(
     createAutomationCommandHandlers(makeFigmaFromStore)
 
   async function handleRequest(_id: string, command: string, args: unknown): Promise<unknown> {
+    markAutomationRpc()
     const result = await handleAutomationRequest(getStore(), command, args)
     // 重建后首个响应通知 MCP 侧：旧 id 缓存已失效，AI 应重取 get_page_tree。
     if (graphReplacedPending) {
