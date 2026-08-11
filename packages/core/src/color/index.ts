@@ -65,7 +65,7 @@ export function colorToFill(color: string | Color) {
   return {
     type: 'SOLID' as const,
     color: { r: rgba.r, g: rgba.g, b: rgba.b, a: rgba.a },
-    opacity: rgba.a,
+    opacity: 1,
     visible: true
   }
 }

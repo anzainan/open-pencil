@@ -73,7 +73,7 @@ function parseStroke(value: string | Color, width: number): Stroke {
   const color = typeof value === 'string' ? parseColor(value) : value
   return {
     color,
-    opacity: color.a,
+    opacity: 1,
     visible: true,
     weight: width,
     align: 'INSIDE'

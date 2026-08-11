@@ -193,12 +193,25 @@ describe('rgba255ToColor', () => {
 })
 
 describe('colorToFill', () => {
-  test('from Color object', () => {
+  test('from Color object keeps alpha in color.a and opacity at 1 (single application)', () => {
     const fill = colorToFill({ r: 1, g: 0, b: 0, a: 0.5 })
     expect(fill.type).toBe('SOLID')
     expect(fill.color.r).toBe(1)
-    expect(fill.opacity).toBe(0.5)
+    expect(fill.color.a).toBe(0.5)
+    expect(fill.opacity).toBe(1)
     expect(fill.visible).toBe(true)
+  })
+
+  test('from 8-digit hex applies alpha exactly once (color.a only)', () => {
+    const fill = colorToFill('#162D5099')
+    expect(fill.color.a).toBeCloseTo(0.6, 2)
+    expect(fill.opacity).toBe(1)
+  })
+
+  test('from 6-digit hex stays opaque', () => {
+    const fill = colorToFill('#2E86DE')
+    expect(fill.color.a).toBe(1)
+    expect(fill.opacity).toBe(1)
   })
 
   test('from hex string', () => {
@@ -206,6 +219,8 @@ describe('colorToFill', () => {
     expect(fill.type).toBe('SOLID')
     expect(fill.color.r).toBeCloseTo(1)
     expect(fill.color.g).toBeCloseTo(0)
+    expect(fill.color.a).toBe(1)
+    expect(fill.opacity).toBe(1)
   })
 })
 
