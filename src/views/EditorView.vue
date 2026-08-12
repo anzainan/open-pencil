@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, provide, ref } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref } from 'vue'
 import { useEventListener, useUrlSearchParams } from '@vueuse/core'
 import { useRoute } from 'vue-router'
 import { useHead } from '@unhead/vue'
@@ -43,7 +43,15 @@ if (createdInitialTab && route.meta.demo && !('test' in params)) {
   void createDemoShapes(firstTab.store)
 }
 
-useHead({ title: route.meta.demo ? 'Demo' : undefined })
+// tab 标题同步 documentName：demo 路由固定「Demo」，其余跟随 activeTab 文档名，
+// undefined（空文档 / Untitled）回落 App.vue 的 titleTemplate 兜底「OpenPencil」。
+useHead({
+  title: computed(() => {
+    if (route.meta.demo) return 'Demo'
+    const name = activeTab.value?.store.state.documentName
+    return name && name !== 'Untitled' ? name : undefined
+  })
+})
 useKeyboard()
 useMenu()
 
