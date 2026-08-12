@@ -80,9 +80,15 @@ export class SceneGraph {
   private sourceMetadataPreservationDepth = 0
   positionPreviewVersion = 0
   instanceIndex = new Map<string, Set<string>>()
+  /** Per-instance ID counter so concurrent graphs never share module-level state. */
+  private nextLocalID = 1
+
+  private generateId(): string {
+    return `0:${this.nextLocalID++}`
+  }
 
   constructor() {
-    const root = createDefaultNode(generateId, 'FRAME', {
+    const root = createDefaultNode(() => this.generateId(), 'FRAME', {
       name: 'Document',
       width: 0,
       height: 0
@@ -144,11 +150,11 @@ export class SceneGraph {
     collectionId: string,
     value?: VariableValue
   ): Variable {
-    return Variables.createVariable(this, generateId, name, type, collectionId, value)
+    return Variables.createVariable(this, () => this.generateId(), name, type, collectionId, value)
   }
 
   createCollection(name: string): VariableCollection {
-    return Variables.createCollection(this, generateId, name)
+    return Variables.createCollection(this, () => this.generateId(), name)
   }
 
   removeCollection(id: string): void {
@@ -272,8 +278,8 @@ export class SceneGraph {
     }
   }
   private generateNodeId(): string {
-    let id = generateId()
-    while (this.nodes.has(id)) id = generateId()
+    let id = this.generateId()
+    while (this.nodes.has(id)) id = this.generateId()
     return id
   }
   private registerNode(node: SceneNode, parentId: string | null): SceneNode {

@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises'
 import { defineCommand } from 'citty'
 
 import { FigmaAPI } from '@open-pencil/core/figma-api'
+import { computeAllLayouts } from '@open-pencil/core/layout'
 
 import { isAppMode, requireFile, rpc } from '#cli/app-client'
 import { appTargetOptions, appTargetRpcArgs } from '#cli/app-target'
@@ -100,6 +101,9 @@ export default defineCommand({
       const { BUILTIN_IO_FORMATS, IORegistry } = await import('@open-pencil/core/io')
       const io = new IORegistry(BUILTIN_IO_FORMATS)
       const outPath = args.output ? args.output : file
+      // Recompute auto-layout before writing so the file never carries stale
+      // layout from before the last mutation (mirrors browser apply.ts).
+      computeAllLayouts(graph)
       const result = await io.writeDocument('fig', graph)
       await writeFile(outPath, result.data as Uint8Array)
       if (!args.quiet) {
