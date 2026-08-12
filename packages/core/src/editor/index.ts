@@ -1,5 +1,7 @@
 export { createDefaultEditorState, createEditor } from './create'
 export type { Editor } from './create'
+export { HeadlessEditSession } from './headless-session'
+export type { ApplyToolResult, HeadlessEditSessionOptions } from './headless-session'
 export { createTextActions } from './text'
 export { opacityFromBuffer } from './nodes'
 export { EDITOR_TOOLS, TOOL_SHORTCUTS } from './tool-registry'

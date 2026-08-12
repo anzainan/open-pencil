@@ -13,6 +13,7 @@ import { createBrowserRpcBridge } from '#mcp/browser-rpc'
 import { MCP_CORS_HEADERS, MCP_CORS_METHODS, MCP_EXPOSED_HEADERS } from '#mcp/http-options'
 import type { RpcJsonObject } from '#mcp/json'
 import { preprocessRpc } from '#mcp/jsx-preprocess'
+import { createNodeRpcBackend } from '#mcp/node-rpc-backend'
 import { createMcpSessionManager } from '#mcp/server/sessions'
 import { registerTools } from '#mcp/tool/registration'
 
@@ -288,18 +289,46 @@ function buildServerContext(options: ServerOptions) {
   const mcpSessions = createMcpSessionManager({
     serverVersion: MCP_VERSION,
     registerTools: (mcpServer: McpServer) =>
-      registerTools(mcpServer, { enableEval, mcpRoot, sendRpc: sendToBrowser })
+      registerTools(mcpServer, { enableEval, mcpRoot, sendRpc: hybridSendRpc })
   })
   const browserRpc = createBrowserRpcBridge({
     authToken,
     onConnectionChange: mcpSessions.notifyToolsChanged
   })
-  const sendToBrowser = browserRpc.sendRpc
+  const nodeBackend = createNodeRpcBackend({ mcpRoot })
+
+  /**
+   * Hybrid RPC sender: prefer the live browser (browser apply/replay path);
+   * when the browser is offline or a call fails/times out, fall back to the
+   * in-process Node editing sessions so MCP canvas tools keep working headlessly.
+   */
+  async function hybridSendRpc(body: Record<string, unknown>): Promise<unknown> {
+    if (browserRpc.isConnected()) {
+      try {
+        return await browserRpc.sendRpc(body)
+      } catch (error) {
+        // Fall through to the Node backend (offline/timeout fallback).
+        console.warn('[mcp] browser RPC failed, falling back to Node session:', error)
+      }
+    }
+    return nodeBackend.sendRpc(body)
+  }
+  const sendToBrowser = hybridSendRpc
 
   const app = createHonoApp({ authToken, corsOrigin, browserRpc, mcpSessions, sendToBrowser })
   const wss = new WebSocketServer({ noServer: true })
 
-  return { httpPort, withTcp, mcpSessions, browserRpc, sendToBrowser, app, wss, authToken }
+  return {
+    httpPort,
+    withTcp,
+    mcpSessions,
+    browserRpc,
+    nodeBackend,
+    sendToBrowser,
+    app,
+    wss,
+    authToken
+  }
 }
 
 /**
@@ -311,6 +340,7 @@ function buildServerContext(options: ServerOptions) {
  */
 async function shutdownRuntime(
   browserRpc: ReturnType<typeof createBrowserRpcBridge>,
+  nodeBackend: ReturnType<typeof createNodeRpcBackend>,
   mcpSessions: ReturnType<typeof createMcpSessionManager>,
   wss: WebSocketServer,
   state: ListenerState
@@ -318,6 +348,11 @@ async function shutdownRuntime(
   const errors: unknown[] = []
   try {
     browserRpc.close()
+  } catch (e) {
+    errors.push(e)
+  }
+  try {
+    nodeBackend.close()
   } catch (e) {
     errors.push(e)
   }
@@ -370,7 +405,7 @@ function buildHandle(
         errors.push(error)
       }
       try {
-        await shutdownRuntime(browserRpc, mcpSessions, wss, state)
+        await shutdownRuntime(browserRpc, nodeBackend, mcpSessions, wss, state)
       } catch (error) {
         errors.push(error)
       }
@@ -422,7 +457,9 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
   } catch (err) {
     // Tear down any listeners that started before the failure, then close
     // all resources so nothing leaks when startServer rejects.
-    await shutdownRuntime(ctx.browserRpc, ctx.mcpSessions, ctx.wss, state).catch(() => undefined)
+    await shutdownRuntime(ctx.browserRpc, ctx.nodeBackend, ctx.mcpSessions, ctx.wss, state).catch(
+      () => undefined
+    )
     throw err
   }
 
