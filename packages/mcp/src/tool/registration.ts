@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
@@ -62,6 +62,40 @@ function withGraphReplacedNotice(result: MCPResult): MCPResult {
         text: `${text}\n\n⚠️ graph:replaced — 文档已重建，节点 id 已重排。请重新调用 get_page_tree 获取最新 id，再引用节点。`
       }
     ]
+  }
+}
+
+/** 把 warning 追加进文本结果（不回滚、不阻断，仅提示）。 */
+function withWarning(result: MCPResult, warning: string): MCPResult {
+  const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
+  return {
+    ...result,
+    content: [{ type: 'text' as const, text: `${text}\n\n⚠️ ${warning}` }]
+  }
+}
+
+/** 取浏览器当前打开目标文档的绝对 path；查不到/失败时返回 undefined（不阻断保存）。 */
+async function openDocumentPath(
+  sendRpc: RpcSender,
+  target: { document_id?: string },
+  resolvedRoot: string
+): Promise<string | undefined> {
+  try {
+    const result = (await sendRpc({ command: 'list_documents', args: {} })) as {
+      ok?: boolean
+      result?: {
+        documents?: Array<{ id?: string; path?: string; active?: boolean }>
+      }
+    }
+    if (result.ok === false) return undefined
+    const docs = result.result?.documents ?? []
+    const doc = target.document_id
+      ? docs.find((d) => d.id === target.document_id)
+      : (docs.find((d) => d.active) ?? docs[0])
+    if (!doc?.path) return undefined
+    return resolve(isAbsolute(doc.path) ? doc.path : resolve(resolvedRoot, doc.path))
+  } catch {
+    return undefined
   }
 }
 
@@ -205,17 +239,29 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
             ? await resolveSafePath(args.path, resolvedRoot)
             : undefined
         const { target } = splitAutomationTarget(args)
+
+        // 路径一致性校验：浏览器已打开文档时，相对 path 按 MCP root 解析可能写到新文件，
+        // 刷新会回到旧文件（假象「图片全丢」）。仅提示，不回滚不阻断。
+        let pathWarning: string | undefined
+        if (safePath && resolvedRoot) {
+          const currentPath = await openDocumentPath(sendRpc, target, resolvedRoot)
+          if (currentPath && resolve(safePath.realPath) !== currentPath) {
+            pathWarning = `保存路径 ${safePath.resolved} 与浏览器当前打开文件 ${currentPath} 不一致，将写入新文件；覆盖当前文档请不传 path`
+          }
+        }
+
         const result = await sendRpc({
           command: 'save_file',
           args: { ...target, path: safePath?.realPath }
         })
         const res = result as { ok?: boolean; result?: unknown; target?: unknown; error?: string }
         if (res.ok === false) return fail(new Error(res.error))
-        return ok({
+        const out = ok({
           saved: true,
           ...(safePath ? { path: safePath.resolved } : {}),
           ...(res.target ? { target: res.target } : {})
         })
+        return pathWarning ? withWarning(out, pathWarning) : out
       } catch (e) {
         return fail(e)
       }

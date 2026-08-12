@@ -218,7 +218,8 @@ async function handleMockCommand(
 export function connectMockBrowser(
   port: number,
   graph: SceneGraph,
-  authToken?: string
+  authToken?: string,
+  overrides?: Record<string, (args: unknown) => Promise<unknown> | unknown>
 ): Promise<MockBrowser> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`)
@@ -243,7 +244,10 @@ export function connectMockBrowser(
 
         try {
           requests.push({ command: msg.command, args: msg.args })
-          const result = await handleMockCommand(graph, msg.command, msg.args)
+          const override = overrides?.[msg.command]
+          const result = override
+            ? await override(msg.args)
+            : await handleMockCommand(graph, msg.command, msg.args)
           ws.send(JSON.stringify({ type: 'response', id: msg.id, ok: true, result }))
         } catch (e) {
           ws.send(
