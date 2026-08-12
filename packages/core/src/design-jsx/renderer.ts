@@ -12,7 +12,8 @@ import { fetchIcons } from '#core/icons'
 import { createIconFromPaths } from '#core/icons/render'
 import { extractPaths, scalePathInfos } from '#core/icons/svg'
 import type { IconData } from '#core/icons/types'
-import { computeAllLayouts } from '#core/layout'
+import { PARENT_LAYOUT_EDIT_KEYS } from '#core/layout/apply'
+import { computeAllLayouts, computeLayout } from '#core/layout'
 import { randomHex } from '#core/random'
 
 import { applySizeOverrides, propsToOverrides } from './props-overrides'
@@ -74,12 +75,59 @@ export async function renderTree(
   if (options.y !== undefined) graph.updateNode(result.id, { y: options.y })
 
   computeAllLayouts(graph)
+  persistEditedFlexChildPositions(graph, parentId)
 
   return {
     id: result.id,
     name: result.name,
     type: result.type,
     childIds: result.childIds
+  }
+}
+
+/**
+ * Render semantics = "layout result is the stored result". When the render
+ * targets an auto-layout parent that has been layout-edited, its stored child
+ * coordinates are no longer authoritative, yet fig-imported FRAME children keep
+ * their source snapshot position unconditionally (preservesImportedFrameGeometry).
+ * Recompute the flex layout and force-write the computed x/y so the save path
+ * reads node.x/node.y (editedFields x/y) instead of the stale rawTransform.
+ */
+function persistEditedFlexChildPositions(graph: SceneGraph, parentId: string): void {
+  const parent = graph.getNode(parentId)
+  if (!parent || parent.layoutMode === 'NONE') return
+  if (!parent.source.editedFields.some((key) => PARENT_LAYOUT_EDIT_KEYS.has(key))) return
+
+  const children = graph.getChildren(parentId)
+  if (children.length === 0) return
+
+  // Drop the import marker only for FRAME children so updateChildFromYoga
+  // recomputes their position instead of honoring the fig snapshot. Original
+  // sources are captured up front so they can be restored after the layout.
+  const originalSources = new Map<string, SceneNode['source']>()
+  graph.preserveSourceMetadataDuring(() => {
+    for (const child of children) {
+      if (
+        child.visible &&
+        child.layoutPositioning !== 'ABSOLUTE' &&
+        child.source.format === 'fig' &&
+        child.type === 'FRAME'
+      ) {
+        originalSources.set(child.id, child.source)
+        child.source = { ...child.source, format: null }
+      }
+    }
+    computeLayout(graph, parentId)
+  })
+  for (const child of graph.getChildren(parentId)) {
+    const originalSource = originalSources.get(child.id)
+    if (originalSource) {
+      graph.preserveSourceMetadataDuring(() => {
+        child.source = originalSource
+      })
+    }
+    if (!child.visible || child.layoutPositioning === 'ABSOLUTE') continue
+    graph.updateNode(child.id, { x: child.x, y: child.y })
   }
 }
 

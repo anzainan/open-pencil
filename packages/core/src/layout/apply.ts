@@ -61,7 +61,7 @@ function frameSourceIsFig(graph: SceneGraph, parentId: string | null): boolean {
 }
 
 /** 父容器上的布局键：被编辑过则存储的子坐标不再可信，恢复 Yoga 重排。 */
-const PARENT_LAYOUT_EDIT_KEYS: ReadonlySet<string> = new Set([
+export const PARENT_LAYOUT_EDIT_KEYS: ReadonlySet<string> = new Set([
   'width',
   'height',
   'paddingTop',
