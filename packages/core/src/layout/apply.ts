@@ -60,6 +60,41 @@ function frameSourceIsFig(graph: SceneGraph, parentId: string | null): boolean {
   return parentId ? graph.getNode(parentId)?.source.format === 'fig' : false
 }
 
+/** 父容器上的布局键：被编辑过则存储的子坐标不再可信，恢复 Yoga 重排。 */
+const PARENT_LAYOUT_EDIT_KEYS: ReadonlySet<string> = new Set([
+  'width',
+  'height',
+  'paddingTop',
+  'paddingBottom',
+  'paddingLeft',
+  'paddingRight',
+  'itemSpacing',
+  'counterAxisSpacing',
+  'primaryAxisAlign',
+  'counterAxisAlign',
+  'counterAxisAlignContent',
+  'layoutWrap',
+  'layoutMode',
+  'layoutDirection',
+  'primaryAxisSizing',
+  'counterAxisSizing',
+  'layoutGrow',
+  'layoutAlignSelf',
+  'minWidth',
+  'maxWidth',
+  'minHeight',
+  'maxHeight'
+])
+
+function preservesImportedFigChildPosition(graph: SceneGraph, child: SceneNode): boolean {
+  if (child.type === 'INSTANCE') return false
+  if (child.source.format !== 'fig' || !frameSourceIsFig(graph, child.parentId)) return false
+  const parent = child.parentId ? graph.getNode(child.parentId) : undefined
+  if (!parent) return false
+  const edited = parent.source.editedFields
+  return !edited.some((key) => PARENT_LAYOUT_EDIT_KEYS.has(key))
+}
+
 function computedChildPosition(
   child: SceneNode,
   yogaChild: YogaNode,
@@ -107,13 +142,22 @@ function updateChildFromYoga(graph: SceneGraph, child: SceneNode, yogaChild: Yog
     frameSourceIsFig(graph, child.parentId)
   const preservesImportedPosition =
     preservesImportedFrameGeometry ||
-    (child.source.format === 'fig' && Math.abs(child.rotation) > 0.001)
-  graph.updateNode(child.id, {
-    x: computedChildPosition(child, yogaChild, 'x', preservesImportedPosition),
-    y: computedChildPosition(child, yogaChild, 'y', preservesImportedPosition),
-    width: computedChildSize(child, yogaChild, 'width', preservesImportedFrameGeometry),
-    height: computedChildSize(child, yogaChild, 'height', preservesImportedFrameGeometry)
-  })
+    (child.source.format === 'fig' && Math.abs(child.rotation) > 0.001) ||
+    preservesImportedFigChildPosition(graph, child)
+
+  const x = computedChildPosition(child, yogaChild, 'x', preservesImportedPosition)
+  const y = computedChildPosition(child, yogaChild, 'y', preservesImportedPosition)
+  const width = computedChildSize(child, yogaChild, 'width', preservesImportedFrameGeometry)
+  const height = computedChildSize(child, yogaChild, 'height', preservesImportedFrameGeometry)
+
+  const updates: Partial<SceneNode> = {}
+  // 仅在值实际变化时写回：加载期坐标保留场景下（值不变）不再调用 updateNode，
+  // 避免把 x/y 标记进 source.editedFields → 保存链丢失 rawTransform 写坏磁盘（P0）。
+  if (Math.abs(x - child.x) > 0.001) updates.x = x
+  if (Math.abs(y - child.y) > 0.001) updates.y = y
+  if (Math.abs(width - child.width) > 0.001) updates.width = width
+  if (Math.abs(height - child.height) > 0.001) updates.height = height
+  if (Object.keys(updates).length > 0) graph.updateNode(child.id, updates)
 }
 
 function preservesImportedInstanceInternals(child: SceneNode): boolean {
