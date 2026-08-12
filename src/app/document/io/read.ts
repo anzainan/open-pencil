@@ -4,7 +4,10 @@ import { computeAllLayouts } from '@open-pencil/core/layout'
 
 import { bridgeClient } from '@/app/bridge/client'
 import { getPendingAiOps, journalDocPathForSource, withAiOpsLock } from '@/app/bridge/op-journal'
-import { isAutomationRpcActive } from '@/app/automation/bridge/apply'
+import {
+  isAiOpFlushWindowActive,
+  isAutomationRpcActive
+} from '@/app/automation/bridge/apply'
 import { yieldToUI } from '@/app/document/io/browser'
 import { applyImportedDocument } from '@/app/document/io/imported-document'
 import { readReloadSource } from '@/app/document/io/reload-source'
@@ -117,11 +120,13 @@ export function createReloadActions({
     // 并暴露 AI 活跃窗口状态与 saved/scene 版本差，便于定位窄竞态屏闪。
     const savedVersion = getSavedVersion()
     const aiActive = isAutomationRpcActive()
+    const aiFlushGuard = isAiOpFlushWindowActive()
     console.warn(
       `[reload] triggered path=${diagnostics?.path ?? 'n/a'} ` +
         `selfWriteEcho=${diagnostics?.selfWriteEcho ?? 'n/a'} ` +
         `journalEmpty=${diagnostics?.journalEmpty ?? 'n/a'} ` +
-        `savedVsScene=${savedVersion}:${state.sceneVersion} aiActive=${aiActive}`
+        `savedVsScene=${savedVersion}:${state.sceneVersion} ` +
+        `aiActive=${aiActive} aiFlushGuard=${aiFlushGuard}`
     )
     // 内存有未落盘改动（sceneVersion 高于上次已保存版本，或 journal 非空）时
     // 跳过磁盘重载——磁盘是旧状态，重载会用旧内容覆盖新内存导致内容丢失（P0-2）。
@@ -130,6 +135,13 @@ export function createReloadActions({
     // 会触发少量真实 reload → 画布反复空白恢复。窗口内直接跳过，不重建不广播。
     if (aiActive) {
       console.warn('[reload] skipped: AI active window')
+      return
+    }
+    // 写者归属感知守卫（dev-batch8）：距「覆盖 AI 操作的落盘完成」窗口内的
+    // 磁盘 reload 一律跳过——含外部写（无水印可匹配）与迟到 echo（超 10s 时间窗），
+    // 避免协作竞态触发的重建把内存态（含导入节点布局）回滚为磁盘快照。
+    if (aiFlushGuard) {
+      console.warn('[reload] skipped: AI flush window (writer-ownership guard)')
       return
     }
 

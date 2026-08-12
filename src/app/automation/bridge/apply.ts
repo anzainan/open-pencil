@@ -40,6 +40,13 @@ export interface ApplyToolOptions {
  */
 const AI_ACTIVE_WINDOW_MS = 10_000
 let lastAutomationRpcAt = 0
+/**
+ * 写者归属感知守卫窗口（dev-batch8）：覆盖 AI 操作的落盘完成后多久内的磁盘
+ * reload 一律跳过（含外部写 / 迟到 echo），把「纯时间窗」升级为「写者归属感知」。
+ */
+const AI_FLUSH_GUARD_MS = 10_000
+/** 最近一次覆盖 AI 操作的落盘完成时间（write.ts 写盘成功路径标记，0 = 从未落盘）。 */
+let lastAiOpFlushCompleteAt = 0
 
 /** 记录一次 automation RPC 调用（工具应用 / WS 请求）。 */
 export function markAutomationRpc(): void {
@@ -49,6 +56,29 @@ export function markAutomationRpc(): void {
 /** 当前是否处于 AI 活跃窗口（最近 windowMs 内有过 automation RPC 调用）。 */
 export function isAutomationRpcActive(windowMs: number = AI_ACTIVE_WINDOW_MS): boolean {
   return Date.now() - lastAutomationRpcAt <= windowMs
+}
+
+/** 最近一次 automation RPC 调用时间（0 = 尚无调用）。 */
+export function getLastAutomationRpcAt(): number {
+  return lastAutomationRpcAt
+}
+
+/** 标记一次覆盖 AI 操作的落盘已完成（write.ts 在写盘成功路径调用）。 */
+export function markAiOpFlushComplete(): void {
+  lastAiOpFlushCompleteAt = Date.now()
+}
+
+/** 最近一次覆盖 AI 操作的落盘完成时间（0 = 从未落盘）。 */
+export function getLastAiOpFlushCompleteAt(): number {
+  return lastAiOpFlushCompleteAt
+}
+
+/**
+ * 写者归属感知守卫：距「覆盖 AI 操作的落盘完成」windowMs 内的磁盘 reload
+ * 一律跳过（含外部写），无论是否匹配 selfWriteMtime 水印。
+ */
+export function isAiOpFlushWindowActive(windowMs: number = AI_FLUSH_GUARD_MS): boolean {
+  return lastAiOpFlushCompleteAt > 0 && Date.now() - lastAiOpFlushCompleteAt <= windowMs
 }
 
 export interface ApplyToolResult {
