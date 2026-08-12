@@ -10,6 +10,8 @@ import {
   vectorNetworkToSVGPaths
 } from '@open-pencil/core'
 
+import { expectDefined } from '#tests/helpers/assert'
+
 function makeGraph() {
   const graph = new SceneGraph()
   graph.createNode('CANVAS', graph.rootId, { name: 'Page 1' })
@@ -501,5 +503,85 @@ describe('selectionToJSX', () => {
     expect(jsx).toContain('<Rectangle')
     expect(jsx).toContain('<Ellipse')
     expect(jsx).toContain('\n\n')
+  })
+})
+
+describe('JSX export of ABSOLUTE children inside flex (B2/Task 4 round trip)', () => {
+  test('absolute child in flex keeps position="absolute" + x/y on export', () => {
+    const graph = makeGraph()
+    const btn = graph.createNode('FRAME', pageId(graph), {
+      name: 'copy-btn',
+      width: 296,
+      height: 32,
+      layoutMode: 'HORIZONTAL',
+      primaryAxisSizing: 'FIXED',
+      counterAxisSizing: 'FIXED',
+      primaryAxisAlign: 'CENTER'
+    })
+    graph.createNode('RECTANGLE', btn.id, {
+      name: 'AbsIcon',
+      x: 113.5,
+      y: 9,
+      width: 14,
+      height: 14,
+      layoutPositioning: 'ABSOLUTE'
+    })
+    graph.createNode('TEXT', btn.id, {
+      name: 'Text',
+      x: 20,
+      y: 8.5,
+      width: 60,
+      height: 20,
+      text: '复制链接',
+      textAutoResize: 'NONE'
+    })
+
+    const jsx = sceneNodeToJSX(btn.id, graph)
+    expect(jsx).toContain('position="absolute"')
+    expect(jsx).toContain('x={113.5}')
+    expect(jsx).toContain('y={9}')
+    // flow child keeps coordinates implicit for round-trip stability.
+    expect(jsx).not.toContain('x={20}')
+  })
+
+  test('absolute child in flex round-trips back to identical coordinates', async () => {
+    const graph = makeGraph()
+    const btn = graph.createNode('FRAME', pageId(graph), {
+      name: 'copy-btn',
+      width: 296,
+      height: 32,
+      layoutMode: 'HORIZONTAL',
+      primaryAxisSizing: 'FIXED',
+      counterAxisSizing: 'FIXED',
+      primaryAxisAlign: 'CENTER',
+      counterAxisAlign: 'CENTER',
+      itemSpacing: 6
+    })
+    const abs = graph.createNode('RECTANGLE', btn.id, {
+      name: 'AbsIcon',
+      x: 113.5,
+      y: 9,
+      width: 14,
+      height: 14,
+      layoutPositioning: 'ABSOLUTE'
+    })
+    graph.createNode('TEXT', btn.id, {
+      name: 'Text',
+      x: 20,
+      y: 8.5,
+      width: 60,
+      height: 20,
+      text: '复制链接',
+      textAutoResize: 'NONE'
+    })
+
+    const jsx = sceneNodeToJSX(btn.id, graph)
+    const [result] = await renderJSX(graph, jsx)
+    const rBtn = expectDefined(graph.getNode(result.id), 'round-tripped button')
+    const rAbs = expectDefined(graph.getNode(rBtn.childIds[0]), 'round-tripped absolute child')
+
+    expect(rAbs.layoutPositioning).toBe('ABSOLUTE')
+    expect(rAbs.x).toBe(abs.x)
+    expect(rAbs.y).toBe(abs.y)
   })
 })

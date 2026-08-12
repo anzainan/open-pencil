@@ -183,7 +183,13 @@ function collectPositionProps(
   ctx: ReturnType<typeof getNodeContext>,
   props: [string, unknown][]
 ): void {
-  if (ctx.parentIsAutoLayout || ctx.parentIsGrid) return
+  const parentIsFlow = ctx.parentIsAutoLayout || ctx.parentIsGrid
+  const isAbsoluteInFlow = parentIsFlow && node.layoutPositioning === 'ABSOLUTE'
+  // Flow children inside auto-layout/grid keep their coordinates implicit so the
+  // flex re-layout positions them; only ABSOLUTE children need explicit x/y
+  // (mirroring propsToOverrides: x/y + parentLayout !== NONE → ABSOLUTE).
+  if (parentIsFlow && !isAbsoluteInFlow) return
+  if (isAbsoluteInFlow) props.push(['position', 'absolute'])
   if (node.x !== 0) props.push(['x', node.x])
   if (node.y !== 0) props.push(['y', node.y])
 }
@@ -312,7 +318,12 @@ function vectorNodeToJSX(node: SceneNode, graph: SceneGraph, indent: number): st
   if (node.name && node.name !== node.type) props.push(['name', node.name])
 
   const ctx = getNodeContext(node, graph)
-  if (!ctx.parentIsAutoLayout && !ctx.parentIsGrid) {
+  const parentIsFlow = ctx.parentIsAutoLayout || ctx.parentIsGrid
+  if (!parentIsFlow) {
+    if (node.x !== 0) props.push(['x', node.x])
+    if (node.y !== 0) props.push(['y', node.y])
+  } else if (node.layoutPositioning === 'ABSOLUTE') {
+    props.push(['position', 'absolute'])
     if (node.x !== 0) props.push(['x', node.x])
     if (node.y !== 0) props.push(['y', node.y])
   }
