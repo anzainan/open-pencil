@@ -31,6 +31,14 @@ openFileFromQueryParam()
 if (!IS_TAURI) {
   void import('virtual:pwa-register').then(({ registerSW }) => {
     registerSW({ immediate: true })
+    // 部署后旧 SW 会继续服务预缓存的旧页面；controllerchange 是新 SW 接管当前页面的信号，
+    // 触发一次刷新即可切换到新版（autoUpdate 静默升级 + 本刷新 = 后台换版 + 自动刷新一次）。
+    // 单次刷新语义：新 SW 首次控制本页面才触发，刷新后控制器已固定，不会循环刷新。
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload()
+      })
+    }
     return undefined
   })
 }
