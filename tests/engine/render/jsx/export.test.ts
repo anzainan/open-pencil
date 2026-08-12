@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 
-import { SceneGraph, sceneNodeToJSX, selectionToJSX } from '@open-pencil/core'
+import type { SceneNode } from '@open-pencil/core'
+import {
+  parseSVGPath,
+  renderJSX,
+  SceneGraph,
+  sceneNodeToJSX,
+  selectionToJSX,
+  vectorNetworkToSVGPaths
+} from '@open-pencil/core'
 
 function makeGraph() {
   const graph = new SceneGraph()
@@ -382,6 +390,97 @@ describe('sceneNodeToJSX', () => {
     expect(jsx).toContain('rowStart={2}')
     expect(jsx).toContain('colSpan={2}')
     expect(jsx).not.toContain('rowSpan')
+  })
+})
+
+describe('sceneNodeToJSX vector round-trip', () => {
+  test('VECTOR with vectorNetwork exports inline svg with path d', () => {
+    const graph = makeGraph()
+    const network = parseSVGPath('M0 0 L24 0 L24 24 L0 24 Z')
+    const node = graph.createNode('VECTOR', pageId(graph), {
+      name: 'home',
+      width: 24,
+      height: 24,
+      vectorNetwork: network,
+      fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 1 }, opacity: 1, visible: true }]
+    })
+    const jsx = sceneNodeToJSX(node.id, graph)
+    expect(jsx).toContain('<svg')
+    expect(jsx).toContain('viewBox="0 0 24 24"')
+    expect(jsx).toContain('<path d=')
+    expect(jsx).toContain('fill="#FFFFFF"')
+    expect(jsx).not.toContain('<Vector')
+  })
+
+  test('VECTOR without vectorNetwork falls back to Vector tag', () => {
+    const graph = makeGraph()
+    const node = graph.createNode('VECTOR', pageId(graph), {
+      name: 'plain',
+      width: 24,
+      height: 24
+    })
+    const jsx = sceneNodeToJSX(node.id, graph)
+    expect(jsx).toContain('<Vector')
+    expect(jsx).not.toContain('<svg')
+  })
+
+  test('inline svg paths are non-empty and parse back to network geometry', () => {
+    const graph = makeGraph()
+    const network = parseSVGPath('M0 0 C10 0 24 10 24 24 Z')
+    const node = graph.createNode('VECTOR', pageId(graph), {
+      width: 24,
+      height: 24,
+      vectorNetwork: network
+    })
+    const jsx = sceneNodeToJSX(node.id, graph)
+    const dMatch = jsx.match(/<path d="([^"]+)"/)
+    expect(dMatch).not.toBeNull()
+    if (!dMatch) return
+    const roundTrip = parseSVGPath(dMatch[1])
+    expect(roundTrip.segments.length).toBe(network.segments.length)
+    expect(roundTrip.vertices.length).toBe(network.vertices.length)
+  })
+
+  test('vectorNetworkToSVGPaths returns one path per region', () => {
+    const graph = makeGraph()
+    const network = parseSVGPath('M0 0 L12 0 L12 12 L0 12 Z M12 12 L24 12 L24 24 L12 24 Z')
+    const paths = vectorNetworkToSVGPaths(network)
+    expect(paths.length).toBeGreaterThan(0)
+    const node = graph.createNode('VECTOR', pageId(graph), {
+      width: 24,
+      height: 24,
+      vectorNetwork: network
+    })
+    const jsx = sceneNodeToJSX(node.id, graph)
+    const dCount = (jsx.match(/<path /g) ?? []).length
+    expect(dCount).toBe(paths.length)
+  })
+
+  test('exported inline svg renders back to VECTOR with non-empty vectorNetwork', async () => {
+    const graph = makeGraph()
+    const network = parseSVGPath('M0 0 L24 0 L24 24 L0 24 Z')
+    graph.createNode('VECTOR', pageId(graph), {
+      name: 'home',
+      width: 24,
+      height: 24,
+      vectorNetwork: network
+    })
+    const jsx = sceneNodeToJSX(graph.getPages()[0].childIds[0], graph)
+
+    const renderGraph = makeGraph()
+    await renderJSX(renderGraph, jsx)
+    const page = renderGraph.getPages()[0]
+    const vectors: SceneNode[] = []
+    for (const childId of page.childIds) {
+      const child = renderGraph.getNode(childId)
+      if (child?.type === 'VECTOR') vectors.push(child)
+      for (const grandChildId of child?.childIds ?? []) {
+        const grandChild = renderGraph.getNode(grandChildId)
+        if (grandChild?.type === 'VECTOR') vectors.push(grandChild)
+      }
+    }
+    expect(vectors.length).toBeGreaterThan(0)
+    for (const vector of vectors) expect(vector.vectorNetwork).not.toBeNull()
   })
 })
 

@@ -389,11 +389,11 @@ function configureTextLeafWithoutMeasurer(
   parent: SceneNode,
   fixedDerivedMainAxis: boolean
 ): void {
-  const hasStoredSize =
-    child.width > 0 && child.height > 0 && !(child.width === 100 && child.height === 100)
+  const widthAuthoritative = child.width !== 100 || child.figmaDerivedLayout?.width !== undefined
+  const heightAuthoritative = child.height !== 100 || child.figmaDerivedLayout?.height !== undefined
 
   if (child.textAutoResize === 'WIDTH_AND_HEIGHT') {
-    if (hasStoredSize) {
+    if (widthAuthoritative && heightAuthoritative) {
       yogaChild.setWidth(child.width)
       yogaChild.setHeight(child.height)
     } else {
@@ -413,7 +413,7 @@ function configureTextLeafWithoutMeasurer(
     child.layoutAlignSelf === 'STRETCH' ||
     (child.layoutAlignSelf === 'AUTO' && parent.counterAxisAlign === 'STRETCH')
   if (!(!isRow && stretches) && !fixedDerivedMainAxis) yogaChild.setWidth(child.width)
-  if (hasStoredSize) yogaChild.setHeight(child.height)
+  if (heightAuthoritative) yogaChild.setHeight(child.height)
   else yogaChild.setHeight(estimateTextSize(child, measurementWidth).height)
 }
 

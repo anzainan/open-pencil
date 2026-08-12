@@ -1,6 +1,7 @@
 import type { SceneGraph, SceneNode, NodeType } from '@open-pencil/scene-graph'
 
 import { DEFAULT_FONT_FAMILY } from '#core/constants'
+import { vectorNetworkToSVGPaths } from '#core/io/formats/svg/paths'
 import { resolveNodeTextDirection } from '#core/text/direction'
 
 import {
@@ -298,10 +299,54 @@ function collectProps(node: SceneNode, graph: SceneGraph): [string, unknown][] {
 
 // --- JSX rendering ---
 
+function vectorNodeToJSX(node: SceneNode, graph: SceneGraph, indent: number): string {
+  const network = node.vectorNetwork
+  if (!network) return ''
+  const paths = vectorNetworkToSVGPaths(network)
+  if (paths.length === 0) return ''
+
+  const prefix = '  '.repeat(indent)
+  const childPrefix = '  '.repeat(indent + 1)
+
+  const props: [string, unknown][] = [['viewBox', `0 0 ${node.width} ${node.height}`]]
+  if (node.name && node.name !== node.type) props.push(['name', node.name])
+
+  const ctx = getNodeContext(node, graph)
+  if (!ctx.parentIsAutoLayout && !ctx.parentIsGrid) {
+    if (node.x !== 0) props.push(['x', node.x])
+    if (node.y !== 0) props.push(['y', node.y])
+  }
+  if (node.width > 0) props.push(['w', node.width])
+  if (node.height > 0) props.push(['h', node.height])
+
+  const pathProps: [string, unknown][] = []
+  const fill = solidFillColor(node.fills)
+  const stroke = solidStroke(node.strokes)
+  if (fill) pathProps.push(['fill', fill])
+  else pathProps.push(['fill', ''])
+  if (stroke) {
+    pathProps.push(['stroke', stroke.color])
+    if (stroke.weight !== 1) pathProps.push(['strokeWidth', stroke.weight])
+    if (stroke.dash) pathProps.push(['strokeDash', stroke.dash])
+  }
+  const pathAttrStr = pathProps.map(([k, v]) => formatProp(k, v)).join(' ')
+
+  const attrsStr = props.map(([k, v]) => formatProp(k, v)).join(' ')
+  const pathLines = paths.map(
+    (d) => `${childPrefix}<path d="${d}"${pathAttrStr ? ` ${pathAttrStr}` : ''} />`
+  )
+  return [`${prefix}<svg ${attrsStr}>`, ...pathLines, `${prefix}</svg>`].join('\n')
+}
+
 function nodeToJSX(node: SceneNode, graph: SceneGraph, indent: number, format: JSXFormat): string {
   const tagMap = format === 'tailwind' ? NODE_TYPE_TO_TW_TAG : NODE_TYPE_TO_TAG
   const tag = tagMap[node.type]
   if (!tag) return ''
+
+  if (format === 'openpencil' && node.type === 'VECTOR' && node.vectorNetwork) {
+    const svgJSX = vectorNodeToJSX(node, graph, indent)
+    if (svgJSX) return svgJSX
+  }
 
   const prefix = '  '.repeat(indent)
   let attrsStr: string
