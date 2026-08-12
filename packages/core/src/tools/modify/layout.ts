@@ -1,6 +1,11 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 
-import { defineTool, nodeNotFound } from '#core/tools/schema'
+import {
+  defineTool,
+  importedFlexMutationWarnings,
+  nodeNotFound,
+  withWarnings
+} from '#core/tools/schema'
 
 export const setLayout = defineTool({
   name: 'set_layout',
@@ -166,6 +171,12 @@ export const setLayoutChild = defineTool({
       node.layoutPositioning = args.positioning
       updated.push('layoutPositioning')
     }
-    return { id: args.id, updated }
+    // Imported-source children serialize stackPositioning from the fig snapshot
+    // (figLayout), so an in-memory ABSOLUTE change never reaches the disk.
+    const warnings =
+      args.positioning !== undefined
+        ? importedFlexMutationWarnings(figma.graph.getNode(args.id), 'layout')
+        : []
+    return withWarnings({ id: args.id, updated }, warnings)
   }
 })

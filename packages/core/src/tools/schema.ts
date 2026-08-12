@@ -121,6 +121,26 @@ export function withWarnings(result: unknown, warnings: string[]): unknown {
   return { result, warnings }
 }
 
+/**
+ * Imported-source (source.fig) nodes serialize from their fig snapshot rather
+ * than live fields: `.fig` export reads rawTransform / figLayout over
+ * node.x / node.layoutPositioning. Mutations on such nodes therefore only take
+ * effect in memory unless the parent layout recompute or a replace_id re-render
+ * (JSX with explicit x/y) persists them. Surface this instead of fake success.
+ */
+export function importedFlexMutationWarnings(
+  node: SceneNode | null | undefined,
+  kind: 'coordinates' | 'layout'
+): string[] {
+  if (!node?.source.fig.rawTransform) return []
+  if (kind === 'coordinates') {
+    return [
+      '该节点为导入来源，坐标修改仅内存生效；要持久化请用 replace_id 重渲染（JSX 显式 x/y）或修改父容器布局触发重算'
+    ]
+  }
+  return ['layoutPositioning 修改仅内存生效，落盘仍读源快照']
+}
+
 function isPureErrorResult(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const keys = Object.keys(value)

@@ -1,4 +1,10 @@
-import { defineTool, nodeNotFound, nodeSummary } from '#core/tools/schema'
+import {
+  defineTool,
+  importedFlexMutationWarnings,
+  nodeNotFound,
+  nodeSummary,
+  withWarnings
+} from '#core/tools/schema'
 
 export const deleteNode = defineTool({
   name: 'delete_node',
@@ -73,7 +79,8 @@ export const nodeMove = defineTool({
     if (!node) return nodeNotFound(id)
     node.x = x
     node.y = y
-    return { id, x, y }
+    const warnings = importedFlexMutationWarnings(figma.graph.getNode(id), 'coordinates')
+    return withWarnings({ id, x, y }, warnings)
   }
 })
 
