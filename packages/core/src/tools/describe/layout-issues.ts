@@ -114,6 +114,10 @@ function checkGrowInHug(ctx: LayoutContext): void {
   if (willGetConcreteSize(node, isRow, graph)) return
   for (const child of children) {
     if (child.layoutGrow > 0) {
+      // 主轴上 sizing='FILL' 是合法组合：FILL 语义即占满可用空间，hug 父下退化为
+      // 内容尺寸。grow=1 只是 fill 的数据层持久形态，不应告警。
+      const mainSizing = isRow ? child.primaryAxisSizing : child.counterAxisSizing
+      if (mainSizing === 'FILL') continue
       issues.push({
         message: `"${child.name}" grow=${child.layoutGrow} inside HUG parent "${node.name}"`,
         suggestion: 'Set parent to fixed size, or remove grow'

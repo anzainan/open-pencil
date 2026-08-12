@@ -65,3 +65,59 @@ describe('describe stroke summaries', () => {
     expect(result.visual).toContain('#021A3B 10.13px stroke')
   })
 })
+
+interface DescribeIssuesResult extends ToolResult {
+  issues?: Array<{ message?: string }>
+}
+
+function growInHugMessages(result: DescribeIssuesResult): string[] {
+  const issues = result.issues ?? []
+  return issues
+    .map((issue) => issue.message ?? '')
+    .filter((message) => /grow=\d+ inside HUG/i.test(message))
+}
+
+/** HUG 父（row）+ 单个子节点；返回父 frame id。 */
+function setupHugRowChild(
+  childType: 'FILL' | 'FIXED',
+  name: string
+): { figma: ReturnType<typeof setupToolTest>['figma']; graph: ReturnType<typeof setupToolTest>['graph']; frameId: string } {
+  const { figma, graph } = setupToolTest()
+  const frame = figma.createFrame()
+  frame.name = 'HugParent'
+  frame.resize(300, 40)
+  graph.updateNode(frame.id, {
+    layoutMode: 'HORIZONTAL',
+    primaryAxisSizing: 'HUG',
+    counterAxisSizing: 'FIXED'
+  })
+
+  const child = figma.createRectangle()
+  child.name = name
+  child.resize(childType === 'FILL' ? 80 : 80, 20)
+  frame.appendChild(child)
+  graph.updateNode(child.id, {
+    layoutGrow: 1,
+    primaryAxisSizing: childType
+  })
+
+  return { figma, graph, frameId: frame.id }
+}
+
+describe('describe grow-in-hug layout issues', () => {
+  test('does not warn when a fill child sits inside a HUG parent', () => {
+    const { figma, frameId } = setupHugRowChild('FILL', 'FillChild')
+    const result = getTool('describe').execute(figma, { id: frameId }) as DescribeIssuesResult
+
+    expect(growInHugMessages(result)).toHaveLength(0)
+  })
+
+  test('still warns when a FIXED child with grow sits inside a HUG parent', () => {
+    const { figma, frameId } = setupHugRowChild('FIXED', 'FixedGrowChild')
+    const result = getTool('describe').execute(figma, { id: frameId }) as DescribeIssuesResult
+
+    expect(growInHugMessages(result)).toEqual([
+      expect.stringMatching(/grow=1 inside HUG parent "HugParent"/)
+    ])
+  })
+})
