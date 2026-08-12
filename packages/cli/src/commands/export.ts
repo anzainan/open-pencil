@@ -15,7 +15,13 @@ import {
 import { isAppMode, requireFile, rpc } from '#cli/app-client'
 import { appTargetOptions, appTargetRpcArgs } from '#cli/app-target'
 import { ok, printError } from '#cli/format'
-import { loadDocument, populateDocumentPage, populateWholeDocument } from '#cli/headless'
+import {
+  loadDocument,
+  populateDocumentPage,
+  populateWholeDocument,
+  registerFontDirectories,
+  resolveFontDirectories
+} from '#cli/headless'
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
 const RASTER_FORMATS = ['PNG', 'JPG', 'WEBP']
@@ -44,6 +50,7 @@ interface ExportArgs {
   height: string
   'document-id'?: string
   'page-id'?: string
+  'fonts-dir'?: string
 }
 
 async function writeAndLog(path: string, content: string | Uint8Array) {
@@ -182,9 +189,19 @@ async function executeFileExport(
   return io.exportContent(formatId, { graph, target }, options)
 }
 
+async function registerExportFonts(fontsDir: string | undefined): Promise<void> {
+  const registered = await registerFontDirectories(
+    fontsDir ? [fontsDir] : resolveFontDirectories(undefined)
+  )
+  if (registered > 0 && fontsDir) {
+    console.log(ok(`Registered ${registered} font file(s) from ${fontsDir}`))
+  }
+}
+
 async function exportFromFile(format: string, args: ExportArgs) {
   const file = requireFile(args.file)
   const graph = await loadDocument(file)
+  await registerExportFonts(args['fonts-dir'])
 
   const pages = graph.getPages()
   const page = args.page ? pages.find((p) => p.name === args.page) : pages[0]
@@ -315,6 +332,12 @@ export default defineCommand({
     thumbnail: { type: 'boolean', description: 'Export page thumbnail instead of full render' },
     width: { type: 'string', description: 'Thumbnail width (default: 1920)', default: '1920' },
     height: { type: 'string', description: 'Thumbnail height (default: 1080)', default: '1080' },
+    'fonts-dir': {
+      type: 'string',
+      description:
+        'Directory to scan for .ttf/.otf/.woff/.woff2 fonts to use for text rendering (default: ./fonts if present)',
+      required: false
+    },
     ...appTargetOptions
   },
   async run({ args }) {

@@ -1,13 +1,42 @@
 import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import { BUILTIN_IO_FORMATS, IORegistry, initCanvasKit } from '@open-pencil/core/io'
 import { populateAllLazyFigImportRoots, populateLazyFigImportRoots } from '@open-pencil/core/kiwi'
 import { computeAllLayouts } from '@open-pencil/core/layout'
+import { registerWorkspaceFontFiles, scanFontDirectory } from '@open-pencil/core/text'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 export { initCanvasKit }
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
+
+/**
+ * Register fonts from a directory (recursively) into the shared FontManager so
+ * headless render/layout can use CJK/custom faces. Accepts an explicit
+ * --fonts-dir; falls back to a `fonts/` folder next to cwd when present.
+ * Returns the count of registered files.
+ */
+export async function registerFontDirectories(dirs: readonly string[]): Promise<number> {
+  let registered = 0
+  for (const dir of dirs) {
+    if (!dir) continue
+    const files = await scanFontDirectory(dir)
+    if (files.length === 0) continue
+    registerWorkspaceFontFiles(files)
+    registered += files.length
+  }
+  return registered
+}
+
+/** Resolve font directories: explicit --fonts-dir values plus the default ./fonts. */
+export function resolveFontDirectories(explicit: readonly string[] | undefined): string[] {
+  const dirs = explicit?.filter(Boolean) ?? []
+  const defaultFonts = resolve(process.cwd(), 'fonts')
+  if (!dirs.includes(defaultFonts) && existsSync(defaultFonts)) dirs.push(defaultFonts)
+  return dirs
+}
 
 export async function loadDocument(filePath: string): Promise<SceneGraph> {
   const bytes = new Uint8Array(await readFile(filePath))

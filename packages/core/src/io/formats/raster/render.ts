@@ -1,6 +1,6 @@
 import type { CanvasKit, Canvas } from 'canvaskit-wasm'
 
-import type { SceneGraph } from '@open-pencil/scene-graph'
+import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import { computeDescendantVisualBounds } from '@open-pencil/scene-graph/geometry'
 
 import type { SkiaRenderer } from '#core/canvas'
@@ -20,6 +20,28 @@ interface RenderOptions {
 
 function ensureSinglePageSelection(graph: SceneGraph, pageId: string, nodeIds: string[]): boolean {
   return nodeIds.every((nodeId) => findPageId(graph, nodeId) === pageId)
+}
+
+/** True when the node paints an opaque fill across its whole bounds. */
+function nodeHasOpaqueFill(node: SceneNode | undefined): boolean {
+  if (!node) return false
+  return node.fills.some(
+    (fill) =>
+      fill.visible &&
+      fill.type === 'SOLID' &&
+      fill.color.a >= 1 &&
+      (fill.opacity ?? 1) >= 1
+  )
+}
+
+/**
+ * When every exported root node carries a fully opaque fill there is nothing to
+ * composite behind it. Otherwise (transparent root, e.g. a frame with no fill)
+ * export onto the page background color instead of pure transparency, matching
+ * the thumbnail path — otherwise the PNG comes out visually broken.
+ */
+function needsPageBackgroundComposite(graph: SceneGraph, nodeIds: string[]): boolean {
+  return !nodeIds.every((nodeId) => nodeHasOpaqueFill(graph.getNode(nodeId)))
 }
 
 function nodeNeedsSceneBackdrop(graph: SceneGraph, nodeId: string): boolean {
@@ -279,6 +301,7 @@ export function renderNodesToImage(
   }
 
   const quality = options.quality ?? (options.format === 'PNG' ? 100 : 90)
+  const compositePageBackground = needsPageBackgroundComposite(graph, nodeIds)
   return renderToSurface(
     ck,
     renderer,
@@ -289,7 +312,13 @@ export function renderNodesToImage(
     options.format,
     quality,
     (canvas) => {
-      canvas.clear(ck.TRANSPARENT)
+      if (compositePageBackground) {
+        canvas.clear(
+          ck.Color4f(renderer.pageColor.r, renderer.pageColor.g, renderer.pageColor.b, 1)
+        )
+      } else {
+        canvas.clear(ck.TRANSPARENT)
+      }
       canvas.scale(options.scale, options.scale)
       canvas.translate(-bounds.minX, -bounds.minY)
     },

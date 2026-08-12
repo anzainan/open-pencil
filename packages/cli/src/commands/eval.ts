@@ -8,7 +8,12 @@ import { computeAllLayouts } from '@open-pencil/core/layout'
 import { isAppMode, requireFile, rpc } from '#cli/app-client'
 import { appTargetOptions, appTargetRpcArgs } from '#cli/app-target'
 import { printError } from '#cli/format'
-import { loadDocument, populateWholeDocument } from '#cli/headless'
+import {
+  loadDocument,
+  populateWholeDocument,
+  registerFontDirectories,
+  resolveFontDirectories
+} from '#cli/headless'
 
 function printResult(value: unknown, json: boolean) {
   if (json || !process.stdout.isTTY) {
@@ -46,7 +51,13 @@ export default defineCommand({
     },
     ...appTargetOptions,
     json: { type: 'boolean', description: 'Output as JSON' },
-    quiet: { type: 'boolean', alias: 'q', description: 'Suppress output' }
+    quiet: { type: 'boolean', alias: 'q', description: 'Suppress output' },
+    'fonts-dir': {
+      type: 'string',
+      description:
+        'Directory to scan for .ttf/.otf/.woff/.woff2 fonts to use for text layout (default: ./fonts if present)',
+      required: false
+    }
   },
   async run({ args }) {
     let code = args.code
@@ -73,6 +84,11 @@ export default defineCommand({
     const file = requireFile(args.file)
     const graph = await loadDocument(file)
     populateWholeDocument(graph)
+    if (args['fonts-dir']) {
+      await registerFontDirectories([args['fonts-dir']])
+    } else {
+      await registerFontDirectories(resolveFontDirectories(undefined))
+    }
     const figma = new FigmaAPI(graph)
 
     type AsyncFunctionConstructor = new (
