@@ -4,10 +4,10 @@ import { basename, extname, join, resolve } from 'node:path'
 
 import { encodeBase64 } from '@open-pencil/core/bytes'
 import { HeadlessEditSession } from '@open-pencil/core/editor'
-import { computeAllLayouts } from '@open-pencil/core/layout'
 import { BUILTIN_IO_FORMATS, IORegistry, headlessRenderNodes } from '@open-pencil/core/io'
+import { computeAllLayouts } from '@open-pencil/core/layout'
 import { executeRpcCommand } from '@open-pencil/core/rpc'
-import type { SceneGraph } from '@open-pencil/scene-graph'
+import { SceneGraph } from '@open-pencil/scene-graph'
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
 const DESIGN_EXTENSIONS = new Set(['.fig', '.pen'])
@@ -62,7 +62,9 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
     return graph
   }
 
-  async function openFileIntoSession(path: string): Promise<{ documentId: string; pageId: string }> {
+  async function openFileIntoSession(
+    path: string
+  ): Promise<{ documentId: string; pageId: string }> {
     const absPath = resolve(path)
     const documentId = sessionDocumentId(absPath)
     const existing = sessions.get(documentId)
@@ -94,7 +96,10 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
       return { record: sessions.get(documentId) as SessionRecord, documentId }
     }
     if (defaultSessionId && sessions.has(defaultSessionId)) {
-      return { record: sessions.get(defaultSessionId) as SessionRecord, documentId: defaultSessionId }
+      return {
+        record: sessions.get(defaultSessionId) as SessionRecord,
+        documentId: defaultSessionId
+      }
     }
     if (mcpRoot) {
       const { readdir } = await import('node:fs/promises')
@@ -107,7 +112,10 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
       const first = names.find((name) => DESIGN_EXTENSIONS.has(extname(name).toLowerCase()))
       if (first) {
         const opened = await openFileIntoSession(join(mcpRoot, first))
-        return { record: sessions.get(opened.documentId) as SessionRecord, documentId: opened.documentId }
+        return {
+          record: sessions.get(opened.documentId) as SessionRecord,
+          documentId: opened.documentId
+        }
       }
     }
     return null
@@ -191,10 +199,7 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
     }
   }
 
-  async function handleEval(
-    documentId: string | undefined,
-    code: string
-  ): Promise<RpcResponse> {
+  async function handleEval(documentId: string | undefined, code: string): Promise<RpcResponse> {
     const resolved = await resolveSession(documentId)
     if (!resolved) {
       return {
@@ -326,11 +331,10 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
 
   /** Dispatch an RPC body with the same shape the browser automation bridge uses. */
   async function sendRpc(body: Record<string, unknown>): Promise<unknown> {
-    const command = String(body.command ?? '')
+    const command = typeof body.command === 'string' ? body.command : ''
     const args = isRecord(body.args) ? body.args : {}
-    const handler = commandHandlers[command]
-    if (handler) {
-      return handler({
+    if (command in commandHandlers) {
+      return commandHandlers[command]({
         documentId: typeof args.document_id === 'string' ? args.document_id : undefined,
         pageId: typeof args.page_id === 'string' ? args.page_id : undefined,
         path: typeof args.path === 'string' && args.path ? args.path : undefined,

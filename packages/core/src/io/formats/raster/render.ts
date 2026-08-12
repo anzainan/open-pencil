@@ -26,11 +26,7 @@ function ensureSinglePageSelection(graph: SceneGraph, pageId: string, nodeIds: s
 function nodeHasOpaqueFill(node: SceneNode | undefined): boolean {
   if (!node) return false
   return node.fills.some(
-    (fill) =>
-      fill.visible &&
-      fill.type === 'SOLID' &&
-      fill.color.a >= 1 &&
-      (fill.opacity ?? 1) >= 1
+    (fill) => fill.visible && fill.type === 'SOLID' && fill.color.a >= 1 && fill.opacity >= 1
   )
 }
 

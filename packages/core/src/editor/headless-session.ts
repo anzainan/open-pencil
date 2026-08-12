@@ -1,8 +1,8 @@
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { renderTreeNode } from '#core/design-jsx'
-import { FigmaAPI } from '#core/figma-api'
 import { snapshotPage, type PageSnapshot } from '#core/editor/history/snapshot'
+import { FigmaAPI } from '#core/figma-api'
 import { exportFigFile } from '#core/io/formats/fig'
 import { computeAllLayouts } from '#core/layout'
 import { ALL_TOOLS, appendPostComputeWarnings, wrapEvalCode } from '#core/tools'
@@ -44,7 +44,7 @@ export class HeadlessEditSession {
   constructor({ graph, filePath, pageId }: HeadlessEditSessionOptions) {
     this.graph = graph
     this.filePath = filePath ?? null
-    this.currentPageId = pageId ?? graph.getPages()[0]?.id ?? graph.rootId
+    this.currentPageId = pageId ?? graph.getPages()[0].id
   }
 
   setCurrentPage(pageId: string): boolean {
@@ -123,8 +123,9 @@ export class HeadlessEditSession {
     const figma = this.makeFigma()
     const before = this.snapshot()
     try {
-      const AsyncFunction = Object.getPrototypeOf(async () => undefined)
-        .constructor as new (...args: string[]) => (...args: unknown[]) => Promise<unknown>
+      const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor as new (
+        ...args: string[]
+      ) => (...args: unknown[]) => Promise<unknown>
       const fn = new AsyncFunction('figma', wrapEvalCode(code))
       const result = await fn(figma)
       computeAllLayouts(this.graph, this.currentPageId)

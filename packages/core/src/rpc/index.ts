@@ -1,4 +1,5 @@
 export { executeRpcCommand, ALL_RPC_COMMANDS } from './commands'
+export type { DescribeArgs } from './describe-command'
 export type {
   InfoResult,
   PageItem,

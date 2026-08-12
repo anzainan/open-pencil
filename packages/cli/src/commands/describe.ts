@@ -1,5 +1,5 @@
-import { defineCommand } from 'citty'
 import type { ListItem } from 'agentfmt'
+import { defineCommand } from 'citty'
 
 import type { DescribeArgs } from '@open-pencil/core/rpc'
 
@@ -19,9 +19,16 @@ type DescribeNode = {
   children?: DescribeNode[]
 }
 
-function collectIssues(node: DescribeNode, out: Array<{ severity: string; node: string; message: string }>): void {
+function collectIssues(
+  node: DescribeNode,
+  out: Array<{ severity: string; node: string; message: string }>
+): void {
   for (const issue of node.issues ?? []) {
-    out.push({ severity: issue.severity ?? 'info', node: `${node.name} (${node.id})`, message: issue.message })
+    out.push({
+      severity: issue.severity ?? 'info',
+      node: `${node.name} (${node.id})`,
+      message: issue.message
+    })
   }
   for (const child of node.children ?? []) collectIssues(child, out)
 }
@@ -40,11 +47,10 @@ function printTree(nodes: DescribeNode[], depth = 0): void {
   }
 }
 
+const SEVERITY_MARKERS: Record<string, string> = { error: '✗', warning: '!' }
+
 function issueListItem(issue: { severity: string; node: string; message: string }): ListItem {
-  const severityLabel =
-    issue.severity === 'error'
-      ? '✗'
-      : (issue.severity === 'warning' ? '!' : '·')
+  const severityLabel = SEVERITY_MARKERS[issue.severity] ?? '·'
   return { header: `${severityLabel} ${issue.message}`, details: { node: issue.node } }
 }
 
@@ -72,7 +78,12 @@ export default defineCommand({
       depth: args.depth ? Number(args.depth) : undefined,
       grid: args.grid ? Number(args.grid) : undefined,
       id: args.id,
-      ids: args.ids ? args.ids.split(',').map((s) => s.trim()).filter(Boolean) : undefined
+      ids: args.ids
+        ? args.ids
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : undefined
     }
     const data = await loadRpcData<{
       page?: { id: string; name: string }
@@ -92,7 +103,9 @@ export default defineCommand({
 
     const nodes = data.nodes ?? []
     console.log('')
-    console.log(bold(`  Describe ${data.page ? `page "${data.page.name}"` : `${nodes.length} node(s)`}`))
+    console.log(
+      bold(`  Describe ${data.page ? `page "${data.page.name}"` : `${nodes.length} node(s)`}`)
+    )
     console.log('')
     printTree(nodes)
     console.log('')

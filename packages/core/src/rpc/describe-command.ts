@@ -17,17 +17,23 @@ const MAX_DESCRIBE_DEPTH = 5
  * app automation RPC handler. Uses the exact same implementation as the MCP
  * `describe` tool, so headless and browser-backed reports always agree.
  */
-export const describeCommand: RpcCommand<DescribeArgs, unknown> = {
+export const describeCommand: RpcCommand<DescribeArgs> = {
   name: 'describe',
   execute: (graph, args) => {
     const gridSize = args.grid ?? 8
     const describeId = (nodeId: string) =>
-      describeOneNode({ graph }, nodeId, Math.min(args.depth ?? autoDepth(graph, nodeId), MAX_DESCRIBE_DEPTH), gridSize)
+      describeOneNode(
+        { graph },
+        nodeId,
+        Math.min(args.depth ?? autoDepth(graph, nodeId), MAX_DESCRIBE_DEPTH),
+        gridSize
+      )
 
-        let ids: string[] | undefined
+    let ids: string[] | undefined
     if (args.ids && args.ids.length > 0) ids = args.ids
     else if (args.id) ids = [args.id]
-    if (ids) {      return { nodes: ids.map(describeId) }
+    if (ids) {
+      return { nodes: ids.map(describeId) }
     }
 
     const pages = graph.getPages()

@@ -188,16 +188,16 @@ export async function scanFontDirectory(dir: string): Promise<WorkspaceFontFile[
     if (!FONT_FILE_EXTENSIONS.includes(`.${ext}` as (typeof FONT_FILE_EXTENSIONS)[number])) {
       continue
     }
-      const fullPath = join(dir, name)
-      try {
-        if ((await stat(fullPath)).isDirectory()) continue
-        const bytes = await readFile(fullPath)
-        const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-        files.push({ name, ext, data })
-      } catch (error) {
-        // Skip unreadable files instead of failing the whole scan.
-        console.warn(`[workspace-fonts] 跳过不可读字体文件 ${fullPath}:`, error)
-      }
+    const fullPath = join(dir, name)
+    try {
+      if ((await stat(fullPath)).isDirectory()) continue
+      const bytes = await readFile(fullPath)
+      const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+      files.push({ name, ext, data })
+    } catch (error) {
+      // Skip unreadable files instead of failing the whole scan.
+      console.warn(`[workspace-fonts] 跳过不可读字体文件 ${fullPath}:`, error)
+    }
   }
   return files
 }
