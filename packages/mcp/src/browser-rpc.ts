@@ -232,7 +232,12 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
     pending.delete(msg.id)
     clearTimeout(req.timer)
     if (msg.ok === false) {
-      req.reject(new Error(msg.error ?? 'RPC failed'))
+      // Mark genuine tool errors so the hybrid RPC sender can distinguish
+      // them from connection/timeout failures and avoid masking the browser's
+      // authoritative answer with a headless-session fallback error.
+      const err = new Error(msg.error ?? 'RPC failed') as Error & { isBrowserToolError?: boolean }
+      err.isBrowserToolError = true
+      req.reject(err)
     } else {
       req.resolve(stripEnvelope(msg))
     }

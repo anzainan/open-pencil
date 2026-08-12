@@ -33,6 +33,16 @@ export const MCP_VERSION: string = packageJson.version
 
 const HEARTBEAT_INTERVAL_MS = 5_000
 
+/** True when the browser answered a request with a genuine tool error (ok:false). */
+function isBrowserToolError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'isBrowserToolError' in error &&
+    error.isBrowserToolError === true
+  )
+}
+
 let installCommandPromise: Promise<string> | null = null
 
 async function resolveMcpInstallCommand(): Promise<string> {
@@ -307,6 +317,10 @@ function buildServerContext(options: ServerOptions) {
       try {
         return await browserRpc.sendRpc(body)
       } catch (error) {
+        // A genuine tool error from the browser (e.g. "Node not found") is the
+        // authoritative answer — rethrow instead of masking it with a headless
+        // session that may not even have the document open.
+        if (isBrowserToolError(error)) throw error
         // Fall through to the Node backend (offline/timeout fallback).
         console.warn('[mcp] browser RPC failed, falling back to Node session:', error)
       }
@@ -379,6 +393,7 @@ function buildHandle(
   app: Hono,
   wss: WebSocketServer,
   browserRpc: ReturnType<typeof createBrowserRpcBridge>,
+  nodeBackend: ReturnType<typeof createNodeRpcBackend>,
   mcpSessions: ReturnType<typeof createMcpSessionManager>,
   state: ListenerState,
   resolvedSocketPath: string | null,
@@ -470,6 +485,7 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
     ctx.app,
     ctx.wss,
     ctx.browserRpc,
+    ctx.nodeBackend,
     ctx.mcpSessions,
     state,
     resolvedSocketPath,
