@@ -7,6 +7,7 @@ import { HeadlessEditSession } from '@open-pencil/core/editor'
 import { BUILTIN_IO_FORMATS, IORegistry, headlessRenderNodes } from '@open-pencil/core/io'
 import { computeAllLayouts } from '@open-pencil/core/layout'
 import { executeRpcCommand } from '@open-pencil/core/rpc'
+import { registerWorkspaceFontFiles, scanFontDirectory } from '@open-pencil/core/text'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
@@ -50,6 +51,14 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
   const mcpRoot = options.mcpRoot ? resolve(options.mcpRoot) : null
   const sessions = new Map<string, SessionRecord>()
   let defaultSessionId: string | null = null
+
+  // Register workspace fonts before any session measures text, so headless
+  // Node edits use real glyph metrics (CJK ≈1em/char) instead of the 0.6×
+  // estimate fallback. Mirrors the CLI eval/export font registration path.
+  const fontsReady = registerWorkspaceFontDirectories([
+    ...(mcpRoot ? [resolve(mcpRoot, 'fonts')] : []),
+    resolve(process.cwd(), 'fonts')
+  ])
 
   function sessionDocumentId(path: string): string {
     return `file:${resolve(path)}`
@@ -331,6 +340,7 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
 
   /** Dispatch an RPC body with the same shape the browser automation bridge uses. */
   async function sendRpc(body: Record<string, unknown>): Promise<unknown> {
+    await fontsReady
     const command = typeof body.command === 'string' ? body.command : ''
     const args = isRecord(body.args) ? body.args : {}
     if (command in commandHandlers) {
@@ -363,4 +373,12 @@ export type NodeRpcBackend = ReturnType<typeof createNodeRpcBackend>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+async function registerWorkspaceFontDirectories(dirs: string[]): Promise<void> {
+  for (const dir of dirs) {
+    const files = await scanFontDirectory(dir)
+    if (files.length === 0) continue
+    registerWorkspaceFontFiles(files)
+  }
 }

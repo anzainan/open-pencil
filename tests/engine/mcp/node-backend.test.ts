@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { createNodeRpcBackend } from '#mcp/node-rpc-backend'
 
 import { expectDefined } from '#tests/helpers/assert'
+import { repoPath } from '#tests/helpers/paths'
 
 interface RpcResponse {
   ok: boolean
@@ -134,6 +135,70 @@ describe('node-rpc-backend (headless MCP editing without a browser)', () => {
 
     const unknown = (await backend.sendRpc({ command: 'nope', args: {} })) as RpcResponse
     expect(unknown.ok).toBe(false)
+    backend.close()
+  })
+
+  test('registers workspace fonts so CJK text measures with real glyph metrics', async () => {
+    const root = await tmpDir()
+    // Seed a fonts/ dir next to mcpRoot the way a real workspace does.
+    await mkdir(join(root, 'fonts'))
+    await copyFile(
+      repoPath('tests/fixtures/fonts/NotoSansCJK-Test.otf'),
+      join(root, 'fonts', 'NotoSansCJK-Test.otf')
+    )
+
+    const backend = createNodeRpcBackend({ mcpRoot: root })
+    const created = (await backend.sendRpc({
+      command: 'new_document',
+      args: { path: join(root, 'cjk.fig') }
+    })) as RpcResponse
+    expect(created.ok).toBe(true)
+    const documentId = expectDefined(created.target?.document_id, 'document_id')
+
+    // Build an auto-layout frame containing a CJK text node with WIDTH_AND_HEIGHT.
+    const built = (await backend.sendRpc({
+      command: 'eval',
+      args: {
+        document_id: documentId,
+        code: `
+          const frame = figma.createFrame()
+          frame.name = 'CJK'
+          frame.resize(300, 200)
+          frame.layoutMode = 'VERTICAL'
+          frame.primaryAxisSizing = 'HUG'
+          frame.counterAxisSizing = 'HUG'
+          const text = figma.createText()
+          text.name = 'Title'
+          text.characters = '欢迎回来'
+          text.fontSize = 40
+          text.fontName = { family: 'Noto Sans CJK SC', style: 'Regular' }
+          text.textAutoResize = 'WIDTH_AND_HEIGHT'
+          frame.appendChild(text)
+        `
+      }
+    })) as RpcResponse
+    expect(built.ok).toBe(true)
+
+    // Read back the measured text node size after computeAllLayouts.
+    const read = (await backend.sendRpc({
+      command: 'eval',
+      args: {
+        document_id: documentId,
+        code: `
+          const frame = figma.currentPage.children[0]
+          const text = frame.children[0]
+          return { width: text.width, height: text.height }
+        `
+      }
+    })) as RpcResponse
+    expect(read.ok).toBe(true)
+    const measured = read.result as { width: number; height: number }
+
+    // 4 full-width CJK chars at 40px ≈ 160px wide (1.0em/char), not the 0.6×
+    // fallback estimate (96px). Line height uses real font metrics (≈58px).
+    expect(measured.width).toBe(160)
+    expect(measured.height).toBeGreaterThan(40)
+    expect(measured.height).toBeLessThan(90)
     backend.close()
   })
 })
