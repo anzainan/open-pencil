@@ -127,12 +127,27 @@ export function withWarnings(result: unknown, warnings: string[]): unknown {
  * node.x / node.layoutPositioning. Mutations on such nodes therefore only take
  * effect in memory unless the parent layout recompute or a replace_id re-render
  * (JSX with explicit x/y) persists them. Surface this instead of fake success.
+ *
+ * Gate covers imported flex children even when rawTransform is absent (flex
+ * children normally carry no transform in the fig snapshot — their position is
+ * layout-derived): warn whenever the fig source still holds a serialization
+ * source (rawTransform or figLayout) and the node sits in a flex flow.
  */
 export function importedFlexMutationWarnings(
-  node: SceneNode | null | undefined,
+  figma: FigmaAPI,
+  id: string,
   kind: 'coordinates' | 'layout'
 ): string[] {
-  if (!node?.source.fig.rawTransform) return []
+  const node = figma.graph.getNode(id)
+  if (node?.source.format !== 'fig') return []
+  // Only warn when the fig snapshot actually serializes this child from
+  // snapshot fields; with neither rawTransform nor figLayout the mutation
+  // persists from live fields and needs no warning.
+  const fig = node.source.fig
+  if (fig.rawTransform === null && fig.layout === null) return []
+  const parent = node.parentId ? figma.graph.getNode(node.parentId) : undefined
+  const inFlexFlow = parent?.layoutMode !== 'NONE' && node.layoutPositioning !== 'ABSOLUTE'
+  if (!inFlexFlow) return []
   if (kind === 'coordinates') {
     return [
       '该节点为导入来源，坐标修改仅内存生效；要持久化请用 replace_id 重渲染（JSX 显式 x/y）或修改父容器布局触发重算'

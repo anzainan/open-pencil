@@ -79,7 +79,7 @@ export const nodeMove = defineTool({
     if (!node) return nodeNotFound(id)
     node.x = x
     node.y = y
-    const warnings = importedFlexMutationWarnings(figma.graph.getNode(id), 'coordinates')
+    const warnings = importedFlexMutationWarnings(figma, id, 'coordinates')
     return withWarnings({ id, x, y }, warnings)
   }
 })

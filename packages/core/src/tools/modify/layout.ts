@@ -150,6 +150,14 @@ export const setLayoutChild = defineTool({
   execute: (figma, args) => {
     const node = figma.getNodeById(args.id)
     if (!node) return nodeNotFound(args.id)
+    // Imported-source children serialize stackPositioning from the fig snapshot
+    // (figLayout), so an in-memory ABSOLUTE change never reaches the disk.
+    // Evaluate from pre-mutation state: setting layoutPositioning below would
+    // flip the imported-flex in-flow gate after the fact.
+    const warnings =
+      args.positioning !== undefined
+        ? importedFlexMutationWarnings(figma, args.id, 'layout')
+        : []
     const updated: string[] = []
     if (args.sizing_horizontal !== undefined) {
       node.layoutSizingHorizontal = args.sizing_horizontal
@@ -171,12 +179,6 @@ export const setLayoutChild = defineTool({
       node.layoutPositioning = args.positioning
       updated.push('layoutPositioning')
     }
-    // Imported-source children serialize stackPositioning from the fig snapshot
-    // (figLayout), so an in-memory ABSOLUTE change never reaches the disk.
-    const warnings =
-      args.positioning !== undefined
-        ? importedFlexMutationWarnings(figma.graph.getNode(args.id), 'layout')
-        : []
     return withWarnings({ id: args.id, updated }, warnings)
   }
 })

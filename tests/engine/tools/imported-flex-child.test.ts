@@ -12,6 +12,20 @@ import { getTool, setupToolTest, type ToolResult } from '#tests/helpers/tools'
  * 非导入节点保持「改活体 → 落盘」行为。
  */
 
+/** 建 flex 容器并 append 子节点。 */
+function addToFlexFrame(figma: ReturnType<typeof setupToolTest>['figma'], child: ReturnType<typeof figma.createRectangle>) {
+  const frame = figma.createFrame()
+  frame.resize(296, 32)
+  figma.graph.updateNode(frame.id, {
+    layoutMode: 'HORIZONTAL',
+    primaryAxisSizing: 'FIXED',
+    counterAxisSizing: 'FIXED',
+    primaryAxisAlign: 'CENTER'
+  })
+  frame.appendChild(child)
+  return frame
+}
+
 /** 给 flex 容器加一个 fig 导入来源的 RECTANGLE 子节点（rawTransform 携带陈旧坐标）。 */
 function addImportedChild(figma: ReturnType<typeof setupToolTest>['figma']) {
   const child = figma.createRectangle()
@@ -26,6 +40,31 @@ function addImportedChild(figma: ReturnType<typeof setupToolTest>['figma']) {
       fig: {
         ...raw.source.fig,
         rawTransform: { m00: 1, m01: 0, m02: 20, m10: 0, m11: 1, m12: 9 }
+      }
+    }
+  })
+  return child
+}
+
+/**
+ * fig 导入来源的 flex 子节点 rawTransform 缺失（fig 流内子节点常无 transform，
+ * 位置由父布局推导）但 figLayout 仍携带序列化快照 —— dev-batch8 回归用例：
+ * 此前 schema.ts 门槛只看 rawTransform 会漏报，加固后必须提示。
+ */
+function addImportedChildWithoutTransform(figma: ReturnType<typeof setupToolTest>['figma']) {
+  const child = figma.createRectangle()
+  child.resize(14, 14)
+  const raw = figma.graph.getNode(child.id)
+  if (!raw) throw new Error('child not found')
+  figma.graph.updateNode(child.id, {
+    source: {
+      ...raw.source,
+      format: 'fig',
+      editedFields: [],
+      fig: {
+        ...raw.source.fig,
+        rawTransform: null,
+        layout: { stackPositioning: 'AUTO' }
       }
     }
   })
@@ -68,9 +107,8 @@ describe('node_move on flex children', () => {
 
   test('imported flex child: warns that the move is memory-only', async () => {
     const { figma } = setupToolTest()
-    const frame = figma.createFrame()
-    frame.resize(296, 32)
     const child = addImportedChild(figma)
+    addToFlexFrame(figma, child)
 
     const result = getTool('node_move').execute(figma, {
       id: child.id,
@@ -82,6 +120,40 @@ describe('node_move on flex children', () => {
     const warning = (result.warnings as string[])[0]
     expect(warning).toContain('仅内存生效')
     expect(warning).toContain('导入来源')
+  })
+
+  test('imported flex child without transform: warns that the move is memory-only', async () => {
+    const { figma } = setupToolTest()
+    const child = addImportedChildWithoutTransform(figma)
+    addToFlexFrame(figma, child)
+
+    const result = getTool('node_move').execute(figma, {
+      id: child.id,
+      x: 100,
+      y: 50
+    }) as ToolResult
+
+    expect(Array.isArray(result.warnings)).toBe(true)
+    const warning = (result.warnings as string[])[0]
+    expect(warning).toContain('仅内存生效')
+    expect(warning).toContain('导入来源')
+  })
+
+  test('imported child under non-flex parent: no warning (parent flex gate converges)', async () => {
+    const { figma } = setupToolTest()
+    const child = addImportedChildWithoutTransform(figma)
+    // 默认 FRAME layoutMode = NONE：非 flex 流内，不应提示（避免对「fig 导入但非
+    // flex 流内」多报）。
+    const frame = figma.createFrame()
+    frame.appendChild(child)
+
+    const result = getTool('node_move').execute(figma, {
+      id: child.id,
+      x: 100,
+      y: 50
+    }) as ToolResult
+
+    expect(result.warnings).toBeUndefined()
   })
 })
 
@@ -118,9 +190,24 @@ describe('set_layout_child(ABSOLUTE) on flex children', () => {
 
   test('imported flex child: warns that layoutPositioning is memory-only', async () => {
     const { figma } = setupToolTest()
-    const frame = figma.createFrame()
-    frame.resize(296, 32)
     const child = addImportedChild(figma)
+    addToFlexFrame(figma, child)
+
+    const result = getTool('set_layout_child').execute(figma, {
+      id: child.id,
+      positioning: 'ABSOLUTE'
+    }) as ToolResult
+
+    expect(Array.isArray(result.warnings)).toBe(true)
+    const warning = (result.warnings as string[])[0]
+    expect(warning).toContain('仅内存生效')
+    expect(warning).toContain('落盘仍读源快照')
+  })
+
+  test('imported flex child without transform: warns that layoutPositioning is memory-only', async () => {
+    const { figma } = setupToolTest()
+    const child = addImportedChildWithoutTransform(figma)
+    addToFlexFrame(figma, child)
 
     const result = getTool('set_layout_child').execute(figma, {
       id: child.id,
