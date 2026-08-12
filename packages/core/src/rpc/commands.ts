@@ -1,20 +1,8 @@
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
-import {
-  analyzeClustersCommand,
-  analyzeColorsCommand,
-  analyzeOverlapsCommand,
-  analyzeSpacingCommand,
-  analyzeTypographyCommand
-} from './analyze-commands'
-import {
-  findCommand,
-  infoCommand,
-  nodeCommand,
-  pagesCommand,
-  queryCommand,
-  treeCommand
-} from './read-commands'
+import { analyzeClustersCommand, analyzeColorsCommand, analyzeOverlapsCommand, analyzeSpacingCommand, analyzeTypographyCommand } from './analyze-commands'
+import { describeCommand } from './describe-command'
+import { findCommand, infoCommand, nodeCommand, pagesCommand, queryCommand, treeCommand } from './read-commands'
 import type { RpcCommand } from './types'
 import { variablesCommand } from './variables-command'
 
@@ -32,6 +20,7 @@ export type { RpcCommand } from './types'
 export * from './read-commands'
 export * from './variables-command'
 export * from './analyze-commands'
+export * from './describe-command'
 
 export const ALL_RPC_COMMANDS = [
   infoCommand,
@@ -41,6 +30,7 @@ export const ALL_RPC_COMMANDS = [
   queryCommand,
   nodeCommand,
   variablesCommand,
+  describeCommand,
   analyzeColorsCommand,
   analyzeTypographyCommand,
   analyzeSpacingCommand,

@@ -81,5 +81,12 @@ export function prepareDocumentForRpc(graph: SceneGraph, command: string, args?:
     else populateWholeDocument(graph)
     return
   }
+  if (command === 'describe') {
+    populateWholeDocument(graph)
+    // Layout issues and summaries need current auto-layout values; recompute
+    // unconditionally so the report never reads stale geometry.
+    computeAllLayouts(graph)
+    return
+  }
   populateWholeDocument(graph)
 }
