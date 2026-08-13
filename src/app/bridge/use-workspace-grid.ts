@@ -41,10 +41,11 @@ export function useWorkspaceGrid(options: {
     }
   })
 
-  /** 顶层文件夹 = 文件首段目录 ∪ 空目录（GET /dirs 顶层）。 */
+  /** 顶层文件夹 = 文件首段目录（仅深层文件）∪ 空目录（GET /dirs 顶层）。根文件首段即文件名，不算文件夹。 */
   const folders = computed(() => {
     const names = new Set<string>()
     for (const document of options.documents.value) {
+      if (!document.id.includes('/')) continue
       const first = document.id.split('/')[0]
       if (first) names.add(first)
     }
