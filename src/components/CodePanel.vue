@@ -11,12 +11,10 @@ import { useEditorStore } from '@/app/editor/active-store'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
 import AppTextButton from '@/components/ui/AppTextButton.vue'
 import Tip from '@/components/ui/Tip.vue'
-import { loadJSXGrammar } from '@/lib/prism-jsx'
 
 import type { JSXFormat } from '@open-pencil/core/design-jsx'
 
 const store = useEditorStore()
-void loadJSXGrammar()
 const { copy, copied } = useClipboard({ copiedDuring: 2000 })
 const { dialogs } = useI18n()
 const jsxFormat = ref<JSXFormat>('openpencil')
