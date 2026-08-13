@@ -15,19 +15,20 @@ import { bridgeClient, type BridgeFileEvent } from '@/app/bridge/client'
 import { useWorkspaceGrid } from '@/app/bridge/use-workspace-grid'
 import { createStorageWorkspaceSource } from '@/app/storage/workspace/source'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
-import Tip from '@/components/ui/Tip.vue'
 import ContextMenuOverlay from '@/components/workspace/ContextMenuOverlay.vue'
 import MovePrompt from '@/components/workspace/MovePrompt.vue'
 import NewProjectPrompt from '@/components/workspace/NewProjectPrompt.vue'
-import NotifyBell from '@/components/workspace/NotifyBell.vue'
 import RenamePrompt from '@/components/workspace/RenamePrompt.vue'
+import WorkspaceTopBar from '@/components/workspace/WorkspaceTopBar.vue'
 import { activeTab, createUntitledTab, openStorageDocumentInNewTab } from '@/app/tabs'
 
 const { dialogs } = useI18n()
 const router = useRouter()
 const provider = computed(() => storageProviderRegistry.get(activeStorageProviderID.value))
 const workspaceLabel = computed(() =>
-  provider.value.id === BRIDGE_STORAGE_PROVIDER.id ? '本地工作区 · file-bridge' : provider.value.label
+  provider.value.id === BRIDGE_STORAGE_PROVIDER.id
+    ? dialogs.value.cloudWorkspace
+    : provider.value.label
 )
 const configured = ref(false)
 const workspace = useDocumentWorkspace({
@@ -132,55 +133,14 @@ onUnmounted(() => {
 
 <template>
   <main class="flex min-h-screen flex-col bg-canvas text-surface" data-test-id="home-workspace">
-    <header class="flex h-14 shrink-0 items-center border-b border-border px-6">
-      <div>
-        <h1 class="text-sm font-semibold">{{ dialogs.teamSpace }}</h1>
-        <p class="text-[10px] text-muted">{{ workspaceLabel }}</p>
-      </div>
-
-      <div class="mx-auto flex items-center gap-2">
-        <button
-          type="button"
-          data-test-id="home-new-project"
-          class="rounded border border-border px-3 py-1.5 text-xs text-muted hover:bg-hover hover:text-surface"
-          @click="newProjectOpen = true"
-        >
-          {{ dialogs.newProject }}
-        </button>
-        <button
-          type="button"
-          class="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="!configured"
-          data-test-id="home-new-document"
-          @click="createDocument"
-        >
-          {{ dialogs.new }}
-        </button>
-      </div>
-
-      <div class="flex items-center gap-1.5">
-        <button
-          type="button"
-          class="rounded px-2 py-1.5 text-xs text-muted hover:bg-hover hover:text-surface"
-          data-test-id="home-settings"
-          @click="openSettingsDialog('storage')"
-        >
-          {{ dialogs.settings }}
-        </button>
-        <NotifyBell />
-        <Tip :label="dialogs.trash">
-          <button
-            type="button"
-            class="flex size-7 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
-            data-test-id="home-trash"
-            :aria-label="dialogs.trash"
-            @click="router.push('/trash')"
-          >
-            <icon-lucide-trash-2 class="size-3.5" />
-          </button>
-        </Tip>
-      </div>
-    </header>
+    <WorkspaceTopBar
+      mode="home"
+      :title="dialogs.teamSpace"
+      :workspace-label="workspaceLabel"
+      :new-disabled="!configured"
+      @new-project="newProjectOpen = true"
+      @new-document="createDocument"
+    />
 
     <section class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col p-6">
       <p v-if="errorMessage && configured" class="mb-4 shrink-0 text-xs text-danger" role="alert">

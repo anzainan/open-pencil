@@ -21,7 +21,9 @@ const { dialogs } = useI18n()
 const router = useRouter()
 const provider = computed(() => storageProviderRegistry.get(activeStorageProviderID.value))
 const workspaceLabel = computed(() =>
-  provider.value.id === BRIDGE_STORAGE_PROVIDER.id ? '本地工作区 · file-bridge' : provider.value.label
+  provider.value.id === BRIDGE_STORAGE_PROVIDER.id
+    ? dialogs.value.cloudWorkspace
+    : provider.value.label
 )
 const configured = ref(false)
 const workspace = useDocumentWorkspace({

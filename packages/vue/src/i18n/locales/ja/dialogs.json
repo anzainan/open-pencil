@@ -119,6 +119,7 @@
   "settingsStorage": "クラウドストレージ",
   "storageWorkspace": "ストレージワークスペース",
   "openStorageWorkspace": "ワークスペースを開く",
+  "cloudWorkspace": "クラウドワークスペース",
   "newStoredDocument": "新規ドキュメント",
   "emptyStorageWorkspace": "保存されたドキュメントはまだありません。",
   "loadingDocuments": "ドキュメントを読み込み中…",

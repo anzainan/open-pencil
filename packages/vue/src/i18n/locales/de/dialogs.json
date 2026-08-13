@@ -119,6 +119,7 @@
   "settingsStorage": "Cloud-Speicher",
   "storageWorkspace": "Speicher-Arbeitsbereich",
   "openStorageWorkspace": "Arbeitsbereich öffnen",
+  "cloudWorkspace": "Cloud-Arbeitsbereich",
   "newStoredDocument": "Neues Dokument",
   "emptyStorageWorkspace": "Noch keine gespeicherten Dokumente.",
   "loadingDocuments": "Dokumente werden geladen…",

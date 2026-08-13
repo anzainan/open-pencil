@@ -119,6 +119,7 @@
   "settingsStorage": "云存储",
   "storageWorkspace": "存储工作区",
   "openStorageWorkspace": "打开工作区",
+  "cloudWorkspace": "云端工作区",
   "newStoredDocument": "新建文档",
   "emptyStorageWorkspace": "暂无已存储的文档。",
   "loadingDocuments": "正在加载文档…",

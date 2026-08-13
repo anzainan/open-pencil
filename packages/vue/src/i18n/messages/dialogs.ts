@@ -185,6 +185,7 @@ export const dialogMessageDefaults = {
   settingsStorage: 'Cloud storage',
   storageWorkspace: 'Storage workspace',
   openStorageWorkspace: 'Open workspace',
+  cloudWorkspace: 'Cloud workspace',
   newStoredDocument: 'New document',
   emptyStorageWorkspace: 'No stored documents yet.',
   loadingDocuments: 'Loading documents…',

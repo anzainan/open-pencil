@@ -1,30 +1,38 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@open-pencil/vue'
 
-import {
-  activeStorageProviderID,
-  BRIDGE_STORAGE_PROVIDER,
-  storageProviderRegistry
-} from '@/app/integrations/storage'
+import { activeStorageProviderID, BRIDGE_STORAGE_PROVIDER } from '@/app/integrations/storage'
 import { openSettingsDialog } from '@/app/settings/dialog'
 import { bridgeClient, type BridgeFileEvent, type BridgeTrashEntry } from '@/app/bridge/client'
 import { useWorkspaceFileOps } from '@/app/bridge/workspace-ops'
+import { activeTab, createUntitledTab } from '@/app/tabs'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
-import Tip from '@/components/ui/Tip.vue'
-import NotifyBell from '@/components/workspace/NotifyBell.vue'
+import NewProjectPrompt from '@/components/workspace/NewProjectPrompt.vue'
+import WorkspaceTopBar from '@/components/workspace/WorkspaceTopBar.vue'
 
 const { dialogs } = useI18n()
 const router = useRouter()
-const provider = computed(() => storageProviderRegistry.get(activeStorageProviderID.value))
-const workspaceLabel = computed(() =>
-  provider.value.id === BRIDGE_STORAGE_PROVIDER.id ? '本地工作区 · file-bridge' : provider.value.label
-)
 const configured = ref(false)
 const trashFiles = ref<BridgeTrashEntry[]>([])
 const loading = ref(true)
 const errorMessage = ref<string | null>(null)
+const newProjectOpen = ref(false)
+
+async function onNewProjectConfirm(name: string): Promise<void> {
+  await ops.createProject(name)
+}
+
+async function createDocument(): Promise<void> {
+  if (!configured.value) return
+  await router.push('/editor')
+  await nextTick()
+  const current = activeTab.value
+  const isUntouched =
+    current?.store.state.documentName === 'Untitled' && !current.store.undo.canUndo
+  if (!isUntouched) createUntitledTab()
+}
 
 async function loadTrash(): Promise<void> {
   if (activeStorageProviderID.value !== BRIDGE_STORAGE_PROVIDER.id) return
@@ -76,44 +84,13 @@ onUnmounted(() => {
 
 <template>
   <main class="flex min-h-screen flex-col bg-canvas text-surface" data-test-id="trash-workspace">
-    <header class="flex h-14 shrink-0 items-center border-b border-border px-6">
-      <Tip :label="dialogs.back">
-        <button
-          type="button"
-          data-test-id="trash-back"
-          :aria-label="dialogs.back"
-          class="flex size-7 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
-          @click="router.push('/')"
-        >
-          <icon-lucide-arrow-left class="size-3.5" />
-        </button>
-      </Tip>
-      <div class="ml-3 flex items-center gap-2">
-        <icon-lucide-trash-2 class="size-3.5 text-muted" />
-        <h1 class="text-sm font-semibold">{{ dialogs.trash }}</h1>
-      </div>
-
-      <div class="mx-auto flex items-center gap-2">
-        <span class="text-xs text-muted">{{ workspaceLabel }}</span>
-      </div>
-
-      <div class="flex items-center gap-1.5">
-        <button
-          type="button"
-          class="rounded px-2 py-1.5 text-xs text-muted hover:bg-hover hover:text-surface"
-          @click="openSettingsDialog('storage')"
-        >
-          {{ dialogs.settings }}
-        </button>
-        <NotifyBell />
-        <span
-          class="flex size-7 items-center justify-center rounded text-xs font-medium text-white"
-          aria-hidden="true"
-        >
-          <icon-lucide-trash-2 class="size-3.5" />
-        </span>
-      </div>
-    </header>
+    <WorkspaceTopBar
+      mode="trash"
+      :title="dialogs.trash"
+      :new-disabled="!configured"
+      @new-project="newProjectOpen = true"
+      @new-document="createDocument"
+    />
 
     <section class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col p-6">
       <p v-if="errorMessage && configured" class="mb-4 shrink-0 text-xs text-danger" role="alert">
@@ -190,5 +167,16 @@ onUnmounted(() => {
         </template>
       </AppPlaceholder>
     </section>
+
+    <NewProjectPrompt
+      :open="newProjectOpen"
+      :title="dialogs.newProject"
+      :description="dialogs.newProjectDescription"
+      :placeholder="dialogs.projectNamePlaceholder"
+      :confirm-label="dialogs.create"
+      :cancel-label="dialogs.cancel"
+      @update:open="newProjectOpen = $event"
+      @confirm="onNewProjectConfirm"
+    />
   </main>
 </template>

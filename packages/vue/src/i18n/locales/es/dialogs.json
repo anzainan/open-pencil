@@ -119,6 +119,7 @@
   "settingsStorage": "Almacenamiento en la nube",
   "storageWorkspace": "Espacio de almacenamiento",
   "openStorageWorkspace": "Abrir espacio",
+  "cloudWorkspace": "Espacio de trabajo en la nube",
   "newStoredDocument": "Nuevo documento",
   "emptyStorageWorkspace": "Aún no hay documentos guardados.",
   "loadingDocuments": "Cargando documentos…",

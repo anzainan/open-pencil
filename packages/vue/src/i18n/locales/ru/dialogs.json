@@ -119,6 +119,7 @@
   "settingsStorage": "Облачное хранилище",
   "storageWorkspace": "Рабочая область хранилища",
   "openStorageWorkspace": "Открыть область",
+  "cloudWorkspace": "Облачное рабочее пространство",
   "newStoredDocument": "Новый документ",
   "emptyStorageWorkspace": "Сохранённых документов пока нет.",
   "loadingDocuments": "Загрузка документов…",

@@ -119,6 +119,7 @@
   "settingsStorage": "Archiviazione cloud",
   "storageWorkspace": "Area di archiviazione",
   "openStorageWorkspace": "Apri area",
+  "cloudWorkspace": "Spazio di lavoro cloud",
   "newStoredDocument": "Nuovo documento",
   "emptyStorageWorkspace": "Nessun documento archiviato.",
   "loadingDocuments": "Caricamento documenti…",
