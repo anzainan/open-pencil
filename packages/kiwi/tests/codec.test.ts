@@ -10,6 +10,7 @@ import {
   isCodecReady,
   peekMessageType,
   type Color,
+  type FigmaMessage,
   type NodeChange
 } from '../src/fig/codec'
 
@@ -92,5 +93,26 @@ describe('Figma Kiwi codec', () => {
 
     expect(paint?.type).toBe('IMAGE')
     expect(paint?.imageScaleMode).toBe('CROP')
+  })
+
+  test('round-trips VECTOR fill geometry with EVENODD winding rule', async () => {
+    await initCodec()
+
+    const message: FigmaMessage = {
+      ...createNodeChangesMessage(1, 0, [
+        {
+          guid: { sessionID: 1, localID: 3 },
+          type: 'VECTOR',
+          fillGeometry: [{ windingRule: 'EVENODD', commandsBlob: 0 }]
+        }
+      ]),
+      blobs: [{ bytes: new Uint8Array([0, 1, 2, 3]) }]
+    }
+    const encoded = encodeMessage(message)
+    const decoded = decodeMessage(encoded)
+    const path = decoded.nodeChanges?.[0]?.fillGeometry?.[0]
+
+    expect(path?.windingRule).toBe('EVENODD')
+    expect(path?.commandsBlob).toBe(0)
   })
 })

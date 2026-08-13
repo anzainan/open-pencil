@@ -43,7 +43,7 @@ enum NodePhase {
 
 enum WindingRule {
   NONZERO = 0;
-  ODD = 1;
+  EVENODD = 1;
 }
 
 enum NodeType {
