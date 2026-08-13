@@ -3,9 +3,11 @@ import { decompress as zstdDecompress } from 'fzstd'
 
 import { decodeBinarySchema, compileSchema, ByteBuffer } from '../schema-runtime'
 import type { FigmaMessage, NodeChange } from './codec'
+import { normalizeWindingRuleSchema } from './normalize'
 import { isZstdCompressed } from './protocol'
 
 export type { NodeChange } from './codec'
+export { normalizeWindingRuleSchema } from './normalize'
 
 /**
  * Deduplicates pluginData/pluginRelaunchData entries on raw NodeChange objects.
@@ -95,6 +97,10 @@ export function decodeFigKiwiCanvas(data: Uint8Array): FigKiwiDecodeResult {
 
   const schemaBytes = inflateSync(payload.schemaDeflated)
   const schema = decodeBinarySchema(new ByteBuffer(schemaBytes))
+  // Old files may embed a pre-rename schema whose WindingRule enum names value
+  // 1 `ODD` instead of `EVENODD`. Normalize so encoded evenodd content decodes
+  // back as `'EVENODD'` rather than `'ODD'`.
+  normalizeWindingRuleSchema(schema)
   const compiled = compileSchema(schema) as CompiledKiwiSchema
   const message = compiled.decodeMessage(payload.dataRaw) as FigmaMessage
 

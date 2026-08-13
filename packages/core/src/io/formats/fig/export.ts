@@ -6,6 +6,7 @@ import { compressFigDataSync } from '@open-pencil/fig'
 import { buildComponentPropIndex, stringToGuid } from '@open-pencil/fig/node-change'
 import { initCodec, getCompiledSchema, getSchemaBytes } from '@open-pencil/kiwi/fig/codec'
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
+import { normalizeWindingRuleSchema } from '@open-pencil/kiwi/fig/parse'
 import { decodeBinarySchema, compileSchema, ByteBuffer } from '@open-pencil/kiwi/schema-runtime'
 import type { SceneGraph, VariableValue } from '@open-pencil/scene-graph'
 import type { GUID } from '@open-pencil/scene-graph/primitives'
@@ -403,6 +404,10 @@ export async function exportFigFile(
   if (graph.figSchemaDeflated) {
     const schemaBytes = inflateSync(graph.figSchemaDeflated)
     const figSchema = decodeBinarySchema(new ByteBuffer(schemaBytes))
+    // Old files may embed a pre-rename schema whose WindingRule enum names
+    // value 1 `ODD` instead of `EVENODD`. Normalize before compiling so the
+    // encoder accepts `'EVENODD'` (and the embedded schema bytes stay verbatim).
+    normalizeWindingRuleSchema(figSchema)
     compiled = compileSchema(figSchema) as ReturnType<typeof getCompiledSchema>
     schemaDeflated = graph.figSchemaDeflated
   } else {
