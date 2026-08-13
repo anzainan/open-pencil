@@ -93,7 +93,7 @@ function switchToWorkspace(): void {
   activeStorageProviderID.value = BRIDGE_STORAGE_PROVIDER.id
 }
 
-function copyCORSCConfiguration(): void {
+function copyCORSConfiguration(): void {
   void copy(buildCORSConfigurationJSON(collectCloudCORSOrigins()))
 }
 
@@ -243,7 +243,7 @@ onMounted(() => void refreshStatuses())
         v-if="provider.id === 's3-compatible'"
         type="button"
         class="rounded px-3 py-1.5 text-[11px] text-muted hover:bg-hover hover:text-surface"
-        @click="copyCORSCConfiguration"
+        @click="copyCORSConfiguration"
       >
         {{ copied ? dialogs.copied : dialogs.copyStorageCors }}
       </button>
