@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, provide, ref } from 'vue'
 import { useEventListener, useUrlSearchParams } from '@vueuse/core'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
@@ -30,6 +30,7 @@ import Tip from '@/components/ui/Tip.vue'
 import Toolbar from '@/components/Toolbar/Toolbar.vue'
 
 const route = useRoute()
+const router = useRouter()
 const params = useUrlSearchParams('history')
 const showChrome = !('no-chrome' in params)
 
@@ -128,6 +129,22 @@ onUnmounted(() => {
 <template>
   <div data-test-id="editor-root" class="flex h-screen w-screen flex-col">
     <RenameSelectionDialog />
+    <header
+      v-if="showChrome"
+      class="flex h-8 shrink-0 items-center border-b border-border bg-canvas px-2"
+    >
+      <Tip :label="dialogs.backToTeamSpace">
+        <button
+          type="button"
+          data-test-id="editor-back-team-space"
+          class="flex h-6 cursor-pointer items-center gap-1.5 rounded px-2 text-xs text-muted transition-colors hover:bg-hover hover:text-surface"
+          @click="router.push('/')"
+        >
+          <icon-lucide-arrow-left class="size-3.5" />
+          {{ dialogs.backToTeamSpace }}
+        </button>
+      </Tip>
+    </header>
     <TabBar />
 
     <!-- Desktop layout -->

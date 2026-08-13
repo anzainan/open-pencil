@@ -99,40 +99,62 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="flex min-h-screen flex-col bg-app text-surface" data-test-id="storage-workspace">
-    <header class="flex h-14 items-center border-b border-border px-6">
+  <main class="flex min-h-screen flex-col bg-canvas text-surface" data-test-id="home-workspace">
+    <header class="flex h-14 shrink-0 items-center border-b border-border px-6">
       <div>
-        <h1 class="text-sm font-semibold">{{ dialogs.storageWorkspace }}</h1>
+        <h1 class="text-sm font-semibold">{{ dialogs.teamSpace }}</h1>
         <p class="text-[10px] text-muted">{{ workspaceLabel }}</p>
       </div>
-      <div class="ml-auto flex items-center gap-2">
-        <Tip v-if="configured" :label="dialogs.refresh">
-          <button
-            type="button"
-            class="flex size-7 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface disabled:opacity-50"
-            :aria-label="dialogs.refresh"
-            :disabled="loading"
-            @click="refresh"
-          >
-            <icon-lucide-refresh-cw class="size-3.5" :class="{ 'animate-spin': loading }" />
-          </button>
-        </Tip>
+
+      <div class="mx-auto flex items-center gap-2">
         <button
           type="button"
-          class="rounded px-3 py-1.5 text-xs text-muted hover:bg-hover hover:text-surface"
-          @click="openSettingsDialog('storage')"
+          data-test-id="home-new-project"
+          class="rounded border border-border px-3 py-1.5 text-xs text-muted hover:bg-hover hover:text-surface"
         >
-          {{ dialogs.settings }}
+          {{ dialogs.newProject }}
         </button>
         <button
           type="button"
           class="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="!configured"
-          data-test-id="storage-new-document"
+          data-test-id="home-new-document"
           @click="createDocument"
         >
-          {{ dialogs.newStoredDocument }}
+          {{ dialogs.new }}
         </button>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          class="rounded px-2 py-1.5 text-xs text-muted hover:bg-hover hover:text-surface"
+          data-test-id="home-settings"
+          @click="openSettingsDialog('storage')"
+        >
+          {{ dialogs.settings }}
+        </button>
+        <Tip :label="dialogs.notifications">
+          <button
+            type="button"
+            class="relative flex size-7 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+            data-test-id="home-notifications"
+            :aria-label="dialogs.notifications"
+          >
+            <icon-lucide-bell class="size-3.5" />
+            <span class="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-error" aria-hidden="true" />
+          </button>
+        </Tip>
+        <Tip :label="dialogs.trash">
+          <button
+            type="button"
+            class="flex size-7 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+            data-test-id="home-trash"
+            :aria-label="dialogs.trash"
+          >
+            <icon-lucide-trash-2 class="size-3.5" />
+          </button>
+        </Tip>
       </div>
     </header>
 
