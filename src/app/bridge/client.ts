@@ -40,6 +40,16 @@ export interface BridgeRecentEntry {
   openedAt: string
 }
 
+export interface BridgeTrashEntry {
+  path: string
+  name: string
+  ext: string
+  type: 'file' | 'dir'
+  size: number
+  mtime: string
+  updatedAt: string
+}
+
 export interface BridgeFileEvent {
   type: 'file.changed' | 'file.created' | 'file.deleted' | 'active.changed'
   path: string
@@ -214,6 +224,89 @@ export class BridgeClient {
       headers: await this.authHeaders()
     })
     if (!response.ok) throw new Error(`Bridge delete failed (${response.status}): ${path}`)
+  }
+
+  /** 创建文件夹（相对路径，可多段，mkdir recursive）。返回创建的目录相对路径。 */
+  async createDir(path: string): Promise<string> {
+    const response = await fetch(`${this.apiBase}/dirs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await this.authHeaders()) },
+      body: JSON.stringify({ path })
+    })
+    if (!response.ok) throw new Error(`Bridge create dir failed (${response.status}): ${path}`)
+    const data = (await response.json()) as { path?: string }
+    if (!data.path) throw new Error('Bridge create dir returned no path')
+    return data.path
+  }
+
+  /** 列出工作区所有目录（含空文件夹，排除回收站），相对路径数组。 */
+  async listDirs(): Promise<string[]> {
+    const response = await fetch(`${this.apiBase}/dirs`)
+    if (!response.ok) throw new Error(`Bridge list dirs failed (${response.status})`)
+    const data = (await response.json()) as { dirs?: string[] }
+    return data.dirs ?? []
+  }
+
+  /** 重命名文件/文件夹（name 为单段新名，不含扩展名）。返回新相对路径。 */
+  async renameFile(path: string, name: string): Promise<string> {
+    const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await this.authHeaders()) },
+      body: JSON.stringify({ name })
+    })
+    if (!response.ok) throw new Error(`Bridge rename failed (${response.status}): ${path}`)
+    const data = (await response.json()) as { path?: string }
+    if (!data.path) throw new Error('Bridge rename returned no path')
+    return data.path
+  }
+
+  /** 移动文件/文件夹到目标目录（to 为相对目录路径，可空=根目录）。返回新相对路径。 */
+  async moveFile(path: string, to: string): Promise<string> {
+    const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await this.authHeaders()) },
+      body: JSON.stringify({ to })
+    })
+    if (!response.ok) throw new Error(`Bridge move failed (${response.status}): ${path}`)
+    const data = (await response.json()) as { path?: string }
+    if (!data.path) throw new Error('Bridge move returned no path')
+    return data.path
+  }
+
+  /** 移至回收站（软删：移动到工作区 .trash/ 下，保留原相对路径便于恢复）。 */
+  async trashFile(path: string): Promise<void> {
+    const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}/trash`, {
+      method: 'POST',
+      headers: await this.authHeaders()
+    })
+    if (!response.ok) throw new Error(`Bridge trash failed (${response.status}): ${path}`)
+  }
+
+  /** 列出回收站内容（path 为原相对路径，type 区分文件/文件夹）。 */
+  async listTrash(): Promise<BridgeTrashEntry[]> {
+    const response = await fetch(`${this.apiBase}/trash`)
+    if (!response.ok) throw new Error(`Bridge list trash failed (${response.status})`)
+    const data = (await response.json()) as { files?: BridgeTrashEntry[] }
+    return data.files ?? []
+  }
+
+  /** 从回收站恢复到原相对路径。 */
+  async restoreTrashFile(path: string): Promise<void> {
+    const response = await fetch(`${this.apiBase}/trash/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await this.authHeaders()) },
+      body: JSON.stringify({ path })
+    })
+    if (!response.ok) throw new Error(`Bridge restore failed (${response.status}): ${path}`)
+  }
+
+  /** 彻底删除回收站文件/文件夹（不可恢复）。 */
+  async deleteTrashFile(path: string): Promise<void> {
+    const response = await fetch(`${this.apiBase}/trash/${encodeRelPath(path)}`, {
+      method: 'DELETE',
+      headers: await this.authHeaders()
+    })
+    if (!response.ok) throw new Error(`Bridge trash delete failed (${response.status}): ${path}`)
   }
 
   /** 列出工作区 fonts/ 文件夹下的字体文件。 */

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useDocumentWorkspace, useI18n } from '@open-pencil/vue'
 
 import {
@@ -25,6 +25,8 @@ import { activeTab, createUntitledTab, openStorageDocumentInNewTab } from '@/app
 
 const { dialogs } = useI18n()
 const router = useRouter()
+const route = useRoute()
+const folderName = computed(() => String(route.params.name ?? ''))
 const provider = computed(() => storageProviderRegistry.get(activeStorageProviderID.value))
 const workspaceLabel = computed(() =>
   provider.value.id === BRIDGE_STORAGE_PROVIDER.id ? '本地工作区 · file-bridge' : provider.value.label
@@ -50,11 +52,10 @@ const clearPreviews = workspace.clearPreviews
 const previewURL = workspace.previewURL
 const vWorkspacePreview = workspace.previewDirective
 
-const grid = useWorkspaceGrid({ documents, refresh })
+const grid = useWorkspaceGrid({ documents, refresh, currentFolder: folderName })
 const {
+  folderFiles,
   folders,
-  rootFiles,
-  fileCountInFolder,
   loadDirs,
   ctxMenu,
   renameState,
@@ -70,6 +71,11 @@ const {
   onNewProjectConfirm
 } = grid
 
+watch(folderName, () => {
+  void refresh()
+  void loadDirs()
+})
+
 async function openDocument(document: StorageDocument): Promise<void> {
   await router.push('/editor')
   await nextTick()
@@ -84,10 +90,6 @@ async function createDocument(): Promise<void> {
   const isUntouched =
     current?.store.state.documentName === 'Untitled' && !current.store.undo.canUndo
   if (!isUntouched) createUntitledTab()
-}
-
-async function openFolder(name: string): Promise<void> {
-  await router.push(`/folder/${encodeURIComponent(name)}`)
 }
 
 watch(activeStorageProviderID, () => {
@@ -131,17 +133,35 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="flex min-h-screen flex-col bg-canvas text-surface" data-test-id="home-workspace">
+  <main class="flex min-h-screen flex-col bg-canvas text-surface" data-test-id="folder-workspace">
     <header class="flex h-14 shrink-0 items-center border-b border-border px-6">
-      <div>
-        <h1 class="text-sm font-semibold">{{ dialogs.teamSpace }}</h1>
-        <p class="text-[10px] text-muted">{{ workspaceLabel }}</p>
+      <Tip :label="dialogs.back">
+        <button
+          type="button"
+          data-test-id="folder-back"
+          :aria-label="dialogs.back"
+          class="flex size-7 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+          @click="router.push('/')"
+        >
+          <icon-lucide-arrow-left class="size-3.5" />
+        </button>
+      </Tip>
+      <div class="ml-3 flex min-w-0 items-center gap-2">
+        <button
+          type="button"
+          class="cursor-pointer truncate text-xs text-muted hover:text-surface"
+          @click="router.push('/')"
+        >
+          {{ dialogs.teamSpace }}
+        </button>
+        <icon-lucide-chevron-right class="size-3 shrink-0 text-muted" />
+        <span class="truncate text-xs font-medium text-surface">{{ folderName }}</span>
       </div>
 
       <div class="mx-auto flex items-center gap-2">
         <button
           type="button"
-          data-test-id="home-new-project"
+          data-test-id="folder-new-project"
           class="rounded border border-border px-3 py-1.5 text-xs text-muted hover:bg-hover hover:text-surface"
           @click="newProjectOpen = true"
         >
@@ -151,7 +171,7 @@ onUnmounted(() => {
           type="button"
           class="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="!configured"
-          data-test-id="home-new-document"
+          data-test-id="folder-new-document"
           @click="createDocument"
         >
           {{ dialogs.new }}
@@ -162,7 +182,6 @@ onUnmounted(() => {
         <button
           type="button"
           class="rounded px-2 py-1.5 text-xs text-muted hover:bg-hover hover:text-surface"
-          data-test-id="home-settings"
           @click="openSettingsDialog('storage')"
         >
           {{ dialogs.settings }}
@@ -172,7 +191,6 @@ onUnmounted(() => {
           <button
             type="button"
             class="flex size-7 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
-            data-test-id="home-trash"
             :aria-label="dialogs.trash"
             @click="router.push('/trash')"
           >
@@ -187,72 +205,43 @@ onUnmounted(() => {
         {{ errorMessage }}
       </p>
 
-      <div v-if="folders.length || rootFiles.length" class="flex flex-col gap-6">
-        <div v-if="folders.length">
-          <h2 class="mb-3 text-xs text-muted">{{ dialogs.folders }}</h2>
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
-            <button
-              v-for="folder in folders"
-              :key="folder"
-              type="button"
-              class="group overflow-hidden rounded-lg border border-border bg-panel text-left hover:border-panel-focus hover:bg-hover"
-              data-test-id="folder-card"
-              @click="openFolder(folder)"
-              @contextmenu.prevent="
-                onCardContextMenu($event, { kind: 'folder', path: folder, name: folder })
-              "
+      <div v-if="folderFiles.length">
+        <h2 class="mb-3 text-xs text-muted">{{ dialogs.folderFiles }}</h2>
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
+          <button
+            v-for="document in folderFiles"
+            :key="document.id"
+            type="button"
+            class="group overflow-hidden rounded-lg border border-border bg-panel text-left hover:border-panel-focus hover:bg-hover"
+            :data-document-id="document.id"
+            @click="openDocument(document)"
+            @contextmenu.prevent="
+              onCardContextMenu($event, {
+                kind: 'file',
+                path: document.id,
+                name: document.name
+              })
+            "
+          >
+            <div
+              v-workspace-preview="document.id"
+              class="flex aspect-[4/3] items-center justify-center bg-panel-field"
             >
-              <div class="flex aspect-[4/3] items-center justify-center bg-panel-field">
-                <icon-lucide-folder class="size-8 text-muted/60" />
-              </div>
-              <div class="border-t border-border p-3">
-                <p class="truncate text-xs font-medium">{{ folder }}</p>
-                <p class="mt-1 text-[10px] text-muted">
-                  {{ fileCountInFolder(folder) }}
-                </p>
-              </div>
-            </button>
-          </div>
-        </div>
-
-        <div v-if="rootFiles.length">
-          <h2 class="mb-3 text-xs text-muted">{{ dialogs.files }}</h2>
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
-            <button
-              v-for="document in rootFiles"
-              :key="document.id"
-              type="button"
-              class="group overflow-hidden rounded-lg border border-border bg-panel text-left hover:border-panel-focus hover:bg-hover"
-              :data-document-id="document.id"
-              @click="openDocument(document)"
-              @contextmenu.prevent="
-                onCardContextMenu($event, {
-                  kind: 'file',
-                  path: document.id,
-                  name: document.name
-                })
-              "
-            >
-              <div
-                v-workspace-preview="document.id"
-                class="flex aspect-[4/3] items-center justify-center bg-panel-field"
-              >
-                <img
-                  v-if="previewURL(document.id)"
-                  :src="previewURL(document.id) ?? undefined"
-                  alt=""
-                  class="size-full object-cover"
-                />
-                <icon-lucide-file-image v-else class="size-6 text-muted/50" />
-              </div>
-              <div class="border-t border-border p-3">
-                <p class="truncate text-xs font-medium">{{ document.name }}</p>
-                <p class="mt-1 text-[10px] text-muted">
-                  {{ new Date(document.updatedAt).toLocaleString() }}
-                </p>
-              </div>
-            </button>
-          </div>
+              <img
+                v-if="previewURL(document.id)"
+                :src="previewURL(document.id) ?? undefined"
+                alt=""
+                class="size-full object-cover"
+              />
+              <icon-lucide-file-image v-else class="size-6 text-muted/50" />
+            </div>
+            <div class="border-t border-border p-3">
+              <p class="truncate text-xs font-medium">{{ document.name }}</p>
+              <p class="mt-1 text-[10px] text-muted">
+                {{ new Date(document.updatedAt).toLocaleString() }}
+              </p>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -262,9 +251,9 @@ onUnmounted(() => {
         </template>
       </AppPlaceholder>
 
-      <AppPlaceholder v-else-if="configured" :label="dialogs.emptyStorageWorkspace" size="page">
+      <AppPlaceholder v-else-if="configured" :label="dialogs.folderEmpty" size="page">
         <template #icon>
-          <icon-lucide-files class="size-5" />
+          <icon-lucide-folder-open class="size-5" />
         </template>
       </AppPlaceholder>
 
