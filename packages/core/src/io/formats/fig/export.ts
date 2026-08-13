@@ -15,7 +15,7 @@ import { decodeBase64 } from '#core/bytes'
 import type { SkiaRenderer } from '#core/canvas'
 import { CANVAS_BG_COLOR, IS_BROWSER, IS_TAURI } from '#core/constants'
 import { renderThumbnail } from '#core/io/formats/raster'
-import { populateAllLazyFigImportRoots } from '#core/kiwi/fig/lazy-import'
+import { getLazyFigImportContext, populateAllLazyFigImportRoots } from '#core/kiwi/fig/lazy-import'
 import {
   sceneNodeToKiwi,
   fractionalPosition,
@@ -25,6 +25,8 @@ import {
   makeCanvasNodeChange
 } from '#core/kiwi/fig/node-change/serialize'
 import { deserializeSceneGraph, serializeSceneGraph } from '#core/kiwi/fig/parse/transfer'
+
+import { dataSafeClone, type CloneSkipReport } from './clone-safe'
 
 const THUMBNAIL_1X1 = decodeBase64(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
@@ -37,6 +39,42 @@ interface CanvasExportEntry {
   page: FigExportPage
   canvasGuid: GUID
   canvasNc: KiwiNodeChange
+}
+
+interface CloneDiagnostic {
+  id: string
+  path: string
+  kind: CloneSkipReport['kind']
+}
+
+/**
+ * 保存前诊断（二线定位）：逐项扫描 graph.nodes + variables + variableCollections +
+ * lazyFigImport.changeMap，用数据安全拷贝的字段级探测定位不可克隆字段。数据安全拷贝
+ * 本身永不抛错，探测等价于「逐项单独 structuredClone + try/catch」，且能给出精确的
+ * 字段路径。无异常字段时静默（不产生任何输出/分配），有异常时把「node id + 字段路径」
+ * 打到 console，便于下一次复现即锁定根因。
+ */
+function diagnoseCloneSafety(sourceGraph: SceneGraph): void {
+  const problems: CloneDiagnostic[] = []
+  const probe = (id: string, value: unknown): void => {
+    dataSafeClone(value, (path, kind) => {
+      problems.push({ id, path, kind })
+    })
+  }
+  for (const [id, node] of sourceGraph.nodes) probe(id, node)
+  for (const [id, variable] of sourceGraph.variables) probe(id, variable)
+  for (const [id, collection] of sourceGraph.variableCollections) probe(id, collection)
+  const lazyFigImport = getLazyFigImportContext(sourceGraph)
+  if (lazyFigImport) {
+    for (const [id, change] of lazyFigImport.changeMap) probe(`changeMap:${id}`, change)
+  }
+  if (problems.length === 0) return
+  const fieldNames = [...new Set(problems.map((problem) => problem.path.split('/').pop() ?? problem.path))]
+  console.warn(
+    `[fig-export] 检测到 ${problems.length} 处不可克隆数据字段，已按数据安全拷贝跳过（不影响保存）：`,
+    problems.map((problem) => `${problem.id}@${problem.path}(${problem.kind})`),
+    `字段名: ${fieldNames.join(', ')}`
+  )
 }
 
 function variableValueToKiwi(
@@ -246,15 +284,15 @@ function applyImportedCanvasFields(page: FigExportPage, canvasNc: KiwiNodeChange
   if (!page.source.id) return
   if (!('pageType' in page.source.fig.rawNodeFields)) delete canvasNc.pageType
   if ('backgroundColor' in page.source.fig.rawNodeFields) {
-    canvasNc.backgroundColor = structuredClone(page.source.fig.rawNodeFields.backgroundColor)
+    canvasNc.backgroundColor = dataSafeClone(page.source.fig.rawNodeFields.backgroundColor)
   }
   if ('backgroundPaints' in page.source.fig.rawNodeFields) {
-    canvasNc.backgroundPaints = structuredClone(
+    canvasNc.backgroundPaints = dataSafeClone(
       page.source.fig.rawNodeFields.backgroundPaints
     ) as NodeChange['backgroundPaints']
   }
   if ('guides' in page.source.fig.rawNodeFields) {
-    canvasNc.guides = structuredClone(page.source.fig.rawNodeFields.guides)
+    canvasNc.guides = dataSafeClone(page.source.fig.rawNodeFields.guides)
   }
   const strokeJoin = page.source.fig.rawNodeFields.strokeJoin
   if (typeof strokeJoin === 'string') canvasNc.strokeJoin = strokeJoin
@@ -389,7 +427,11 @@ export async function exportFigFile(
 ): Promise<Uint8Array> {
   // Lazy population synchronizes component trees and therefore mutates its graph. Saving must not
   // rewrite the live editor document or restore component values over edits made by the user.
-  const graph = deserializeSceneGraph(structuredClone(serializeSceneGraph(sourceGraph)))
+  // 数据安全深拷贝：与原生 structuredClone 同语义覆盖可序列化数据（plain object/array/Map/
+  // Set/ArrayBuffer/TypedArray/原始值），遇函数/Symbol/类实例/Proxy 等不可克隆值跳过该字段
+  // 并 console.warn，保存永不因克隆失败（bc79d16a 同链路合规修复）。
+  diagnoseCloneSafety(sourceGraph)
+  const graph = deserializeSceneGraph(dataSafeClone(serializeSceneGraph(sourceGraph)))
   populateAllLazyFigImportRoots(graph)
   await initCodec()
 

@@ -1,6 +1,7 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import type { EditorContext } from '#core/editor/types'
+import { dataSafeClone } from '#core/io/formats/fig/clone-safe'
 import { computeAllLayouts } from '#core/layout'
 
 export type PageSnapshot = Map<string, SceneNode>
@@ -10,7 +11,13 @@ export function snapshotPage(graph: SceneGraph, pageId: string): PageSnapshot {
   const walk = (id: string) => {
     const node = graph.getNode(id)
     if (!node) return
-    snapshot.set(id, structuredClone(node))
+    // 数据安全深拷贝：遇不可克隆字段跳过并告警，撤销快照永不因克隆失败（bc79d16a 同链路合规修复）。
+    snapshot.set(
+      id,
+      dataSafeClone(node, (path, kind) => {
+        console.warn(`[snapshot] node ${id} 含不可克隆字段 ${path}（${kind}），已跳过`)
+      })
+    )
     for (const childId of node.childIds) walk(childId)
   }
   walk(pageId)
