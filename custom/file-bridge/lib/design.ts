@@ -1,12 +1,22 @@
 import { readdirSync, statSync, type Dirent } from 'node:fs'
 import { join } from 'node:path'
 
-import { ALLOWED_DESIGN_EXTENSIONS, ALLOWED_FONT_EXTENSIONS, FONTS_REL_DIR } from './paths'
+import { ALLOWED_DESIGN_EXTENSIONS, ALLOWED_FONT_EXTENSIONS, FONTS_REL_DIR, TRASH_REL_DIR } from './paths'
 
 export interface DesignFileInfo {
   path: string
   name: string
   ext: string
+  size: number
+  mtime: string
+  updatedAt: string
+}
+
+export interface TrashEntryInfo {
+  path: string
+  name: string
+  ext: string
+  type: 'file' | 'dir'
   size: number
   mtime: string
   updatedAt: string
@@ -39,12 +49,13 @@ export function fileMeta(root: string, rel: string): DesignFileInfo | null {
   }
 }
 
-/** 递归扫描设计目录，按顶层品牌目录分组。根目录下的散文件归入 brand: ''。 */
+/** 递归扫描设计目录，按顶层品牌目录分组。根目录下的散文件归入 brand: ''。回收站目录被排除。 */
 export function scanDesignRoot(root: string): DesignListing {
   const byBrand = new Map<string, DesignFileInfo[]>()
   const flat: DesignFileInfo[] = []
 
   const walk = (dir: string, relDir: string) => {
+    if (relDir === TRASH_REL_DIR) return
     let entries: Dirent[]
     try {
       entries = readdirSync(dir, { withFileTypes: true })
@@ -74,6 +85,91 @@ export function scanDesignRoot(root: string): DesignListing {
     .map(([brand, files]) => ({ brand, files: files.sort((a, b) => a.path.localeCompare(b.path)) }))
 
   return { groups, flat }
+}
+
+/** 递归列目录（含空文件夹），返回相对设计根的目录路径。回收站目录被排除。 */
+export function scanDesignDirs(root: string): string[] {
+  const dirs: string[] = []
+
+  const walk = (dir: string, relDir: string) => {
+    let entries: Dirent[]
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const rel = relDir ? `${relDir}/${entry.name}` : entry.name
+      if (rel === TRASH_REL_DIR || rel.startsWith(`${TRASH_REL_DIR}/`)) continue
+      dirs.push(rel)
+      walk(join(dir, entry.name), rel)
+    }
+  }
+  walk(root, '')
+
+  return dirs.sort((a, b) => a.localeCompare(b))
+}
+
+/** 扫描回收站 `.trash/`：path 为原相对路径（去掉 .trash 前缀），便于恢复。 */
+export function scanTrashRoot(root: string): TrashEntryInfo[] {
+  const out: TrashEntryInfo[] = []
+  const trashRoot = join(root, TRASH_REL_DIR)
+
+  const walk = (dir: string, relDir: string) => {
+    let entries: Dirent[]
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const rel = relDir ? `${relDir}/${entry.name}` : entry.name
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        walk(full, rel)
+        continue
+      }
+      if (!entry.isFile() || !ALLOWED_DESIGN_EXTENSIONS.test(entry.name)) continue
+      const st = statSync(full)
+      out.push({
+        path: rel,
+        name: entry.name,
+        ext: designFileExt(rel),
+        type: 'file',
+        size: st.size,
+        mtime: st.mtime.toISOString(),
+        updatedAt: st.mtime.toISOString()
+      })
+    }
+  }
+  walk(trashRoot, '')
+
+  // 顶层文件夹本身（无文件时也要能恢复/删除）。
+  let entries: Dirent[]
+  try {
+    entries = readdirSync(trashRoot, { withFileTypes: true })
+  } catch {
+    entries = []
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const rel = entry.name
+    if (out.some((file) => file.path === rel || file.path.startsWith(`${rel}/`))) continue
+    const full = join(trashRoot, entry.name)
+    const st = statSync(full)
+    out.push({
+      path: rel,
+      name: entry.name,
+      ext: '',
+      type: 'dir',
+      size: st.size,
+      mtime: st.mtime.toISOString(),
+      updatedAt: st.mtime.toISOString()
+    })
+  }
+
+  return out.sort((a, b) => a.path.localeCompare(b.path))
 }
 
 export interface FontFileInfo {

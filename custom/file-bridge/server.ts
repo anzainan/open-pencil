@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, join, resolve, sep } from 'node:path'
 
-import { fileMeta, scanDesignRoot, scanFontsRoot } from './lib/design'
+import { fileMeta, scanDesignDirs, scanDesignRoot, scanFontsRoot, scanTrashRoot } from './lib/design'
 import { EventBus, FileWatcher, sseResponse } from './lib/events'
 import { createMcpProxy, type McpProxyHandle } from './mcp-proxy'
 import { handleMcpRequest, type McpDeps } from './mcp'
@@ -11,8 +11,11 @@ import {
   isSafeBrand,
   isSafeFontRelPath,
   isSafeRelativePath,
+  isSafeWorkspaceName,
+  isSafeWorkspaceRelPath,
   resolveDesignPath,
-  resolveFontPath
+  resolveFontPath,
+  TRASH_REL_DIR
 } from './lib/paths'
 import { StateStore } from './lib/state'
 
@@ -356,6 +359,170 @@ export function startServer(options: BridgeServerOptions) {
     return json({ path: rel, deleted: true })
   }
 
+  // ---- 文件夹 / 重命名 / 移动 / 回收站（Phase 2/3 新增端点）----
+
+  function listDirs(): Response {
+    return json({ dirs: scanDesignDirs(designRoot) })
+  }
+
+  async function createDir(request: Request): Promise<Response> {
+    let payload: { path?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const path = typeof payload.path === 'string' ? payload.path.trim().replace(/\/+$/, '') : ''
+    if (!isSafeWorkspaceRelPath(path)) return json({ ok: false, error: 'invalid dir path' }, 400)
+    const full = resolveWithin(designRoot, `/${path}`)
+    if (!full) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (existsSync(full)) return json({ ok: false, error: `already exists: ${path}` }, 409)
+    try {
+      mkdirSync(full, { recursive: true })
+    } catch (error) {
+      return json({ ok: false, error: `create dir failed: ${String(error)}` }, 500)
+    }
+    return json({ path }, 201)
+  }
+
+  function isTrashRel(rel: string): boolean {
+    return rel === TRASH_REL_DIR || rel.startsWith(`${TRASH_REL_DIR}/`)
+  }
+
+  function safeResolve(rel: string): string | null {
+    if (!isSafeWorkspaceRelPath(rel)) return null
+    const full = resolveWithin(designRoot, `/${rel}`)
+    if (!full) return null
+    return full
+  }
+
+  /** 目录内新文件名：目标必须是设计根内，且含 `.trash` 前导段时拒绝（避免从回收站外翻越）。 */
+  function resolveForOp(rel: string): string | null {
+    if (isTrashRel(rel)) return null
+    return safeResolve(rel)
+  }
+
+  async function renameEntry(request: Request, rel: string): Promise<Response> {
+    let payload: { name?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const name = typeof payload.name === 'string' ? payload.name.trim() : ''
+    if (!isSafeWorkspaceName(name)) return json({ ok: false, error: 'invalid name' }, 400)
+    const full = resolveForOp(rel)
+    if (!full) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (!existsSync(full)) return json({ ok: false, error: `not found: ${rel}` }, 404)
+    const isFile = statSync(full).isFile()
+    let newName = name
+    if (isFile && !ALLOWED_DESIGN_EXTENSIONS.test(newName)) {
+      const oldExt = extensionOf(rel) || '.fig'
+      newName = `${name}${oldExt}`
+    }
+    const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/') + 1) : ''
+    const newRel = `${dir}${newName}`
+    const newFull = resolveForOp(newRel)
+    if (!newFull) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (existsSync(newFull)) return json({ ok: false, error: `already exists: ${newRel}` }, 409)
+    try {
+      renameSync(full, newFull)
+    } catch (error) {
+      return json({ ok: false, error: `rename failed: ${String(error)}` }, 500)
+    }
+    bus.broadcast('file.deleted', { path: rel, brand: rel.split('/')[0] ?? '' })
+    bus.broadcast('file.created', { path: newRel, brand: newRel.split('/')[0] ?? '' })
+    return json({ path: newRel })
+  }
+
+  async function moveEntry(request: Request, rel: string): Promise<Response> {
+    let payload: { to?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const to = typeof payload.to === 'string' ? payload.to.trim().replace(/\/+$/, '') : ''
+    if (to && !isSafeWorkspaceRelPath(to)) return json({ ok: false, error: 'invalid target dir' }, 400)
+    const full = resolveForOp(rel)
+    if (!full) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (!existsSync(full)) return json({ ok: false, error: `not found: ${rel}` }, 404)
+    const fileName = rel.split('/').pop() ?? ''
+    const newRel = to ? `${to}/${fileName}` : fileName
+    const newFull = resolveForOp(newRel)
+    if (!newFull) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (existsSync(newFull)) return json({ ok: false, error: `already exists: ${newRel}` }, 409)
+    try {
+      mkdirSync(dirname(newFull), { recursive: true })
+      renameSync(full, newFull)
+    } catch (error) {
+      return json({ ok: false, error: `move failed: ${String(error)}` }, 500)
+    }
+    bus.broadcast('file.deleted', { path: rel, brand: rel.split('/')[0] ?? '' })
+    bus.broadcast('file.created', { path: newRel, brand: newRel.split('/')[0] ?? '' })
+    return json({ path: newRel })
+  }
+
+  function trashEntry(rel: string): Response {
+    const full = resolveForOp(rel)
+    if (!full) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (!existsSync(full)) return json({ ok: false, error: `not found: ${rel}` }, 404)
+    const trashRel = `${TRASH_REL_DIR}/${rel}`
+    const trashFull = safeResolve(trashRel)
+    if (!trashFull) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (existsSync(trashFull)) return json({ ok: false, error: `already in trash: ${rel}` }, 409)
+    try {
+      mkdirSync(dirname(trashFull), { recursive: true })
+      renameSync(full, trashFull)
+    } catch (error) {
+      return json({ ok: false, error: `trash failed: ${String(error)}` }, 500)
+    }
+    bus.broadcast('file.deleted', { path: rel, brand: rel.split('/')[0] ?? '' })
+    return json({ path: rel, trashed: true })
+  }
+
+  function listTrash(): Response {
+    return json({ files: scanTrashRoot(designRoot) })
+  }
+
+  async function restoreTrashEntry(request: Request): Promise<Response> {
+    let payload: { path?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const rel = typeof payload.path === 'string' ? payload.path.trim() : ''
+    const trashFull = safeResolve(`${TRASH_REL_DIR}/${rel}`)
+    if (!trashFull) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (!existsSync(trashFull)) return json({ ok: false, error: `not found in trash: ${rel}` }, 404)
+    const targetFull = resolveForOp(rel)
+    if (!targetFull) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (existsSync(targetFull)) {
+      return json({ ok: false, error: `already exists: ${rel}` }, 409)
+    }
+    try {
+      mkdirSync(dirname(targetFull), { recursive: true })
+      renameSync(trashFull, targetFull)
+    } catch (error) {
+      return json({ ok: false, error: `restore failed: ${String(error)}` }, 500)
+    }
+    bus.broadcast('file.created', { path: rel, brand: rel.split('/')[0] ?? '' })
+    return json({ path: rel, restored: true })
+  }
+
+  function deleteTrashEntry(rel: string): Response {
+    const trashFull = safeResolve(`${TRASH_REL_DIR}/${rel}`)
+    if (!trashFull) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (!existsSync(trashFull)) return json({ ok: false, error: `not found in trash: ${rel}` }, 404)
+    try {
+      rmSync(trashFull, { recursive: true, force: true })
+    } catch (error) {
+      return json({ ok: false, error: `delete failed: ${String(error)}` }, 500)
+    }
+    return json({ path: rel, deleted: true })
+  }
+
   // ---- 工作区字体（fonts/ 文件夹）----
 
   function listFonts(): Response {
@@ -534,6 +701,76 @@ export function startServer(options: BridgeServerOptions) {
         return setRecent(request)
       }
       return methodNotAllowed()
+    }
+
+    if (path === '/api/v1/dirs') {
+      if (method === 'GET') return listDirs()
+      if (method === 'POST') {
+        const denied = checkAuth(request, token)
+        if (denied) return denied
+        return createDir(request)
+      }
+      return methodNotAllowed()
+    }
+
+    if (path === '/api/v1/trash') {
+      if (method === 'GET') return listTrash()
+      return methodNotAllowed()
+    }
+
+    if (path === '/api/v1/trash/restore') {
+      if (method !== 'POST') return methodNotAllowed()
+      const denied = checkAuth(request, token)
+      if (denied) return denied
+      return restoreTrashEntry(request)
+    }
+
+    const trashMatch = path.match(/^\/api\/v1\/trash\/(.+)$/)
+    if (trashMatch) {
+      const raw = trashMatch[1]
+      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
+      if (method !== 'DELETE') return methodNotAllowed()
+      const denied = checkAuth(request, token)
+      if (denied) return denied
+      const rel = decodeRelPath(raw)
+      if (!rel) return json({ ok: false, error: 'bad path encoding' }, 400)
+      return deleteTrashEntry(rel)
+    }
+
+    const renameMatch = path.match(/^\/api\/v1\/files\/(.+)\/rename$/)
+    if (renameMatch) {
+      const raw = renameMatch[1]
+      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
+      if (method !== 'POST') return methodNotAllowed()
+      const denied = checkAuth(request, token)
+      if (denied) return denied
+      const rel = decodeRelPath(raw)
+      if (!rel) return json({ ok: false, error: 'bad path encoding' }, 400)
+      return renameEntry(request, rel)
+    }
+
+    const moveMatch = path.match(/^\/api\/v1\/files\/(.+)\/move$/)
+    if (moveMatch) {
+      const raw = moveMatch[1]
+      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
+      if (method !== 'POST') return methodNotAllowed()
+      const denied = checkAuth(request, token)
+      if (denied) return denied
+      const rel = decodeRelPath(raw)
+      if (!rel) return json({ ok: false, error: 'bad path encoding' }, 400)
+      return moveEntry(request, rel)
+    }
+
+    const trashFileMatch = path.match(/^\/api\/v1\/files\/(.+)\/trash$/)
+    if (trashFileMatch) {
+      const raw = trashFileMatch[1]
+      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
+      if (method !== 'POST') return methodNotAllowed()
+      const denied = checkAuth(request, token)
+      if (denied) return denied
+      const rel = decodeRelPath(raw)
+      if (!rel) return json({ ok: false, error: 'bad path encoding' }, 400)
+      return trashEntry(rel)
     }
 
     const metaMatch = path.match(/^\/api\/v1\/files\/(.+)\/meta$/)

@@ -1,7 +1,7 @@
 import { statSync, watch, type FSWatcher } from 'node:fs'
 import { join, sep } from 'node:path'
 
-import { ALLOWED_DESIGN_EXTENSIONS } from './paths'
+import { ALLOWED_DESIGN_EXTENSIONS, TRASH_REL_DIR } from './paths'
 
 export type EventType =
   | 'hello'
@@ -87,6 +87,7 @@ export class FileWatcher {
         if (this.stopped || typeof filename !== 'string') return
         const rel = filename.split(sep).join('/')
         if (!ALLOWED_DESIGN_EXTENSIONS.test(rel)) return
+        if (isTrashRelPath(rel)) return
         this.schedule(rel)
       })
       this.watcher.on('error', (error) => console.error('[file-watcher]', error))
@@ -115,6 +116,7 @@ export class FileWatcher {
   }
 
   private handle(rel: string): void {
+    if (isTrashRelPath(rel)) return
     const full = join(this.root, rel)
     let isFile = false
     try {
@@ -154,6 +156,10 @@ export class FileWatcher {
       }
     }
   }
+}
+
+function isTrashRelPath(rel: string): boolean {
+  return rel === TRASH_REL_DIR || rel.startsWith(`${TRASH_REL_DIR}/`)
 }
 
 /** 构造 SSE 响应；连接断开时取消订阅（Bun 会在流关闭时调用 cancel）。 */

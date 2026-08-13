@@ -9,6 +9,9 @@ export const ALLOWED_FONT_EXTENSIONS = /\.(ttf|otf|woff|woff2)$/i
 /** 工作区字体根目录名（相对设计根）。 */
 export const FONTS_REL_DIR = 'fonts'
 
+/** 回收站目录名（相对设计根，软删文件的落地目录）。 */
+export const TRASH_REL_DIR = '.trash'
+
 function isSafeRelSegments(rel: string, lastMustMatch: RegExp): boolean {
   if (!rel || rel.length === 0) return false
   if (rel.includes('\0')) return false
@@ -23,6 +26,16 @@ function isSafeRelSegments(rel: string, lastMustMatch: RegExp): boolean {
 
 export function isSafeRelativePath(rel: string): boolean {
   return isSafeRelSegments(rel, ALLOWED_DESIGN_EXTENSIONS)
+}
+
+/** 校验工作区任意相对路径（文件或目录，末段无扩展名要求，如 `工作`/`工作/设计`）。 */
+export function isSafeWorkspaceRelPath(rel: string): boolean {
+  return isSafeRelSegments(rel, /.+/)
+}
+
+/** 校验工作区单个名称段（文件夹名 / 重命名目标名）：不得含路径分隔符、`.`、`..`、空。 */
+export function isSafeWorkspaceName(name: string): boolean {
+  return isSafeRelSegments(name, /.+/)
 }
 
 /** 校验字体相对路径：必须位于 fonts/ 子树下且扩展名在白名单内。 */
