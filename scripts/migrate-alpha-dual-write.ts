@@ -45,7 +45,7 @@ interface FileResult {
   written: boolean
 }
 
-interface CliOptions {
+interface CLIOptions {
   files: string[]
   dir: string | undefined
   dryRun: boolean
@@ -125,7 +125,7 @@ async function loadGraph(file: string): Promise<SceneGraph> {
   return graph
 }
 
-async function collectInputFiles(options: CliOptions): Promise<string[]> {
+async function collectInputFiles(options: CLIOptions): Promise<string[]> {
   if (options.files.length > 0) return options.files.map((file) => resolve(file))
   const base = options.dir ?? process.env.DESIGN_ROOT ?? process.cwd()
   return listFigFiles(base)
@@ -165,7 +165,7 @@ function printReport(results: FileResult[]): void {
   console.warn(`total: ${total} dual write(s) across ${results.length} file(s)`)
 }
 
-function printJson(results: FileResult[]): void {
+function printJSON(results: FileResult[]): void {
   const summary = results.map((result) => ({
     file: basename(result.file),
     path: result.file,
@@ -176,8 +176,8 @@ function printJson(results: FileResult[]): void {
   console.warn(JSON.stringify(summary, null, 2))
 }
 
-function parseArgs(args: string[]): CliOptions {
-  const options: CliOptions = { files: [], dir: undefined, dryRun: false, json: false }
+function parseArgs(args: string[]): CLIOptions {
+  const options: CLIOptions = { files: [], dir: undefined, dryRun: false, json: false }
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]
     if (arg === '--dry-run') {
@@ -213,7 +213,7 @@ async function run(): Promise<void> {
       console.error(`failed to process ${file}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
-  if (options.json) printJson(results)
+  if (options.json) printJSON(results)
   else printReport(results)
 }
 
