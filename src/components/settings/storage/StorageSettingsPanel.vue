@@ -15,7 +15,7 @@ import {
   writeStoragePreference
 } from '@/app/integrations/storage'
 import {
-  buildCORSCConfigurationJSON,
+  buildCORSConfigurationJSON,
   collectCloudCORSOrigins
 } from '@/app/integrations/storage/s3/cors'
 import { appCredentialServices } from '@/app/settings/credentials/app'
@@ -94,7 +94,7 @@ function switchToWorkspace(): void {
 }
 
 function copyCORSCConfiguration(): void {
-  void copy(buildCORSCConfigurationJSON(collectCloudCORSOrigins()))
+  void copy(buildCORSConfigurationJSON(collectCloudCORSOrigins()))
 }
 
 async function testConnection(): Promise<void> {
