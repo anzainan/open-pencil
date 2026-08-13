@@ -35,6 +35,7 @@ export const APP_MENU_SCHEMA = [
     items: [
       { id: 'new', label: 'New', shortcut: 'MOD+N' },
       { id: 'open', label: 'Open…', shortcut: 'MOD+O' },
+      { id: 'back-to-team-space', label: 'Back to team space' },
       { type: 'separator' },
       { id: 'save', label: 'Save to cloud', shortcut: 'MOD+S' },
       { id: 'save-as', label: 'Download to local…', shortcut: 'MOD+SHIFT+S' },

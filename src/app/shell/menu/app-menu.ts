@@ -38,7 +38,7 @@ export function useAppMenu() {
     otherPages,
     moveSelectionToPage
   } = useEditorCommands()
-  const { menu, locale, availableLocales, localeLabels, setLocale } = useI18n()
+  const { menu, dialogs, locale, availableLocales, localeLabels, setLocale } = useI18n()
   const { theme, setTheme } = useAppTheme()
 
   const translatedMenuItemLabels: Partial<Record<string, keyof typeof menu.value>> = {
@@ -98,6 +98,7 @@ export function useAppMenu() {
     },
     open: () => void openFileDialog(),
     'open-storage-workspace': () => openStorageWorkspace(router),
+    'back-to-team-space': () => void router.push('/'),
     save: () => void store.saveFigFile(),
     'save-as': () => void store.saveFigFileAs(),
     'export-selection': () => exportSelection('png'),
@@ -170,6 +171,13 @@ export function useAppMenu() {
 
     if (entry.id === 'language') {
       return { label: menuLabel(entry), sub: languageMenu.value }
+    }
+
+    if (entry.id === 'back-to-team-space') {
+      return {
+        label: dialogs.value.backToTeamSpace,
+        action: itemAction(entry)
+      }
     }
 
     if (entry.id === 'selection.moveToPage') {
