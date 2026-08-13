@@ -6,7 +6,7 @@ import { encodeBase64 } from '@open-pencil/core/bytes'
 import { HeadlessEditSession } from '@open-pencil/core/editor'
 import { BUILTIN_IO_FORMATS, IORegistry, headlessRenderNodes } from '@open-pencil/core/io'
 import { computeAllLayouts } from '@open-pencil/core/layout'
-import { executeRpcCommand } from '@open-pencil/core/rpc'
+import { executeRPCCommand } from '@open-pencil/core/rpc'
 import { registerWorkspaceFontFiles, scanFontDirectory } from '@open-pencil/core/text'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
@@ -23,7 +23,7 @@ const READ_COMMANDS = new Set([
   'variables'
 ])
 
-export interface NodeRpcBackendOptions {
+export interface NodeRPCBackendOptions {
   /** Workspace root; used to discover/auto-open .fig/.pen files. */
   mcpRoot?: string | null
 }
@@ -34,7 +34,7 @@ interface SessionRecord {
   createdAt: number
 }
 
-export interface RpcResponse {
+export interface RPCResponse {
   ok: boolean
   result?: unknown
   target?: { document_id?: string; page_id?: string }
@@ -47,7 +47,7 @@ export interface RpcResponse {
  * the MCP server when the browser app is offline (or an RPC times out), so
  * render/batch_update/describe/save_file etc. keep working headlessly.
  */
-export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
+export function createNodeRPCBackend(options: NodeRPCBackendOptions) {
   const mcpRoot = options.mcpRoot ? resolve(options.mcpRoot) : null
   const sessions = new Map<string, SessionRecord>()
   let defaultSessionId: string | null = null
@@ -130,11 +130,11 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
     return null
   }
 
-  function targetOf(documentId: string, pageId: string): RpcResponse['target'] {
+  function targetOf(documentId: string, pageId: string): RPCResponse['target'] {
     return { document_id: documentId, page_id: pageId }
   }
 
-  async function handleListDocuments(): Promise<RpcResponse> {
+  async function handleListDocuments(): Promise<RPCResponse> {
     const documents: Array<{
       id: string
       name: string
@@ -187,7 +187,7 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
     pageId: string | undefined,
     name: string,
     args: Record<string, unknown>
-  ): Promise<RpcResponse> {
+  ): Promise<RPCResponse> {
     const resolved = await resolveSession(documentId)
     if (!resolved) {
       return {
@@ -208,7 +208,7 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
     }
   }
 
-  async function handleEval(documentId: string | undefined, code: string): Promise<RpcResponse> {
+  async function handleEval(documentId: string | undefined, code: string): Promise<RPCResponse> {
     const resolved = await resolveSession(documentId)
     if (!resolved) {
       return {
@@ -229,7 +229,7 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
     documentId: string | undefined,
     command: string,
     args: Record<string, unknown>
-  ): Promise<RpcResponse> {
+  ): Promise<RPCResponse> {
     const resolved = await resolveSession(documentId)
     if (!resolved) {
       return {
@@ -238,7 +238,7 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
       }
     }
     try {
-      const result = executeRpcCommand(resolved.record.session.graph, command, args)
+      const result = executeRPCCommand(resolved.record.session.graph, command, args)
       return {
         ok: true,
         result: await result,
@@ -254,7 +254,7 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
     nodeIds: string[],
     scale: number,
     format: string
-  ): Promise<RpcResponse> {
+  ): Promise<RPCResponse> {
     const resolved = await resolveSession(documentId)
     if (!resolved) return { ok: false, error: 'No open document.' }
     const { session } = resolved.record
@@ -275,7 +275,7 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
   async function handleSave(
     documentId: string | undefined,
     path: string | undefined
-  ): Promise<RpcResponse> {
+  ): Promise<RPCResponse> {
     const resolved = await resolveSession(documentId)
     if (!resolved) return { ok: false, error: 'No open document.' }
     const { session } = resolved.record
@@ -293,25 +293,25 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
     }
   }
 
-  async function handleNewDocument(path: string | undefined): Promise<RpcResponse> {
+  async function handleNewDocument(path: string | undefined): Promise<RPCResponse> {
     const absPath = path ? resolve(path) : null
     const { documentId, pageId } = createEmptySession(absPath)
     return { ok: true, result: { created: true }, target: targetOf(documentId, pageId) }
   }
 
-  async function handleOpenFile(path: string): Promise<RpcResponse> {
+  async function handleOpenFile(path: string): Promise<RPCResponse> {
     const { documentId, pageId } = await openFileIntoSession(path)
     return { ok: true, result: { opened: true }, target: targetOf(documentId, pageId) }
   }
 
-  interface RpcContext {
+  interface RPCContext {
     documentId?: string
     pageId?: string
     path?: string
     args: Record<string, unknown>
   }
 
-  const commandHandlers: Record<string, (ctx: RpcContext) => Promise<unknown>> = {
+  const commandHandlers: Record<string, (ctx: RPCContext) => Promise<unknown>> = {
     list_documents: () => handleListDocuments(),
     new_document: ({ path }) => handleNewDocument(path),
     open_file: ({ path }) =>
@@ -339,7 +339,7 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
   }
 
   /** Dispatch an RPC body with the same shape the browser automation bridge uses. */
-  async function sendRpc(body: Record<string, unknown>): Promise<unknown> {
+  async function sendRPC(body: Record<string, unknown>): Promise<unknown> {
     await fontsReady
     const command = typeof body.command === 'string' ? body.command : ''
     const args = isRecord(body.args) ? body.args : {}
@@ -366,10 +366,10 @@ export function createNodeRpcBackend(options: NodeRpcBackendOptions) {
     defaultSessionId = null
   }
 
-  return { sendRpc, close, sessionCount: () => sessions.size }
+  return { sendRPC, close, sessionCount: () => sessions.size }
 }
 
-export type NodeRpcBackend = ReturnType<typeof createNodeRpcBackend>
+export type NodeRPCBackend = ReturnType<typeof createNodeRPCBackend>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))

@@ -8,23 +8,23 @@ import { z } from 'zod'
 import { encodeBase64 } from '@open-pencil/core/bytes'
 import { ALL_TOOLS, CODEGEN_PROMPT } from '@open-pencil/core/tools'
 
-import type { RpcJsonObject } from '#mcp/json'
+import type { RPCJSONObject } from '#mcp/json'
 import { MAX_RESULT_BYTES, fail, ok, resultTooLargeMessage } from '#mcp/result'
 import type { MCPResult } from '#mcp/result'
 import { resolveSafePath, writeToolOutput } from '#mcp/tool/output'
 import { paramToZod } from '#mcp/tool/schema'
 
-export type RpcSender = (body: Record<string, unknown>) => Promise<unknown>
+export type RPCSender = (body: Record<string, unknown>) => Promise<unknown>
 
 /** RPC 响应中的 graphReplaced 标记：浏览器 replaceGraph 重建后首个响应带它（P0-1 方案 b）。 */
-interface RpcResponse {
+interface RPCResponse {
   ok?: boolean
   result?: unknown
   error?: string
   graphReplaced?: boolean
 }
 
-/** 兼容旧工具的双保险：sendRpc 成功但 result 是纯 {error} 对象时转 fail（P0-3）。 */
+/** 兼容旧工具的双保险：sendRPC 成功但 result 是纯 {error} 对象时转 fail（P0-3）。 */
 function isPureErrorResult(value: unknown): value is { error: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const keys = Object.keys(value)
@@ -76,12 +76,12 @@ function withWarning(result: MCPResult, warning: string): MCPResult {
 
 /** 取浏览器当前打开目标文档的绝对 path；查不到/失败时返回 undefined（不阻断保存）。 */
 async function openDocumentPath(
-  sendRpc: RpcSender,
+  sendRPC: RPCSender,
   target: { document_id?: string },
   resolvedRoot: string
 ): Promise<string | undefined> {
   try {
-    const result = (await sendRpc({ command: 'list_documents', args: {} })) as {
+    const result = (await sendRPC({ command: 'list_documents', args: {} })) as {
       ok?: boolean
       result?: {
         documents?: Array<{ id?: string; path?: string; active?: boolean }>
@@ -121,11 +121,11 @@ function splitAutomationTarget(args: Record<string, unknown>): {
 export interface RegisterToolsOptions {
   enableEval: boolean
   mcpRoot?: string | null
-  sendRpc: RpcSender
+  sendRPC: RPCSender
 }
 
 export function registerTools(mcpServer: McpServer, options: RegisterToolsOptions) {
-  const { enableEval, sendRpc } = options
+  const { enableEval, sendRPC } = options
   const resolvedRoot = options.mcpRoot ? resolve(options.mcpRoot) : null
   const register = mcpServer.registerTool.bind(mcpServer) as (...a: unknown[]) => void
 
@@ -148,13 +148,13 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
             def.name === 'set_image_fill'
               ? await resolveImagePathArg(toolArgs, resolvedRoot)
               : toolArgs
-          const result = await sendRpc({
+          const result = await sendRPC({
             command: 'tool',
             args: { ...target, name: def.name, args: resolvedArgs }
           })
-          const res = result as RpcResponse
+          const res = result as RPCResponse
           if (res.ok === false) return fail(new Error(res.error ?? 'Tool failed'))
-          const r = res.result as RpcJsonObject | undefined
+          const r = res.result as RPCJSONObject | undefined
           // 双保险：旧工具仍可能返回纯 {error} 对象 → 转 fail（P0-3）。
           if (isPureErrorResult(r)) return fail(new Error(r.error))
           const filePath = typeof toolArgs.path === 'string' ? toolArgs.path : null
@@ -205,7 +205,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
     },
     async () => {
       try {
-        const result = await sendRpc({ command: 'list_documents', args: {} })
+        const result = await sendRPC({ command: 'list_documents', args: {} })
         const res = result as { ok?: boolean; result?: unknown; error?: string }
         if (res.ok === false) return fail(new Error(res.error))
         return ok(res.result ?? {})
@@ -244,13 +244,13 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
         // 刷新会回到旧文件（假象「图片全丢」）。仅提示，不回滚不阻断。
         let pathWarning: string | undefined
         if (safePath && resolvedRoot) {
-          const currentPath = await openDocumentPath(sendRpc, target, resolvedRoot)
+          const currentPath = await openDocumentPath(sendRPC, target, resolvedRoot)
           if (currentPath && resolve(safePath.realPath) !== currentPath) {
             pathWarning = `保存路径 ${safePath.resolved} 与浏览器当前打开文件 ${currentPath} 不一致，将写入新文件；覆盖当前文档请不传 path`
           }
         }
 
-        const result = await sendRpc({
+        const result = await sendRPC({
           command: 'save_file',
           args: { ...target, path: safePath?.realPath }
         })
@@ -285,7 +285,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
         try {
           const safe = await resolveSafePath(args.path, resolvedRoot)
           const { target } = splitAutomationTarget(args)
-          const result = await sendRpc({
+          const result = await sendRPC({
             command: 'open_file',
             args: { ...target, path: safe.realPath }
           })
@@ -316,7 +316,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
           const safePath =
             args.path !== undefined ? await resolveSafePath(args.path, resolvedRoot) : undefined
           const { target } = splitAutomationTarget(args)
-          const result = await sendRpc({
+          const result = await sendRPC({
             command: 'new_document',
             args: { ...target, path: safePath?.realPath }
           })
@@ -382,16 +382,16 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
           const resolvedArgs = resolveStepReferences(stepArgs, results)
           const toolArgs =
             tool === 'set_image_fill' ? await resolveImagePathArg(resolvedArgs, resolvedRoot) : resolvedArgs
-          const result = await sendRpc({
+          const result = await sendRPC({
             command: 'tool',
             args: { ...target, name: tool, args: toolArgs }
           })
-          const res = result as RpcResponse
+          const res = result as RPCResponse
           if (res.ok === false) {
             results.push({ index, tool, ok: false, error: res.error ?? 'tool failed' })
             continue
           }
-          const r = res.result as RpcJsonObject | undefined
+          const r = res.result as RPCJSONObject | undefined
           if (isPureErrorResult(r)) {
             results.push({ index, tool, ok: false, error: r.error })
             continue
@@ -425,13 +425,13 @@ function isBatchStep(value: unknown): value is BatchStep {
 }
 
 /** 提取工具结果里的节点 id（与 apply.ts extractNodeIds 同形）。 */
-function extractResultId(result: RpcJsonObject | undefined): string | undefined {
+function extractResultId(result: RPCJSONObject | undefined): string | undefined {
   if (!result || typeof result !== 'object') return undefined
   if (typeof result.id === 'string') return result.id
   if (Array.isArray(result.results)) {
     for (const item of result.results) {
-      if (item && typeof item === 'object' && typeof (item as RpcJsonObject).id === 'string') {
-        return (item as RpcJsonObject).id as string
+      if (item && typeof item === 'object' && typeof (item as RPCJSONObject).id === 'string') {
+        return (item as RPCJSONObject).id as string
       }
     }
   }

@@ -30,7 +30,7 @@ export interface McpProxyOptions {
   /** Base URL of the MCP server, e.g. http://127.0.0.1:7600 */
   httpUrl: string
   /** WebSocket URL of the MCP server, e.g. ws://127.0.0.1:7600 */
-  wsUrl: string
+  wsURL: string
   /** Optional explicit spawn command. When omitted, the default repo entry is used. */
   serverCmd?: string | null
   /** Working directory to resolve the default spawn command from (repo root). */
@@ -66,7 +66,7 @@ function forwardHeaders(headers: Headers): Record<string, string> {
 }
 
 export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
-  const { enabled, authToken, httpUrl, wsUrl, serverCmd, spawnCwd, designRoot, stateDir } = options
+  const { enabled, authToken, httpUrl, wsURL, serverCmd, spawnCwd, designRoot, stateDir } = options
 
   let child: ReturnType<typeof spawn> | null = null
   let ready = false
@@ -198,7 +198,7 @@ export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
     pipe(ws: ServerWebSocket) {
       const state: PipeState = { buffer: [], client: null }
       ws.data = state
-      const client = new WebSocket(wsUrl)
+      const client = new WebSocket(wsURL)
       state.client = client
       client.binaryType = 'arraybuffer'
       client.onopen = () => {

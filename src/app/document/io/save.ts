@@ -1,7 +1,8 @@
 import type { EditorState } from '@open-pencil/core/editor'
+import { dialogMessages } from '@open-pencil/vue'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
-import { journalDocPathForFilePath, journalDocPathForSource, withAiOpsLock } from '@/app/bridge/op-journal'
+import { journalDocPathForFilePath, journalDocPathForSource, withAIOpsLock } from '@/app/bridge/op-journal'
 import { rememberWorkspaceFile } from '@/app/bridge/restore'
 import { resolveUniqueWorkspacePath, sanitizeWorkspaceFileName } from '@/app/bridge/workspace-name'
 import { downloadBlob } from '@/app/document/io/browser'
@@ -62,7 +63,7 @@ export function createSaveActions({
         // 覆盖 MCP new_document/save_file、UI 新建、Tauri 打开等全部写路径。
         state.autosaveEnabled = true
         const docPath = await journalDocPathForSource(storageBinding, filePath)
-        const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildFigFile()))
+        const wrote = await withAIOpsLock(docPath, async () => writeFile(await buildFigFile()))
         if (wrote && !storageBinding) setSourceIdentity({ handle: fileHandle, path: filePath })
         if (wrote) toast.info('文件已保存到云端')
       } else {
@@ -109,7 +110,7 @@ export function createSaveActions({
     setDownloadName(path)
     setSourceIdentity({ handle: null, path: null })
     state.autosaveEnabled = true
-    const wrote = await withAiOpsLock(path, async () => writeFile(await buildFigFile()))
+    const wrote = await withAIOpsLock(path, async () => writeFile(await buildFigFile()))
     if (wrote) {
       startWatchingFile()
       void bridgeClient.reportRecent(path)
@@ -166,7 +167,7 @@ export function createSaveActions({
       state.autosaveEnabled = true
       const docPath = await journalDocPathForFilePath(path)
       try {
-        const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildExportData()))
+        const wrote = await withAIOpsLock(docPath, async () => writeFile(await buildExportData()))
         if (wrote) setSourceIdentity({ handle: null, path })
       } catch (error) {
         toast.error(`保存失败：${saveErrorMessage(error)}`)
@@ -186,7 +187,7 @@ export function createSaveActions({
       state.autosaveEnabled = true
       const docPath = await journalDocPathForSource(null, null)
       try {
-        const wrote = await withAiOpsLock(docPath, async () => writeFile(await buildExportData()))
+        const wrote = await withAIOpsLock(docPath, async () => writeFile(await buildExportData()))
         if (wrote) setSourceIdentity({ handle, path: null })
       } catch (error) {
         toast.error(`保存失败：${saveErrorMessage(error)}`)
@@ -197,7 +198,7 @@ export function createSaveActions({
       return
     }
 
-    const filename = prompt('Save as:', getDownloadName() ?? 'Untitled.fig')
+    const filename = prompt(dialogMessages.get().saveAsPrompt, getDownloadName() ?? 'Untitled.fig')
     if (!filename) return
     setStorageBinding(null)
     setDownloadName(filename)

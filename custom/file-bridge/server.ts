@@ -274,7 +274,7 @@ export function startServer(options: BridgeServerOptions) {
     enabled: mcpEnabled,
     authToken: mcpAuthToken || null,
     httpUrl: mcpHttpUrl,
-    wsUrl: mcpWsUrl,
+    wsURL: mcpWsUrl,
     serverCmd: mcpServerCmd,
     spawnCwd: resolveRepoRoot(import.meta.dir),
     designRoot,

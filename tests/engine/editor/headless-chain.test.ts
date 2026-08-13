@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { initCodec, parseFigFile, SceneGraph } from '@open-pencil/core'
 import { HeadlessEditSession } from '@open-pencil/core/editor'
-import { executeRpcCommand } from '@open-pencil/core/rpc'
+import { executeRPCCommand } from '@open-pencil/core/rpc'
 
 import { expectDefined } from '#tests/helpers/assert'
 
@@ -30,8 +30,8 @@ describe('headless edit chain: 建→改→质检→落盘→重开 (core pieces
       const frameId = (render.result as { id: string }).id
       await session.applyTool('set_fill', { id: frameId, color: '#FFFFFF' })
 
-      // 质检 (describe via executeRpcCommand — the same impl the MCP node backend uses)
-      const describeResult = executeRpcCommand(graph, 'describe', { id: frameId }) as {
+      // 质检 (describe via executeRPCCommand — the same impl the MCP node backend uses)
+      const describeResult = executeRPCCommand(graph, 'describe', { id: frameId }) as {
         nodes: Array<{ name: string; role: string }>
       }
       const report = describeResult.nodes[0]

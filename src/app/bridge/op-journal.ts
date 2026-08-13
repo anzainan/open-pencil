@@ -5,7 +5,7 @@
  * periodic `.fig` autosave persists it to disk. On a successful bridge PUT the
  * journal for that document is cleared; if the tab is refreshed/closed/crashes
  * before the next PUT, the journal is replayed when the document reopens
- * (see `replayPendingAiOps` in tabs). This is the IndexedDB half of the
+ * (see `replayPendingAIOps` in tabs). This is the IndexedDB half of the
  * "double insurance" against losing AI work.
  *
  * Keyed by the bridge document path (e.g. `PixelMob/login.fig`). Documents bound
@@ -15,7 +15,7 @@
  *
  * Serialization (anti-race): all journal mutations — append, clear, and the
  * single-op range remove on undo — are mutually exclusive per document through a
- * FIFO lock (`withAiOpsLock`). The apply path holds the lock across "mutate +
+ * FIFO lock (`withAIOpsLock`). The apply path holds the lock across "mutate +
  * append", and the save path holds the same lock across "serialize + PUT +
  * clear". This guarantees:
  *   - A write can never clear the journal while an op is still being appended
@@ -38,7 +38,7 @@ const INDEX_DOC = 'byDoc'
 /** Cap journal entries per document to bound IndexedDB usage (ux-live-collab §11-9). */
 const MAX_OPS_PER_DOC = 500
 
-export interface AiOpRecord {
+export interface AIOpRecord {
   /** `${docPath}\u0000${seq}` — unique across documents. */
   id: string
   docPath: string
@@ -53,12 +53,12 @@ const lockTails = new Map<string, Promise<void>>()
 
 /**
  * Run `fn` exclusively for a document. Concurrent callers for the same document
- * (another `withAiOpsLock`, or any journal mutation performed inside one) queue
+ * (another `withAIOpsLock`, or any journal mutation performed inside one) queue
  * FIFO and run only after the current holder finishes. `fn` must not acquire the
  * same document lock again (no nesting); journal helpers are lock-free on
  * purpose and rely on their caller to hold the lock.
  */
-export async function withAiOpsLock<T>(
+export async function withAIOpsLock<T>(
   docPath: string | null,
   fn: () => Promise<T>
 ): Promise<T> {
@@ -124,10 +124,10 @@ function recordId(docPath: string, seq: number): string {
   return `${docPath}\u0000${seq}`
 }
 
-async function docEntries(docPath: string): Promise<AiOpRecord[]> {
+async function docEntries(docPath: string): Promise<AIOpRecord[]> {
   const database = await openDb()
   const tx = database.transaction(STORE, 'readonly')
-  const rows = (await reqToPromise(tx.objectStore(STORE).index(INDEX_DOC).getAll(docPath))) as AiOpRecord[]
+  const rows = (await reqToPromise(tx.objectStore(STORE).index(INDEX_DOC).getAll(docPath))) as AIOpRecord[]
   await txDone(tx)
   return rows.sort((a, b) => a.seq - b.seq)
 }
@@ -136,11 +136,11 @@ async function docEntries(docPath: string): Promise<AiOpRecord[]> {
  * Append one applied AI op to the journal for the given store. No-op when the
  * store has no journalable target (no bridge binding and no convertible filePath).
  *
- * Must be called while holding the document lock (inside `withAiOpsLock`) so the
+ * Must be called while holding the document lock (inside `withAIOpsLock`) so the
  * append cannot interleave with the covering autosave write. Returns the seq
  * assigned to the record; the caller syncs the journal on undo/redo through it.
  */
-export async function journalAppendAiOp(
+export async function journalAppendAIOp(
   store: EditorStore,
   tool: string,
   args: Record<string, unknown>
@@ -179,7 +179,7 @@ export async function journalMaxSeq(docPath: string): Promise<number> {
 }
 
 /** Pending (not-yet-persisted) AI ops for a document, sorted by seq. */
-export async function getPendingAiOps(docPath: string): Promise<AiOpRecord[]> {
+export async function getPendingAIOps(docPath: string): Promise<AIOpRecord[]> {
   if (!docPath) return []
   return docEntries(docPath)
 }
@@ -190,13 +190,13 @@ export async function getPendingAiOps(docPath: string): Promise<AiOpRecord[]> {
  * removed, so an op appended outside the lock after the covering write is never
  * dropped by a stale clear.
  */
-export async function clearAiOps(docPath: string, persistedThrough?: number): Promise<void> {
+export async function clearAIOps(docPath: string, persistedThrough?: number): Promise<void> {
   if (!docPath) return
   const database = await openDb()
   const tx = database.transaction(STORE, 'readwrite')
   const objectStore = tx.objectStore(STORE)
   const index = objectStore.index(INDEX_DOC)
-  const rows = (await reqToPromise(index.getAll(IDBKeyRange.only(docPath)))) as AiOpRecord[]
+  const rows = (await reqToPromise(index.getAll(IDBKeyRange.only(docPath)))) as AIOpRecord[]
   for (const row of rows) {
     if (persistedThrough === undefined || row.seq <= persistedThrough) {
       objectStore.delete(row.id)
@@ -212,13 +212,13 @@ export async function clearAiOps(docPath: string, persistedThrough?: number): Pr
  * and any stragglers a racing redo re-appended). Must be called while holding
  * the document lock.
  */
-export async function removeAiOpsFrom(docPath: string, fromSeq: number): Promise<void> {
+export async function removeAIOpsFrom(docPath: string, fromSeq: number): Promise<void> {
   if (!docPath) return
   const database = await openDb()
   const tx = database.transaction(STORE, 'readwrite')
   const objectStore = tx.objectStore(STORE)
   const index = objectStore.index(INDEX_DOC)
-  const rows = (await reqToPromise(index.getAll(IDBKeyRange.only(docPath)))) as AiOpRecord[]
+  const rows = (await reqToPromise(index.getAll(IDBKeyRange.only(docPath)))) as AIOpRecord[]
   for (const row of rows) {
     if (row.seq >= fromSeq) objectStore.delete(row.id)
   }

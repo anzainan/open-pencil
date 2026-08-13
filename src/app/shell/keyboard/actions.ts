@@ -93,7 +93,7 @@ export function createKeyboardActions({
     }
   }
 
-  function exportSelectionPng() {
+  function exportSelectionPNG() {
     if (store.state.selectedIds.size > 0) void store.exportSelection(1, 'png')
   }
 
@@ -132,7 +132,7 @@ export function createKeyboardActions({
     toggleAutoLayout,
     toggleUI,
     toggleAI,
-    exportSelectionPng,
+    exportSelectionPNG,
     opacityDigit
   }
 }

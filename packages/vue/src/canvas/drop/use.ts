@@ -208,9 +208,9 @@ export function useCanvasDrop(canvasRef: Ref<HTMLCanvasElement | null>, editor: 
       return
     }
 
-    const stockUrl = e.dataTransfer?.getData(STOCK_IMAGE_MIME)
-    if (stockUrl) {
-      void placeStockImage(stockUrl, point.x, point.y, editor)
+    const stockURL = e.dataTransfer?.getData(STOCK_IMAGE_MIME)
+    if (stockURL) {
+      void placeStockImage(stockURL, point.x, point.y, editor)
       return
     }
 

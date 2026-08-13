@@ -1,6 +1,6 @@
 import { autoDepth, describeOneNode } from '#core/tools/describe/tree'
 
-import type { RpcCommand } from './types'
+import type { RPCCommand } from './types'
 
 export interface DescribeArgs {
   id?: string
@@ -17,7 +17,7 @@ const MAX_DESCRIBE_DEPTH = 5
  * app automation RPC handler. Uses the exact same implementation as the MCP
  * `describe` tool, so headless and browser-backed reports always agree.
  */
-export const describeCommand: RpcCommand<DescribeArgs> = {
+export const describeCommand: RPCCommand<DescribeArgs> = {
   name: 'describe',
   execute: (graph, args) => {
     const gridSize = args.grid ?? 8

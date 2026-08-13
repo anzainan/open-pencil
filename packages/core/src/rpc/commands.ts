@@ -1,9 +1,22 @@
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
-import { analyzeClustersCommand, analyzeColorsCommand, analyzeOverlapsCommand, analyzeSpacingCommand, analyzeTypographyCommand } from './analyze-commands'
+import {
+  analyzeClustersCommand,
+  analyzeColorsCommand,
+  analyzeOverlapsCommand,
+  analyzeSpacingCommand,
+  analyzeTypographyCommand
+} from './analyze-commands'
 import { describeCommand } from './describe-command'
-import { findCommand, infoCommand, nodeCommand, pagesCommand, queryCommand, treeCommand } from './read-commands'
-import type { RpcCommand } from './types'
+import {
+  findCommand,
+  infoCommand,
+  nodeCommand,
+  pagesCommand,
+  queryCommand,
+  treeCommand
+} from './read-commands'
+import type { RPCCommand } from './types'
 import { variablesCommand } from './variables-command'
 
 export type AutomationDocumentSummary = {
@@ -16,7 +29,7 @@ export type AutomationDocumentSummary = {
   pages: Array<{ id: string; name: string }>
 }
 
-export type { RpcCommand } from './types'
+export type { RPCCommand } from './types'
 export * from './read-commands'
 export * from './variables-command'
 export * from './analyze-commands'
@@ -36,9 +49,9 @@ export const ALL_RPC_COMMANDS = [
   analyzeSpacingCommand,
   analyzeClustersCommand,
   analyzeOverlapsCommand
-] as RpcCommand[]
+] as RPCCommand[]
 
-export function executeRpcCommand(graph: SceneGraph, name: string, args: unknown): unknown {
+export function executeRPCCommand(graph: SceneGraph, name: string, args: unknown): unknown {
   const cmd = ALL_RPC_COMMANDS.find((c) => c.name === name)
   if (!cmd) throw new Error(`Unknown command: ${name}`)
   return cmd.execute(graph, args as never)

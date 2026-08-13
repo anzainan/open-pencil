@@ -10,7 +10,7 @@ export {
   getStockPhotoProviders,
   registerStockPhotoProvider,
   setActiveStockPhotoProvider,
-  setPexelsApiKey,
+  setPexelsAPIKey,
   setUnsplashAccessKey,
   type StockPhotoProvider,
   type StockPhotoResult

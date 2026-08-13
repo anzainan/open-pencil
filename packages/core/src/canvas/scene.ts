@@ -1,7 +1,12 @@
 /* eslint-disable max-lines -- scene dispatch stays together while shape domains live in sibling modules */
 import type { Canvas, Path } from 'canvaskit-wasm'
 
-import type { SceneNode, SceneGraph, Fill } from '@open-pencil/scene-graph'
+import {
+  getAbsolutePositionFull,
+  type SceneNode,
+  type SceneGraph,
+  type Fill
+} from '@open-pencil/scene-graph'
 import { computeDescendantVisualBounds } from '@open-pencil/scene-graph/geometry'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
@@ -36,7 +41,19 @@ function drawVisibleFills(
 ): void {
   paintFills(r, node.fills, node, graph, draw)
 }
-function isCulled(r: SkiaRenderer, node: SceneNode, absX: number, absY: number): boolean {
+
+function hasNodeTransform(node: SceneNode): boolean {
+  return node.rotation !== 0 || node.flipX || node.flipY
+}
+
+function isCulled(
+  r: SkiaRenderer,
+  graph: SceneGraph,
+  node: SceneNode,
+  absX: number,
+  absY: number,
+  hasTransformedAncestor: boolean
+): boolean {
   const canCull =
     node.childIds.length === 0 ||
     ((node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE') &&
@@ -44,6 +61,15 @@ function isCulled(r: SkiaRenderer, node: SceneNode, absX: number, absY: number):
   if (!canCull) return false
 
   const vp = r.worldViewport
+  if (hasTransformedAncestor) {
+    const bounds = getAbsolutePositionFull(node, graph)
+    return (
+      bounds.boundX > vp.x + vp.w ||
+      bounds.boundY > vp.y + vp.h ||
+      bounds.boundX + bounds.width < vp.x ||
+      bounds.boundY + bounds.height < vp.y
+    )
+  }
   const bw = node.width
   const bh = node.height
   if (node.rotation !== 0) {
@@ -69,14 +95,17 @@ function applyNodeTransforms(
 ): void {
   const rotation =
     overlays.rotationPreview?.nodeId === nodeId ? overlays.rotationPreview.angle : node.rotation
-  if (rotation !== 0) {
-    if (node.type === 'LINE') canvas.rotate(rotation, 0, 0)
-    else canvas.rotate(rotation, node.width / 2, node.height / 2)
-  }
-
   if (node.flipX || node.flipY) {
     canvas.translate(node.flipX ? node.width : 0, node.flipY ? node.height : 0)
     canvas.scale(node.flipX ? -1 : 1, node.flipY ? -1 : 1)
+  }
+
+  // Keep drawing transforms in the same order as getNodeLocalMatrix and Figma's raw matrix.
+  // Reflected quarter-turn connector instances are visibly reversed when rotation is applied
+  // before the reflection.
+  if (rotation !== 0) {
+    if (node.type === 'LINE') canvas.rotate(rotation, 0, 0)
+    else canvas.rotate(rotation, node.width / 2, node.height / 2)
   }
 }
 function renderNodeContent(
@@ -130,7 +159,8 @@ function renderChildIds(
   childIds: string[],
   overlays: RenderOverlays,
   absX: number,
-  absY: number
+  absY: number,
+  hasTransformedAncestor: boolean
 ): void {
   renderMaskedChildIds(
     r,
@@ -140,7 +170,7 @@ function renderChildIds(
       const child = graph.getNode(childId)
       return child?.visible && child.isMask ? child.maskType : null
     },
-    (childId) => r.renderNode(canvas, graph, childId, overlays, absX, absY),
+    (childId) => r.renderNode(canvas, graph, childId, overlays, absX, absY, hasTransformedAncestor),
     (childId) => {
       const child = graph.getNode(childId)
       if (child) renderMaskNodeContent(r, canvas, graph, child, childId, overlays)
@@ -160,7 +190,8 @@ function renderChildren(
   node: SceneNode,
   overlays: RenderOverlays,
   absX: number,
-  absY: number
+  absY: number,
+  hasTransformedAncestor: boolean
 ): void {
   if (node.type === 'BOOLEAN_OPERATION') return
   const isClippableContainer =
@@ -176,10 +207,10 @@ function renderChildren(
     } else {
       canvas.clipRect(r.ck.LTRBRect(0, 0, node.width, node.height), r.ck.ClipOp.Intersect, true)
     }
-    renderChildIds(r, canvas, graph, node.childIds, overlays, absX, absY)
+    renderChildIds(r, canvas, graph, node.childIds, overlays, absX, absY, hasTransformedAncestor)
     canvas.restore()
   } else {
-    renderChildIds(r, canvas, graph, node.childIds, overlays, absX, absY)
+    renderChildIds(r, canvas, graph, node.childIds, overlays, absX, absY, hasTransformedAncestor)
   }
 }
 export function renderNode(
@@ -189,7 +220,8 @@ export function renderNode(
   nodeId: string,
   overlays: RenderOverlays,
   parentAbsX = 0,
-  parentAbsY = 0
+  parentAbsY = 0,
+  hasTransformedAncestor = false
 ): void {
   const node = graph.getNode(nodeId)
   if (
@@ -210,7 +242,7 @@ export function renderNode(
   const absX = parentAbsX + node.x
   const absY = parentAbsY + node.y
 
-  if (isCulled(r, node, absX, absY)) {
+  if (isCulled(r, graph, node, absX, absY, hasTransformedAncestor)) {
     r._culledCount++
     return
   }
@@ -258,7 +290,16 @@ export function renderNode(
   applyNodeTransforms(r, canvas, node, nodeId, overlays)
   renderNodeContent(r, canvas, graph, node, nodeId, overlays)
   drawLayoutGrids(r, canvas, node)
-  renderChildren(r, canvas, graph, node, overlays, absX, absY)
+  renderChildren(
+    r,
+    canvas,
+    graph,
+    node,
+    overlays,
+    absX,
+    absY,
+    hasTransformedAncestor || hasNodeTransform(node)
+  )
 
   if (layerBlur) {
     canvas.restore()

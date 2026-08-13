@@ -1,8 +1,8 @@
 import type { EditorState } from '@open-pencil/core/editor'
 
-import { markAiOpFlushComplete } from '@/app/automation/bridge/apply'
+import { markAIOpFlushComplete } from '@/app/automation/bridge/apply'
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
-import { clearAiOps, journalMaxSeq } from '@/app/bridge/op-journal'
+import { clearAIOps, journalMaxSeq } from '@/app/bridge/op-journal'
 import { webFilePathToWorkspaceRel } from '@/app/bridge/workspace-path'
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
 import { persistStorageCanvasLocally } from '@/app/storage/sync/persist'
@@ -37,13 +37,13 @@ export function createDocumentWriter({
         setLastWriteTime(Date.now())
         setSavedVersion(state.sceneVersion)
         // 落盘成功 = 磁盘已含全部已应用 AI 操作 → 有序清空防丢失日志。
-        // 调用方在 withAiOpsLock 内执行本函数，序列化/PUT/清空与 journal 追加互斥；
+        // 调用方在 withAIOpsLock 内执行本函数，序列化/PUT/清空与 journal 追加互斥；
         // 此处同步等待清空完成（而非 fire-and-forget），并用本次写盘时刻的最大
         // seq 作水位，只删已被该次写盘覆盖的记录。
         const persistedThrough = await journalMaxSeq(storage.documentId)
-        await clearAiOps(storage.documentId, persistedThrough)
+        await clearAIOps(storage.documentId, persistedThrough)
         // 覆盖 AI 操作的落盘完成 → 标记写者归属守卫起点（read.ts 10s 内跳过 reload）。
-        markAiOpFlushComplete()
+        markAIOpFlushComplete()
         return true
       }
       await persistStorageCanvasLocally({
@@ -65,7 +65,7 @@ export function createDocumentWriter({
       // filePath-only 文档的 journal 键由 filePath 换算（与键控同一条逻辑），
       // 落盘成功即按水位清空，避免重放时重复应用。
       await clearJournalForFilePath(filePath)
-      markAiOpFlushComplete()
+      markAIOpFlushComplete()
       return true
     }
     if (fileHandle) {
@@ -84,8 +84,8 @@ export function createDocumentWriter({
       if (rel) {
         await bridgeClient.putFile(rel, data)
         setSavedVersion(state.sceneVersion)
-        await clearAiOps(rel, await journalMaxSeq(rel))
-        markAiOpFlushComplete()
+        await clearAIOps(rel, await journalMaxSeq(rel))
+        markAIOpFlushComplete()
         return true
       }
     }
@@ -97,6 +97,6 @@ export function createDocumentWriter({
     const designRoot = await bridgeClient.getDesignRoot()
     const rel = webFilePathToWorkspaceRel(filePath, designRoot)
     if (!rel) return
-    await clearAiOps(rel, await journalMaxSeq(rel))
+    await clearAIOps(rel, await journalMaxSeq(rel))
   }
 }

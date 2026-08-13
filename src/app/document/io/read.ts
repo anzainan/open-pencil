@@ -3,10 +3,10 @@ import { readFigFile } from '@open-pencil/core/io/formats/fig'
 import { computeAllLayouts } from '@open-pencil/core/layout'
 
 import { bridgeClient } from '@/app/bridge/client'
-import { getPendingAiOps, journalDocPathForSource, withAiOpsLock } from '@/app/bridge/op-journal'
+import { getPendingAIOps, journalDocPathForSource, withAIOpsLock } from '@/app/bridge/op-journal'
 import {
-  isAiOpFlushWindowActive,
-  isAutomationRpcActive
+  isAIOpFlushWindowActive,
+  isAutomationRPCActive
 } from '@/app/automation/bridge/apply'
 import { yieldToUI } from '@/app/document/io/browser'
 import { applyImportedDocument } from '@/app/document/io/imported-document'
@@ -95,12 +95,12 @@ export function createReloadActions({
     const docPath = await journalDocPathForSource(storageBinding, getFilePath())
     // 重建期间与 AI 操作共用同一文档级 FIFO 锁：AI 操作在途时等待其完成，
     // 重建期间新到的 AI 操作也会排队，杜绝「重建 + 操作」交错导致 id 错乱。
-    await withAiOpsLock(docPath, async () => {
+    await withAIOpsLock(docPath, async () => {
       let journalEmpty = true
       // 有未落盘的 AI 操作（journal 非空）时跳过磁盘重载——磁盘是旧状态，
       // 重载会覆盖内存里更新的 AI 结果（SKILL §4.13 的文档重建根因）。
       if (docPath) {
-        const pending = await getPendingAiOps(docPath)
+        const pending = await getPendingAIOps(docPath)
         journalEmpty = pending.length === 0
         if (pending.length > 0) return
       }
@@ -119,8 +119,8 @@ export function createReloadActions({
     // 诊断日志（B1）：区分「自写 echo / 外部写 / 水印失效」三类触发来源，
     // 并暴露 AI 活跃窗口状态与 saved/scene 版本差，便于定位窄竞态屏闪。
     const savedVersion = getSavedVersion()
-    const aiActive = isAutomationRpcActive()
-    const aiFlushGuard = isAiOpFlushWindowActive()
+    const aiActive = isAutomationRPCActive()
+    const aiFlushGuard = isAIOpFlushWindowActive()
     console.warn(
       `[reload] triggered path=${diagnostics?.path ?? 'n/a'} ` +
         `selfWriteEcho=${diagnostics?.selfWriteEcho ?? 'n/a'} ` +

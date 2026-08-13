@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { startServer } from '#mcp/server'
 
-interface RpcResponse {
+interface RPCResponse {
   ok?: boolean
   result?: unknown
   target?: unknown
@@ -51,14 +51,14 @@ describe('MCP server headless fallback (no browser connected)', () => {
     const health = (await (await fetch(`${base}/health`)).json()) as { status: string }
     expect(health.status).toBe('no_app')
 
-    const post = async (body: unknown): Promise<RpcResponse> => {
+    const post = async (body: unknown): Promise<RPCResponse> => {
       const resp = await fetch(`${base}/rpc`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', Authorization: `Bearer ${authToken}` },
         body: JSON.stringify(body)
       })
       expect(resp.status).toBe(200)
-      return (await resp.json()) as RpcResponse
+      return (await resp.json()) as RPCResponse
     }
 
     // 建 + 改 + 质检 + 落盘 via /rpc (headless)

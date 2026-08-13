@@ -8,7 +8,7 @@ import type { SceneGraph } from '@open-pencil/scene-graph'
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { clearRememberedWorkspaceFile, rememberWorkspaceFile } from '@/app/bridge/restore'
 import { setOpenPencilStore } from '@/app/browser-bridge'
-import { replayPendingAiOps } from '@/app/automation/bridge/replay'
+import { replayPendingAIOps } from '@/app/automation/bridge/replay'
 import type { DocumentSourceIdentity } from '@/app/document/io/types'
 import { setActiveEditorStore } from '@/app/editor/active-store'
 import { createEditorStore } from '@/app/editor/session'
@@ -272,7 +272,7 @@ async function restoreBridgeWorkspaceSession(store: EditorStore, documentId: str
   // 防丢失重放：上次关闭/刷新时尚未落盘的 AI 操作，从本地日志重放到内存图。
   const tab = getTabForStore(store)
   if (!tab) return
-  const replayed = await replayPendingAiOps(store, tab.id, documentId)
+  const replayed = await replayPendingAIOps(store, tab.id, documentId)
   if (replayed > 0) {
     store.requestRender()
     toast.info(`已从本地暂存恢复 ${replayed} 条 AI 操作`)

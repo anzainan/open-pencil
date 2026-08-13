@@ -5,7 +5,7 @@ import type { DescribeArgs } from '@open-pencil/core/rpc'
 
 import { appTargetOptions } from '#cli/app-target'
 import { bold, entity, fmtList, printError, formatType } from '#cli/format'
-import { loadRpcData } from '#cli/rpc-data'
+import { loadRPCData } from '#cli/rpc-data'
 
 type DescribeNode = {
   id: string
@@ -85,7 +85,7 @@ export default defineCommand({
             .filter(Boolean)
         : undefined
     }
-    const data = await loadRpcData<{
+    const data = await loadRPCData<{
       page?: { id: string; name: string }
       nodes?: DescribeNode[]
       error?: string

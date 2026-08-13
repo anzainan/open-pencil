@@ -13,7 +13,7 @@ import {
 } from '@open-pencil/dom-css'
 
 import { isAppMode, requireFile, rpc } from '#cli/app-client'
-import { appTargetOptions, appTargetRpcArgs } from '#cli/app-target'
+import { appTargetOptions, appTargetRPCArgs } from '#cli/app-target'
 import { ok, printError } from '#cli/format'
 import {
   loadDocument,
@@ -60,7 +60,7 @@ async function writeAndLog(path: string, content: string | Uint8Array) {
 }
 
 async function exportViaApp(format: string, args: ExportArgs) {
-  const targetArgs = appTargetRpcArgs(args)
+  const targetArgs = appTargetRPCArgs(args)
   if (format === 'SVG') {
     const result = await rpc<{ svg: string }>('tool', {
       ...targetArgs,

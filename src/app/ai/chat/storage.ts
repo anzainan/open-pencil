@@ -1,7 +1,7 @@
 import { computed, ref, watch } from 'vue'
 
 import { IS_TAURI } from '@open-pencil/core/constants'
-import { setPexelsApiKey, setUnsplashAccessKey } from '@open-pencil/core/tools'
+import { setPexelsAPIKey, setUnsplashAccessKey } from '@open-pencil/core/tools'
 
 import {
   designCustomAPIType,
@@ -72,7 +72,7 @@ async function refreshMediaCredentials(): Promise<void> {
         serverPexelsConfigured.value = true
         // 本地未配置时，用云端 key
         if ((await refreshStatus(PEXELS_CREDENTIAL)) !== 'configured') {
-          setPexelsApiKey(cfg.pexelsKey)
+          setPexelsAPIKey(cfg.pexelsKey)
           pexelsKeyStatus.value = 'configured'
         }
       }
@@ -82,8 +82,16 @@ async function refreshMediaCredentials(): Promise<void> {
   }
 
   // 原有逻辑：刷新 unsplash + 本地已配置的 pexels
-  const unsplashStatus = await refreshStatus(UNSPLASH_CREDENTIAL)
+  const [pexelsStatus, unsplashStatus] = await Promise.all([
+    refreshStatus(PEXELS_CREDENTIAL),
+    refreshStatus(UNSPLASH_CREDENTIAL)
+  ])
   unsplashKeyStatus.value = unsplashStatus
+  // 本地已配置 → 用本地 key（优先级最高）；未配置则保留上面 file-bridge 的服务端 key 兜底。
+  if (pexelsStatus === 'configured') {
+    setPexelsAPIKey(await appCredentialServices.resolver.resolve(PEXELS_CREDENTIAL))
+    pexelsKeyStatus.value = 'configured'
+  }
   setUnsplashAccessKey(
     unsplashStatus === 'configured'
       ? await appCredentialServices.resolver.resolve(UNSPLASH_CREDENTIAL)
@@ -117,7 +125,7 @@ export async function setPexelsKey(key: string): Promise<void> {
   if (value) await appCredentialServices.manager.set(PEXELS_CREDENTIAL, value)
   else await appCredentialServices.manager.clear(PEXELS_CREDENTIAL)
   pexelsKeyStatus.value = await refreshStatus(PEXELS_CREDENTIAL)
-  setPexelsApiKey(value || null)
+  setPexelsAPIKey(value || null)
 }
 
 export async function setUnsplashKey(key: string): Promise<void> {

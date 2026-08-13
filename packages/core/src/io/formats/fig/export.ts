@@ -23,6 +23,7 @@ import {
   makeDocumentNodeChange,
   makeCanvasNodeChange
 } from '#core/kiwi/fig/node-change/serialize'
+import { deserializeSceneGraph, serializeSceneGraph } from '#core/kiwi/fig/parse/transfer'
 
 const THUMBNAIL_1X1 = decodeBase64(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
@@ -379,12 +380,15 @@ function appendInternalResources(context: InternalResourceContext): void {
 }
 
 export async function exportFigFile(
-  graph: SceneGraph,
+  sourceGraph: SceneGraph,
   ck?: CanvasKit,
   renderer?: SkiaRenderer,
   pageId?: string,
   renderHeadlessThumbnail = false
 ): Promise<Uint8Array> {
+  // Lazy population synchronizes component trees and therefore mutates its graph. Saving must not
+  // rewrite the live editor document or restore component values over edits made by the user.
+  const graph = deserializeSceneGraph(structuredClone(serializeSceneGraph(sourceGraph)))
   populateAllLazyFigImportRoots(graph)
   await initCodec()
 
@@ -529,7 +533,7 @@ export async function exportFigFile(
   const kiwiData = compiled.encodeMessage(msg)
 
   const currentPageId = pageId ?? pages[0]?.id
-  const thumbnailPng = await renderFigThumbnail(
+  const thumbnailPNG = await renderFigThumbnail(
     graph,
     currentPageId,
     ck,
@@ -537,7 +541,7 @@ export async function exportFigFile(
     renderHeadlessThumbnail
   )
 
-  const metaJson = JSON.stringify({
+  const metaJSON = JSON.stringify({
     version: 1,
     app: 'OpenPencil',
     createdAt: new Date().toISOString()
@@ -553,15 +557,15 @@ export async function exportFigFile(
       await invoke<number[]>('build_fig_file', {
         schemaDeflated: Array.from(schemaDeflated),
         kiwiData: Array.from(kiwiData),
-        thumbnailPng: Array.from(thumbnailPng),
-        metaJson,
+        thumbnailPng: Array.from(thumbnailPNG),
+        metaJson: metaJSON,
         images: imageEntries.map((e) => ({ name: e.name, data: Array.from(e.data) })),
         figKiwiVersion: version
       })
     )
   }
 
-  return compressFigData(schemaDeflated, kiwiData, thumbnailPng, metaJson, imageEntries, version)
+  return compressFigData(schemaDeflated, kiwiData, thumbnailPNG, metaJSON, imageEntries, version)
 }
 
 export { compressFigDataSync } from '@open-pencil/fig'
@@ -573,8 +577,8 @@ function canUseWorker(): boolean {
 function compressViaWorker(
   schemaDeflated: Uint8Array,
   kiwiData: Uint8Array,
-  thumbnailPng: Uint8Array,
-  metaJson: string,
+  thumbnailPNG: Uint8Array,
+  metaJSON: string,
   imageEntries: Array<{ name: string; data: Uint8Array }>,
   figKiwiVersion?: number
 ): Promise<Uint8Array> {
@@ -599,8 +603,8 @@ function compressViaWorker(
     worker.postMessage({
       schemaDeflated,
       kiwiData,
-      thumbnailPng,
-      metaJson,
+      thumbnailPNG,
+      metaJSON,
       images: imageEntries,
       figKiwiVersion
     })
@@ -610,8 +614,8 @@ function compressViaWorker(
 export function compressFigData(
   schemaDeflated: Uint8Array,
   kiwiData: Uint8Array,
-  thumbnailPng: Uint8Array,
-  metaJson: string,
+  thumbnailPNG: Uint8Array,
+  metaJSON: string,
   imageEntries: Array<{ name: string; data: Uint8Array }>,
   figKiwiVersion?: number
 ): Promise<Uint8Array> {
@@ -619,8 +623,8 @@ export function compressFigData(
     return compressViaWorker(
       schemaDeflated,
       kiwiData,
-      thumbnailPng,
-      metaJson,
+      thumbnailPNG,
+      metaJSON,
       imageEntries,
       figKiwiVersion
     )
@@ -629,8 +633,8 @@ export function compressFigData(
     compressFigDataSync(
       schemaDeflated,
       kiwiData,
-      thumbnailPng,
-      metaJson,
+      thumbnailPNG,
+      metaJSON,
       imageEntries,
       figKiwiVersion
     )

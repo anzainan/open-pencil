@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { SceneGraph } from '@open-pencil/core'
-import { executeRpcCommand } from '@open-pencil/core/rpc'
+import { executeRPCCommand } from '@open-pencil/core/rpc'
 
 interface DescribeNode {
   id: string
@@ -55,7 +55,7 @@ function buildGraph(): SceneGraph {
 describe('RPC describe command (pure core, shared with MCP tool)', () => {
   test('describes a page into role/size/visual/layout + children', () => {
     const graph = buildGraph()
-    const result = executeRpcCommand(graph, 'describe', {}) as {
+    const result = executeRPCCommand(graph, 'describe', {}) as {
       page: { id: string; name: string }
       nodes: DescribeNode[]
     }
@@ -77,7 +77,7 @@ describe('RPC describe command (pure core, shared with MCP tool)', () => {
     const graph = buildGraph()
     const frameId = [...graph.getAllNodes()].find((n) => n.name === 'Card')?.id
     expect(frameId).toBeDefined()
-    const single = executeRpcCommand(graph, 'describe', { id: frameId }) as {
+    const single = executeRPCCommand(graph, 'describe', { id: frameId }) as {
       nodes: DescribeNode[]
     }
     expect(single.nodes).toHaveLength(1)
@@ -86,7 +86,7 @@ describe('RPC describe command (pure core, shared with MCP tool)', () => {
 
   test('returns error for unknown page', () => {
     const graph = buildGraph()
-    const result = executeRpcCommand(graph, 'describe', { page: 'Nope' }) as { error?: string }
+    const result = executeRPCCommand(graph, 'describe', { page: 'Nope' }) as { error?: string }
     expect(result.error).toContain('not found')
   })
 })

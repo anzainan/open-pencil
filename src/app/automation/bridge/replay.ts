@@ -11,16 +11,16 @@
  */
 import { applyAutomationTool } from '@/app/automation/bridge/apply'
 import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
-import { getPendingAiOps, withAiOpsLock } from '@/app/bridge/op-journal'
+import { getPendingAIOps, withAIOpsLock } from '@/app/bridge/op-journal'
 import type { EditorStore } from '@/app/editor/active-store'
 import { toast } from '@/app/shell/ui'
 
-export async function replayPendingAiOps(
+export async function replayPendingAIOps(
   store: EditorStore,
   tabId: string,
   docPath: string
 ): Promise<number> {
-  const ops = await getPendingAiOps(docPath)
+  const ops = await getPendingAIOps(docPath)
   if (ops.length === 0) return 0
   const pageId = store.state.currentPageId
   const pageName = store.graph.getNode(pageId)?.name ?? ''
@@ -35,7 +35,7 @@ export async function replayPendingAiOps(
   // 重放期间持锁：autosave 落盘不会插进重放中途清空 journal（已记录的待重放
   // 操作在重放完成并落盘前必须保留）。重放本身 journal:false，不会二次加锁。
   let failed = 0
-  await withAiOpsLock(docPath, async () => {
+  await withAIOpsLock(docPath, async () => {
     for (const op of ops) {
       const result = await applyAutomationTool(makeFigmaFromStore, target, op.tool, op.args, {
         journal: false,

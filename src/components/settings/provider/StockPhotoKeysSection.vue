@@ -8,9 +8,12 @@ import ProviderSettingsField from '@/components/settings/provider/ProviderSettin
 import ProviderSettingsKeyField from '@/components/settings/provider/ProviderSettingsKeyField.vue'
 
 const { dialogs } = useI18n()
-const { pexelsKeyStatus, serverPexelsConfigured, setPexelsKey } = useAIChat()
+const { pexelsKeyStatus, serverPexelsConfigured, setPexelsKey, unsplashKeyStatus, setUnsplashKey } =
+  useAIChat()
 const pexelsKeyInput = ref('')
+const unsplashKeyInput = ref('')
 const hasExistingPexelsKey = computed(() => pexelsKeyStatus.value === 'configured')
+const hasExistingUnsplashKey = computed(() => unsplashKeyStatus.value === 'configured')
 
 async function savePexelsKey(): Promise<void> {
   const value = pexelsKeyInput.value.trim()
@@ -19,9 +22,21 @@ async function savePexelsKey(): Promise<void> {
   pexelsKeyInput.value = ''
 }
 
+async function saveUnsplashKey(): Promise<void> {
+  const value = unsplashKeyInput.value.trim()
+  if (!value) return
+  await setUnsplashKey(value)
+  unsplashKeyInput.value = ''
+}
+
 async function clearPexelsKey(): Promise<void> {
   await setPexelsKey('')
   pexelsKeyInput.value = ''
+}
+
+async function clearUnsplashKey(): Promise<void> {
+  await setUnsplashKey('')
+  unsplashKeyInput.value = ''
 }
 </script>
 
@@ -44,4 +59,18 @@ async function clearPexelsKey(): Promise<void> {
       @change="savePexelsKey"
     />
   </template>
+
+  <ProviderSettingsKeyField
+    v-model="unsplashKeyInput"
+    :label="dialogs.unsplashAccessKey"
+    :saved="hasExistingUnsplashKey"
+    kind="unsplash"
+    :placeholder="
+      hasExistingUnsplashKey ? dialogs.keySavedReplace : dialogs.pexelsAlternativeOptional
+    "
+    key-u-r-l="https://unsplash.com/oauth/applications"
+    :key-u-r-l-label="dialogs.getUnsplashAccessKey"
+    @clear="clearUnsplashKey"
+    @change="saveUnsplashKey"
+  />
 </template>

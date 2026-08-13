@@ -15,13 +15,14 @@ import {
   writeStoragePreference
 } from '@/app/integrations/storage'
 import {
-  buildCorsConfigurationJson,
-  collectCloudCorsOrigins
+  buildCORSCConfigurationJSON,
+  collectCloudCORSOrigins
 } from '@/app/integrations/storage/s3/cors'
 import { appCredentialServices } from '@/app/settings/credentials/app'
 import { settingsDialogOpen } from '@/app/settings/dialog'
 import { credentialRef } from '@/app/settings/credentials/reference'
 import type { CredentialStatus } from '@/app/settings/credentials/types'
+import { toast } from '@/app/shell/ui'
 import { resumeStorageSync } from '@/app/storage/sync'
 import AppInput from '@/components/ui/AppInput.vue'
 
@@ -36,7 +37,6 @@ const preferenceDrafts = ref<Record<string, string>>({
 const credentialDrafts = ref<Record<string, string>>({})
 const credentialStatuses = ref<Record<string, CredentialStatus>>({})
 const busy = ref(false)
-const result = ref<{ ok: boolean; message: string } | null>(null)
 const configured = computed(
   () =>
     storagePreferencesComplete(provider.value.id) &&
@@ -93,25 +93,23 @@ function switchToWorkspace(): void {
   activeStorageProviderID.value = BRIDGE_STORAGE_PROVIDER.id
 }
 
-function copyCorsConfiguration(): void {
-  void copy(buildCorsConfigurationJson(collectCloudCorsOrigins()))
+function copyCORSCConfiguration(): void {
+  void copy(buildCORSCConfigurationJSON(collectCloudCORSOrigins()))
 }
 
 async function testConnection(): Promise<void> {
   busy.value = true
-  result.value = null
   try {
     savePreferences()
     for (const field of provider.value.credentialFields) {
       await saveCredential(field.id)
     }
     await resumeStorageSync()
-    result.value = await createActiveStorageAdapter(provider.value.id).testConnection()
+    const connection = await createActiveStorageAdapter(provider.value.id).testConnection()
+    if (connection.ok) toast.info(connection.message)
+    else toast.error(connection.message)
   } catch (error) {
-    result.value = {
-      ok: false,
-      message: error instanceof Error ? error.message : String(error)
-    }
+    toast.error(error instanceof Error ? error.message : String(error))
   } finally {
     busy.value = false
   }
@@ -120,7 +118,6 @@ async function testConnection(): Promise<void> {
 watch(activeStorageProviderID, (providerID) => {
   preferenceDrafts.value = { ...readStoragePreferences(providerID) }
   credentialDrafts.value = {}
-  result.value = null
   void refreshStatuses()
 })
 
@@ -246,7 +243,7 @@ onMounted(() => void refreshStatuses())
         v-if="provider.id === 's3-compatible'"
         type="button"
         class="rounded px-3 py-1.5 text-[11px] text-muted hover:bg-hover hover:text-surface"
-        @click="copyCorsConfiguration"
+        @click="copyCORSCConfiguration"
       >
         {{ copied ? dialogs.copied : dialogs.copyStorageCors }}
       </button>
@@ -261,14 +258,5 @@ onMounted(() => void refreshStatuses())
     >
       {{ dialogs.openStorageWorkspace }}
     </button>
-
-    <p
-      v-if="result"
-      class="rounded border border-border bg-panel px-2 py-1.5 text-[10px] text-muted data-[state=success]:text-success data-[state=error]:text-danger"
-      :data-state="result.ok ? 'success' : 'error'"
-      role="status"
-    >
-      {{ result.message }}
-    </p>
   </section>
 </template>

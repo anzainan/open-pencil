@@ -13,13 +13,13 @@ import { renderTreeNode } from '@open-pencil/core/design-jsx'
 import type { FigmaAPI } from '@open-pencil/core/figma-api'
 import { computeAllLayouts } from '@open-pencil/core/layout'
 import { ALL_TOOLS, appendPostComputeWarnings } from '@open-pencil/core/tools'
-import type { JsonObject } from '@open-pencil/scene-graph/primitives'
+import type { JSONObject } from '@open-pencil/scene-graph/primitives'
 
 import {
-  journalAppendAiOp,
+  journalAppendAIOp,
   journalDocPath,
-  removeAiOpsFrom,
-  withAiOpsLock
+  removeAIOpsFrom,
+  withAIOpsLock
 } from '@/app/bridge/op-journal'
 import { ensureGraphFonts } from '@/app/editor/fonts'
 import type { AutomationTarget } from '@/app/automation/bridge/target'
@@ -39,46 +39,46 @@ export interface ApplyToolOptions {
  * 避免 AI 批量操作 + autosave 回写 echo 的窄竞态触发画布重建屏闪。
  */
 const AI_ACTIVE_WINDOW_MS = 10_000
-let lastAutomationRpcAt = 0
+let lastAutomationRPCAt = 0
 /**
  * 写者归属感知守卫窗口（dev-batch8）：覆盖 AI 操作的落盘完成后多久内的磁盘
  * reload 一律跳过（含外部写 / 迟到 echo），把「纯时间窗」升级为「写者归属感知」。
  */
 const AI_FLUSH_GUARD_MS = 10_000
 /** 最近一次覆盖 AI 操作的落盘完成时间（write.ts 写盘成功路径标记，0 = 从未落盘）。 */
-let lastAiOpFlushCompleteAt = 0
+let lastAIOpFlushCompleteAt = 0
 
 /** 记录一次 automation RPC 调用（工具应用 / WS 请求）。 */
-export function markAutomationRpc(): void {
-  lastAutomationRpcAt = Date.now()
+export function markAutomationRPC(): void {
+  lastAutomationRPCAt = Date.now()
 }
 
 /** 当前是否处于 AI 活跃窗口（最近 windowMs 内有过 automation RPC 调用）。 */
-export function isAutomationRpcActive(windowMs: number = AI_ACTIVE_WINDOW_MS): boolean {
-  return Date.now() - lastAutomationRpcAt <= windowMs
+export function isAutomationRPCActive(windowMs: number = AI_ACTIVE_WINDOW_MS): boolean {
+  return Date.now() - lastAutomationRPCAt <= windowMs
 }
 
 /** 最近一次 automation RPC 调用时间（0 = 尚无调用）。 */
-export function getLastAutomationRpcAt(): number {
-  return lastAutomationRpcAt
+export function getLastAutomationRPCAt(): number {
+  return lastAutomationRPCAt
 }
 
 /** 标记一次覆盖 AI 操作的落盘已完成（write.ts 在写盘成功路径调用）。 */
-export function markAiOpFlushComplete(): void {
-  lastAiOpFlushCompleteAt = Date.now()
+export function markAIOpFlushComplete(): void {
+  lastAIOpFlushCompleteAt = Date.now()
 }
 
 /** 最近一次覆盖 AI 操作的落盘完成时间（0 = 从未落盘）。 */
-export function getLastAiOpFlushCompleteAt(): number {
-  return lastAiOpFlushCompleteAt
+export function getLastAIOpFlushCompleteAt(): number {
+  return lastAIOpFlushCompleteAt
 }
 
 /**
  * 写者归属感知守卫：距「覆盖 AI 操作的落盘完成」windowMs 内的磁盘 reload
  * 一律跳过（含外部写），无论是否匹配 selfWriteMtime 水印。
  */
-export function isAiOpFlushWindowActive(windowMs: number = AI_FLUSH_GUARD_MS): boolean {
-  return lastAiOpFlushCompleteAt > 0 && Date.now() - lastAiOpFlushCompleteAt <= windowMs
+export function isAIOpFlushWindowActive(windowMs: number = AI_FLUSH_GUARD_MS): boolean {
+  return lastAIOpFlushCompleteAt > 0 && Date.now() - lastAIOpFlushCompleteAt <= windowMs
 }
 
 export interface ApplyToolResult {
@@ -89,14 +89,14 @@ export interface ApplyToolResult {
 
 function extractNodeIds(result: unknown): string[] {
   if (!result || typeof result !== 'object') return []
-  const obj = result as JsonObject
+  const obj = result as JSONObject
   if (typeof obj.deleted === 'string') return []
   const ids: string[] = []
   if (typeof obj.id === 'string') ids.push(obj.id)
   if (Array.isArray(obj.results)) {
     for (const item of obj.results) {
-      if (item && typeof item === 'object' && typeof (item as JsonObject).id === 'string')
-        ids.push((item as JsonObject).id as string)
+      if (item && typeof item === 'object' && typeof (item as JSONObject).id === 'string')
+        ids.push((item as JSONObject).id as string)
     }
   }
   return ids
@@ -128,7 +128,7 @@ async function finishMutating(
   let journalSeq: number | null = null
   if (options.journal && docPath) {
     try {
-      journalSeq = await journalAppendAiOp(store, name, toolArgs)
+      journalSeq = await journalAppendAIOp(store, name, toolArgs)
     } catch (e) {
       console.warn('[collab] failed to journal op', name, e instanceof Error ? e.message : e)
     }
@@ -142,7 +142,7 @@ async function finishMutating(
         store.restorePageFromSnapshot(after)
         if (docPath && journalSeq != null) {
           // Redo restores the op to the graph → make it loss-protected again.
-          void withAiOpsLock(docPath, () => journalAppendAiOp(store, name, toolArgs)).catch(
+          void withAIOpsLock(docPath, () => journalAppendAIOp(store, name, toolArgs)).catch(
             () => undefined
           )
         }
@@ -152,7 +152,7 @@ async function finishMutating(
         if (docPath && journalSeq != null) {
           // Undo removes the op's effect → drop its journal records so replay
           // cannot resurrect it.
-          void withAiOpsLock(docPath, () => removeAiOpsFrom(docPath, journalSeq)).catch(
+          void withAIOpsLock(docPath, () => removeAIOpsFrom(docPath, journalSeq)).catch(
             () => undefined
           )
         }
@@ -174,7 +174,7 @@ export async function applyAutomationTool(
   toolArgs: Record<string, unknown>,
   options: ApplyToolOptions = {}
 ): Promise<ApplyToolResult> {
-  markAutomationRpc()
+  markAutomationRPC()
   const store = target.store
   // Journaling ops hold the document lock for the whole "mutate + append" span so
   // no autosave write can serialize/clear in the middle (see op-journal header).
@@ -236,5 +236,5 @@ export async function applyAutomationTool(
     }
   }
 
-  return withAiOpsLock(docPath, apply)
+  return withAIOpsLock(docPath, apply)
 }

@@ -19,3 +19,4 @@ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
     return { ok: true, result: result.result }
   }
 }
+

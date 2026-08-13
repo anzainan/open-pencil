@@ -10,7 +10,7 @@ import * as Labels from '#core/canvas/labels/draw'
 import * as NodeEditOverlay from '#core/canvas/node-edit-overlay'
 import type { NodeEditOverlayState } from '#core/canvas/node-edit-overlay'
 import * as Overlays from '#core/canvas/overlays'
-import * as AiOverlays from '#core/canvas/overlays/ai'
+import * as AIOverlays from '#core/canvas/overlays/ai'
 import * as PenOverlay from '#core/canvas/pen-overlay'
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import type { RenderOverlays } from '#core/canvas/renderer/types'
@@ -86,7 +86,7 @@ const rendererMethods: ThisType<SkiaRenderer> = {
 
   drawFlashes(canvas: Canvas, graph: SceneGraph): void {
     Overlays.drawFlashes(this, canvas, graph)
-    AiOverlays.drawAiOverlays(this, canvas, graph)
+    AIOverlays.drawAIOverlays(this, canvas, graph)
   },
 
   drawLayoutInsertIndicator(
@@ -151,9 +151,19 @@ const rendererMethods: ThisType<SkiaRenderer> = {
     nodeId: string,
     overlays: RenderOverlays,
     parentAbsX?: number,
-    parentAbsY?: number
+    parentAbsY?: number,
+    hasTransformedAncestor?: boolean
   ): void {
-    SceneRender.renderNode(this, canvas, graph, nodeId, overlays, parentAbsX, parentAbsY)
+    SceneRender.renderNode(
+      this,
+      canvas,
+      graph,
+      nodeId,
+      overlays,
+      parentAbsX,
+      parentAbsY,
+      hasTransformedAncestor
+    )
   },
 
   renderSection(canvas: Canvas, node: SceneNode, graph: SceneGraph): void {

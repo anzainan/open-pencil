@@ -9,6 +9,6 @@
  * initialized first, so the JSX grammar registers on the same instance that
  * `import Prism from 'prismjs'` returns. See phase-state/prism-fix.md.
  */
-export function loadJsxGrammar(): Promise<void> {
+export function loadJSXGrammar(): Promise<void> {
   return import('prismjs/components/prism-jsx').then(() => undefined)
 }

@@ -7,7 +7,7 @@
 import { AUTOMATION_HTTP_PORT } from '@open-pencil/core/constants'
 import { randomHex } from '@open-pencil/core/random'
 
-import { markAutomationRpc } from '@/app/automation/bridge/apply'
+import { markAutomationRPC } from '@/app/automation/bridge/apply'
 import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { createAutomationCommandHandlers } from '@/app/automation/bridge/handlers'
 import type { EditorStore } from '@/app/editor/active-store'
@@ -18,7 +18,7 @@ export function connectAutomation(
   options?: { wsPath?: string }
 ) {
   const token = authToken ?? randomHex(32)
-  const wsUrl = options?.wsPath ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${options.wsPath}` : `ws://127.0.0.1:${AUTOMATION_HTTP_PORT}`
+  const wsURL = options?.wsPath ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${options.wsPath}` : `ws://127.0.0.1:${AUTOMATION_HTTP_PORT}`
   let ws: WebSocket | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined
   let intentionalDisconnect = false
@@ -29,7 +29,7 @@ export function connectAutomation(
     createAutomationCommandHandlers(makeFigmaFromStore)
 
   async function handleRequest(_id: string, command: string, args: unknown): Promise<unknown> {
-    markAutomationRpc()
+    markAutomationRPC()
     const result = await handleAutomationRequest(getStore(), command, args)
     // 重建后首个响应通知 MCP 侧：旧 id 缓存已失效，AI 应重取 get_page_tree。
     if (graphReplacedPending) {
@@ -57,7 +57,7 @@ export function connectAutomation(
   function connect() {
     let socket: WebSocket
     try {
-      socket = new WebSocket(wsUrl)
+      socket = new WebSocket(wsURL)
       ws = socket
     } catch (e) {
       console.error(
