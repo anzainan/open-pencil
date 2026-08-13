@@ -43,22 +43,22 @@ function onClear() {
 <template>
   <PopoverRoot :open="open" @update:open="onOpenChange">
     <PopoverTrigger as-child>
-      <Tip :label="dialogs.notifications">
-        <button
-          type="button"
-          class="relative flex size-7 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
-          data-test-id="home-notifications"
-          :aria-label="dialogs.notifications"
-        >
+      <button
+        type="button"
+        class="relative flex size-7 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+        data-test-id="home-notifications"
+        :aria-label="dialogs.notifications"
+      >
+        <Tip :label="dialogs.notifications">
           <icon-lucide-bell class="size-3.5" />
-          <span
-            v-if="hasUnread"
-            class="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-error"
-            :aria-label="String(unreadCount)"
-            aria-hidden="false"
-          />
-        </button>
-      </Tip>
+        </Tip>
+        <span
+          v-if="hasUnread"
+          class="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-error"
+          :aria-label="String(unreadCount)"
+          aria-hidden="false"
+        />
+      </button>
     </PopoverTrigger>
 
     <PopoverPortal>
