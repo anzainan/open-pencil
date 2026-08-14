@@ -13,6 +13,7 @@ import {
 import { EventBus, FileWatcher, sseResponse } from './lib/events'
 import { createMcpProxy, type McpProxyHandle } from './mcp-proxy'
 import { handleMcpRequest, type McpDeps } from './mcp'
+import { AuthStore, isAdminRole, type User, type UserRole } from './lib/auth'
 import { Manifest } from './lib/manifest'
 import {
   ALLOWED_DESIGN_EXTENSIONS,
@@ -240,14 +241,34 @@ function methodNotAllowed(): Response {
 
 /** 校验写操作鉴权。返回 null 表示通过，否则返回拒绝响应。 */
 function checkAuth(request: Request, token: string): Response | null {
-  if (!token) {
-    return json({ ok: false, error: 'BRIDGE_TOKEN not configured on server' }, 401)
-  }
   const header = request.headers.get('authorization') ?? ''
-  if (!constantTimeEqual(header, `Bearer ${token}`)) {
-    return json({ ok: false, error: 'Unauthorized' }, 401)
-  }
-  return null
+  if (token && constantTimeEqual(header, `Bearer ${token}`)) return null
+  // checkAuth 升级（Phase A）：BRIDGE_TOKEN 或有效 session token 二选一。
+  if (authStore && sessionUser(request)) return null
+  return json({ ok: false, error: 'Unauthorized' }, 401)
+}
+
+// ---- 账号会话（Phase A：登录/成员）。checkAuth 与登录态路由共享。 ----
+let authStore: AuthStore | null = null
+
+function bearerToken(request: Request): string {
+  const header = request.headers.get('authorization') ?? ''
+  return header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : ''
+}
+
+/** 从 Authorization: Bearer <session-token> 解析当前登录用户（无/失效返回 null）。 */
+function sessionUser(request: Request): User | null {
+  if (!authStore) return null
+  const token = bearerToken(request)
+  if (!token) return null
+  return authStore.getSessionUser(token)
+}
+
+/** 登录态用户（非 owner/admin 返回 null）。 */
+function adminUser(request: Request): User | null {
+  const user = sessionUser(request)
+  if (!user || !isAdminRole(user.role)) return null
+  return user
 }
 
 export function startServer(options: BridgeServerOptions) {
@@ -261,6 +282,8 @@ export function startServer(options: BridgeServerOptions) {
 
   const state = new StateStore(stateDir)
   const bus = new EventBus(SSE_PING_MS)
+  // 账号/会话台账（Phase A）：users.json seed 默认管理员，sessions.json 跨容器持久化。
+  authStore = new AuthStore(designRoot)
   // homepage 可见性白名单台账：只展示经首页/工作区创建链路登记的内容（方案 A）。
   const manifest = new Manifest(designRoot)
   const watcher = new FileWatcher(
@@ -648,6 +671,107 @@ export function startServer(options: BridgeServerOptions) {
     return json({ recents: state.getRecent() })
   }
 
+  // ---- 账号会话与成员管理（Phase A：登录 / session 恢复 / 成员 CRUD）----
+
+  async function login(request: Request): Promise<Response> {
+    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
+    let payload: { name?: unknown; password?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const name = typeof payload.name === 'string' ? payload.name.trim() : ''
+    const password = typeof payload.password === 'string' ? payload.password : ''
+    if (!name || !password) return json({ ok: false, error: 'name and password are required' }, 400)
+    const user = authStore.verifyCredentials(name, password)
+    if (!user) return json({ ok: false, error: 'invalid credentials' }, 401)
+    const token = authStore.createSession(user.id)
+    return json({ token, user: authStore.toPublicUser(user) })
+  }
+
+  function logout(request: Request): Response {
+    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
+    const token = bearerToken(request)
+    if (!token || !authStore.getSessionUser(token)) {
+      return json({ ok: false, error: 'Unauthorized' }, 401)
+    }
+    authStore.destroySession(token)
+    return json({ ok: true })
+  }
+
+  function session(request: Request): Response {
+    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
+    const user = sessionUser(request)
+    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+    return json({ user: authStore.toPublicUser(user) })
+  }
+
+  function listMembers(): Response {
+    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
+    return json({ members: authStore.listUsers() })
+  }
+
+  async function createMember(request: Request): Promise<Response> {
+    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
+    let payload: { name?: unknown; password?: unknown; role?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const name = typeof payload.name === 'string' ? payload.name.trim() : ''
+    const password = typeof payload.password === 'string' ? payload.password : ''
+    const role = payload.role === 'admin' || payload.role === 'member' ? payload.role : 'member'
+    const result = authStore.createUser({ name, password, role })
+    if (!result.ok) {
+      if (result.error.startsWith('user already exists')) {
+        return json({ ok: false, error: result.error }, 409)
+      }
+      return json({ ok: false, error: result.error }, 400)
+    }
+    // 添加成员返回含明文密码（「添加并复制」用）；其余场景密码字段绝不出现在响应里。
+    return json({ user: result.user, password: result.password }, 201)
+  }
+
+  async function updateMember(request: Request, id: string): Promise<Response> {
+    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
+    let payload: { password?: unknown; role?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const input: { password?: string; role?: UserRole } = {}
+    if (typeof payload.password === 'string') input.password = payload.password
+    if (payload.role === 'admin' || payload.role === 'member') input.role = payload.role
+    if (input.password === undefined && input.role === undefined) {
+      return json({ ok: false, error: 'nothing to update' }, 400)
+    }
+    // owner 拒绝修改（不区分 admin 提权，直接 403）。
+    if (authStore.isOwner(id)) return json({ ok: false, error: 'owner cannot be modified' }, 403)
+    const result = authStore.updateUser(id, input)
+    if (!result.ok) {
+      return result.error === 'not found'
+        ? json({ ok: false, error: result.error }, 404)
+        : json({ ok: false, error: result.error }, 400)
+    }
+    return json({ user: result.user })
+  }
+
+  function deleteMember(id: string): Response {
+    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
+    // owner 拒绝删除（固定账号，REQ §2.5）。
+    if (authStore.isOwner(id)) return json({ ok: false, error: 'owner cannot be removed' }, 403)
+    const result = authStore.deleteUser(id)
+    if (!result.ok) {
+      return result.error === 'not found'
+        ? json({ ok: false, error: result.error }, 404)
+        : json({ ok: false, error: result.error }, 400)
+    }
+    return json({ deleted: true })
+  }
+
   // ---- 路由 ----
 
   async function route(
@@ -885,6 +1009,58 @@ export function startServer(options: BridgeServerOptions) {
       if (method === 'PUT') return saveFile(request, rel, true)
       if (method === 'POST') return saveFile(request, rel, false)
       if (method === 'DELETE') return deleteFile(rel)
+      return methodNotAllowed()
+    }
+
+    // ---- 账号会话与成员管理（Phase A）----
+
+    if (path === '/api/v1/auth/login') {
+      if (method !== 'POST') return methodNotAllowed()
+      return login(request)
+    }
+
+    if (path === '/api/v1/auth/logout') {
+      if (method !== 'POST') return methodNotAllowed()
+      return logout(request)
+    }
+
+    if (path === '/api/v1/auth/session') {
+      if (method !== 'GET') return methodNotAllowed()
+      return session(request)
+    }
+
+    if (path === '/api/v1/members') {
+      if (method === 'GET') {
+        const user = sessionUser(request)
+        if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+        return listMembers()
+      }
+      if (method === 'POST') {
+        // 成员权限：仅管理员和所有者可操作。
+        const user = adminUser(request)
+        if (!user) {
+          return sessionUser(request)
+            ? json({ ok: false, error: 'Forbidden' }, 403)
+            : json({ ok: false, error: 'Unauthorized' }, 401)
+        }
+        return createMember(request)
+      }
+      return methodNotAllowed()
+    }
+
+    const memberMatch = path.match(/^\/api\/v1\/members\/(.+)$/)
+    if (memberMatch) {
+      const raw = memberMatch[1]
+      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
+      const user = adminUser(request)
+      if (!user) {
+        return sessionUser(request)
+          ? json({ ok: false, error: 'Forbidden' }, 403)
+          : json({ ok: false, error: 'Unauthorized' }, 401)
+      }
+      const id = decodeURIComponent(raw)
+      if (method === 'PATCH') return updateMember(request, id)
+      if (method === 'DELETE') return deleteMember(id)
       return methodNotAllowed()
     }
 

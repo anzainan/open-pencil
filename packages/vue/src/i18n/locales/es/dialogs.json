@@ -287,5 +287,17 @@
   "dismiss": "Descartar",
   "toolRunning": "Ejecutando…",
   "toolError": "Error",
-  "permissionRequestTitle": "Solicitud de permiso"
+  "permissionRequestTitle": "Solicitud de permiso",
+  "login.title": "Pizarra de colaboración en la nube",
+  "login.username": "Nombre de usuario",
+  "login.password": "Contraseña",
+  "login.remember": "Recordar sesión",
+  "login.submit": "Iniciar sesión",
+  "login.error": "No se pudo iniciar sesión. Comprueba el usuario y la contraseña.",
+  "login.footer1": "Los datos se guardan en el espacio de trabajo local; no se necesita cuenta en la nube",
+  "login.footer2": "La información de inicio de sesión solo se almacena en este navegador",
+  "logout.title": "¿Cerrar sesión?",
+  "logout.desc": "Al cerrar sesión, se borrará la información de inicio de sesión guardada en este navegador.",
+  "logout.confirm": "Cerrar sesión",
+  "logout.cancel": "Cancelar"
 }

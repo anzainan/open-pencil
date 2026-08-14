@@ -1,3 +1,5 @@
+import { getSessionToken } from '@/app/auth/session'
+
 export const BRIDGE_PROVIDER_ID = 'bridge-fs'
 
 const DEFAULT_API_BASE = '/api/v1'
@@ -77,6 +79,12 @@ function encodeRelPath(path: string): string {
     .join('/')
 }
 
+/** 写接口鉴权（Phase A）：优先用登录 session token，否则退回 BRIDGE_TOKEN。 */
+function authHeader(): string | null {
+  const session = getSessionToken()
+  return session ? `Bearer ${session}` : null
+}
+
 /**
  * file-bridge 浏览器客户端：REST 文件/状态 API + SSE 事件订阅 + 事件去重/防抖。
  * 供 storage provider、保存/重载管线、文件列表页共用。无外部依赖，可直接单测。
@@ -130,6 +138,8 @@ export class BridgeClient {
   }
 
   private async authHeaders(): Promise<Record<string, string>> {
+    const sessionHeader = authHeader()
+    if (sessionHeader) return { Authorization: sessionHeader }
     const token = await this.getToken()
     return token ? { Authorization: `Bearer ${token}` } : {}
   }

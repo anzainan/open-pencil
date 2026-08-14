@@ -287,5 +287,17 @@
   "dismiss": "关闭",
   "toolRunning": "正在运行…",
   "toolError": "错误",
-  "permissionRequestTitle": "权限请求"
+  "permissionRequestTitle": "权限请求",
+  "login.title": "云端协作白板",
+  "login.username": "用户名",
+  "login.password": "密码",
+  "login.remember": "记住登录状态",
+  "login.submit": "登录",
+  "login.error": "登录失败，请检查用户名和密码",
+  "login.footer1": "数据保存在本地工作区，无需云端账号",
+  "login.footer2": "登录信息仅存储于当前浏览器",
+  "logout.title": "确定要退出登录吗？",
+  "logout.desc": "退出后将清除此浏览器中保存的登录信息",
+  "logout.confirm": "退出登录",
+  "logout.cancel": "取消"
 }

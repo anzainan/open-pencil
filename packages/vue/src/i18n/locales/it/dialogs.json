@@ -287,5 +287,17 @@
   "dismiss": "Chiudi",
   "toolRunning": "Esecuzione…",
   "toolError": "Errore",
-  "permissionRequestTitle": "Richiesta di autorizzazione"
+  "permissionRequestTitle": "Richiesta di autorizzazione",
+  "login.title": "Lavagna collaborativa nel cloud",
+  "login.username": "Nome utente",
+  "login.password": "Password",
+  "login.remember": "Ricorda l'accesso",
+  "login.submit": "Accedi",
+  "login.error": "Accesso non riuscito. Controlla nome utente e password.",
+  "login.footer1": "I dati sono salvati nello spazio di lavoro locale — nessun account cloud richiesto",
+  "login.footer2": "Le informazioni di accesso sono memorizzate solo in questo browser",
+  "logout.title": "Disconnettersi?",
+  "logout.desc": "Dopo la disconnessione, le informazioni di accesso salvate in questo browser verranno cancellate.",
+  "logout.confirm": "Esci",
+  "logout.cancel": "Annulla"
 }

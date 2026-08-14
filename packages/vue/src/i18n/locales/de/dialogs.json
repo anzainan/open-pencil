@@ -287,5 +287,17 @@
   "dismiss": "Schließen",
   "toolRunning": "Wird ausgeführt…",
   "toolError": "Fehler",
-  "permissionRequestTitle": "Berechtigungsanfrage"
+  "permissionRequestTitle": "Berechtigungsanfrage",
+  "login.title": "Cloud-Kollaborations-Whiteboard",
+  "login.username": "Benutzername",
+  "login.password": "Passwort",
+  "login.remember": "Anmeldung merken",
+  "login.submit": "Anmelden",
+  "login.error": "Anmeldung fehlgeschlagen. Prüfe Benutzername und Passwort.",
+  "login.footer1": "Daten werden im lokalen Arbeitsbereich gespeichert — kein Cloud-Konto nötig",
+  "login.footer2": "Anmeldedaten werden nur in diesem Browser gespeichert",
+  "logout.title": "Abmelden?",
+  "logout.desc": "Nach dem Abmelden werden die in diesem Browser gespeicherten Anmeldedaten gelöscht.",
+  "logout.confirm": "Abmelden",
+  "logout.cancel": "Abbrechen"
 }

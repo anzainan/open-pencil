@@ -287,5 +287,17 @@
   "dismiss": "閉じる",
   "toolRunning": "実行中…",
   "toolError": "エラー",
-  "permissionRequestTitle": "権限リクエスト"
+  "permissionRequestTitle": "権限リクエスト",
+  "login.title": "クラウド共同作業ホワイトボード",
+  "login.username": "ユーザー名",
+  "login.password": "パスワード",
+  "login.remember": "ログイン状態を記憶",
+  "login.submit": "ログイン",
+  "login.error": "ログインに失敗しました。ユーザー名とパスワードを確認してください。",
+  "login.footer1": "データはローカルワークスペースに保存されます。クラウドアカウントは不要です",
+  "login.footer2": "ログイン情報はこのブラウザにのみ保存されます",
+  "logout.title": "ログアウトしますか？",
+  "logout.desc": "ログアウトすると、このブラウザに保存されたログイン情報が削除されます。",
+  "logout.confirm": "ログアウト",
+  "logout.cancel": "キャンセル"
 }

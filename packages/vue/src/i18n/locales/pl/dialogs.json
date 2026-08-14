@@ -287,5 +287,17 @@
   "dismiss": "Zamknij",
   "toolRunning": "Uruchamianie…",
   "toolError": "Błąd",
-  "permissionRequestTitle": "Prośba o uprawnienie"
+  "permissionRequestTitle": "Prośba o uprawnienie",
+  "login.title": "Chmura współpracy — tablica",
+  "login.username": "Nazwa użytkownika",
+  "login.password": "Hasło",
+  "login.remember": "Zapamiętaj logowanie",
+  "login.submit": "Zaloguj się",
+  "login.error": "Logowanie nie powiodło się. Sprawdź nazwę użytkownika i hasło.",
+  "login.footer1": "Dane są przechowywane w lokalnym obszarze roboczym — konto w chmurze nie jest potrzebne",
+  "login.footer2": "Informacje logowania są przechowywane tylko w tej przeglądarce",
+  "logout.title": "Wylogować się?",
+  "logout.desc": "Po wylogowaniu informacje logowania zapisane w tej przeglądarce zostaną usunięte.",
+  "logout.confirm": "Wyloguj się",
+  "logout.cancel": "Anuluj"
 }
