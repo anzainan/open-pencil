@@ -307,6 +307,7 @@
   "perm.requestDesc": "Vous n'avez pas l'autorisation de modifier ce fichier. Souhaitez-vous la demander à un administrateur ?",
   "perm.requestConfirm": "Demander l'autorisation",
   "perm.requestSent": "Demande envoyée — en attente d'approbation",
+  "perm.editGranted": "Autorisation de modification accordée — vous pouvez maintenant éditer",
   "share.title": "Partager le fichier",
   "share.scope.internet": "Tout le monde sur Internet",
   "share.scope.team": "Membres de l'équipe",

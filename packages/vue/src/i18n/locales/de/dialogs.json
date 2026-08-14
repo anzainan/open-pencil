@@ -307,6 +307,7 @@
   "perm.requestDesc": "Sie haben keine Bearbeitungsrechte für diese Datei. Möchten Sie sie bei einem Administrator anfordern?",
   "perm.requestConfirm": "Berechtigung anfordern",
   "perm.requestSent": "Anfrage gesendet — warten auf Genehmigung durch den Administrator",
+  "perm.editGranted": "Bearbeitungsrechte erteilt — Sie können jetzt bearbeiten",
   "share.title": "Datei teilen",
   "share.scope.internet": "Jeder im Internet",
   "share.scope.team": "Teammitglieder",

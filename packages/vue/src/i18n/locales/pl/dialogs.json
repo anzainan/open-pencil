@@ -307,6 +307,7 @@
   "perm.requestDesc": "Nie masz uprawnień do edycji tego pliku. Czy chcesz poprosić o nie administratora?",
   "perm.requestConfirm": "Poproś o uprawnienia",
   "perm.requestSent": "Prośba wysłana — oczekiwanie na zatwierdzenie",
+  "perm.editGranted": "Przyznano uprawnienia do edycji — możesz teraz edytować",
   "share.title": "Udostępnij plik",
   "share.scope.internet": "Każdy w internecie",
   "share.scope.team": "Członkowie zespołu",

@@ -3,8 +3,9 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@open-pencil/vue'
 
-import mobaiLogo from '@/assets/mobai-logo.svg'
+import { refreshMediaCredentials } from '@/app/ai/chat/storage'
 import { login } from '@/app/auth/session'
+import mobaiLogo from '@/assets/mobai-logo.svg'
 
 defineOptions({ name: 'LoginView' })
 
@@ -25,6 +26,9 @@ async function submit(): Promise<void> {
   errorMessage.value = null
   try {
     await login(username.value.trim(), password.value, remember.value)
+    // B4：登录后才可读取 /config 的 pexelsKey —— 主动刷新媒体凭证状态，
+    // 避免模块级 credentialsReady 在登录前已判定「未配置」导致 Pexels 显示输入框。
+    await refreshMediaCredentials()
     await router.push('/')
   } catch (error) {
     const message = error instanceof Error ? error.message : ''

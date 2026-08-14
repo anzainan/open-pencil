@@ -277,6 +277,7 @@ export const dialogMessageDefaults = {
     'You don\u2019t have edit permission for this file. Would you like to request it from an admin?',
   'perm.requestConfirm': 'Request permission',
   'perm.requestSent': 'Request sent — waiting for admin approval',
+  'perm.editGranted': 'Edit permission granted — you can now edit',
   'share.title': 'Share file',
   'share.scope.internet': 'Anyone on the internet',
   'share.scope.team': 'Team members',

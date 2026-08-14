@@ -14,6 +14,8 @@ import {
   designProviderID,
   modelConnectionCredentialRef
 } from '@/app/ai/models'
+import { restoreSession } from '@/app/auth/session'
+import { authHeader } from '@/app/bridge/client'
 import { appCredentialServices, browserCredentialsRemembered } from '@/app/settings/credentials/app'
 import {
   initializeCredentialMigration,
@@ -62,10 +64,17 @@ export async function refreshAIProviderStatus(): Promise<void> {
   apiKeyStatus.value = reference ? await refreshStatus(reference) : 'missing'
 }
 
-async function refreshMediaCredentials(): Promise<void> {
-  // 云端兜底：先从 file-bridge config 获取服务端配置的 key
+export async function refreshMediaCredentials(): Promise<void> {
+  // 云端兜底：先从 file-bridge config 获取服务端配置的 key。
+  // B4：/config 仅登录态下发 pexelsKey（Phase C 收紧）——请求前先等登录恢复
+  // （restoreSession 幂等，复用 B2 启动时序模式）并携带 session token，否则云端
+  // 已配置会被恒判「未配置」→ 设置-媒体 Pexels 状态回归成输入框。
+  await restoreSession()
+  const sessionHeader = authHeader()
   try {
-    const res = await fetch('/api/v1/config')
+    const res = await fetch('/api/v1/config', {
+      headers: sessionHeader ? { Authorization: sessionHeader } : {}
+    })
     if (res.ok) {
       const cfg = await res.json()
       if (cfg.pexelsKey) {

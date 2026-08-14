@@ -307,6 +307,7 @@
   "perm.requestDesc": "このファイルの編集権限がありません。管理者にリクエストしますか？",
   "perm.requestConfirm": "権限をリクエスト",
   "perm.requestSent": "リクエストを送信しました。管理者の承認をお待ちください",
+  "perm.editGranted": "編集権限が付与されました — これで編集できます",
   "share.title": "ファイルを共有",
   "share.scope.internet": "インターネット上の誰でも",
   "share.scope.team": "チームメンバー",

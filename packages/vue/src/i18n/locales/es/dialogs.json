@@ -307,6 +307,7 @@
   "perm.requestDesc": "No tienes permiso de edición para este archivo. ¿Quieres solicitarlo a un administrador?",
   "perm.requestConfirm": "Solicitar permiso",
   "perm.requestSent": "Solicitud enviada — esperando la aprobación del administrador",
+  "perm.editGranted": "Permiso de edición concedido — ya puede editar",
   "share.title": "Compartir archivo",
   "share.scope.internet": "Cualquiera en internet",
   "share.scope.team": "Miembros del equipo",

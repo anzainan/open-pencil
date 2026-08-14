@@ -307,6 +307,7 @@
   "perm.requestDesc": "你没有此文件的编辑权限，是否向管理员申请？",
   "perm.requestConfirm": "申请权限",
   "perm.requestSent": "申请已发送，等待管理员批准",
+  "perm.editGranted": "已获得编辑权限，现在可以编辑",
   "share.title": "分享文件",
   "share.scope.internet": "互联网上的任何人",
   "share.scope.team": "团队成员",
