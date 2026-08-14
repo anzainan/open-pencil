@@ -16,6 +16,12 @@ import { handleMcpRequest, type McpDeps } from './mcp'
 import { AuthStore, isAdminRole, type User, type UserRole } from './lib/auth'
 import { NotificationStore } from './lib/notifications'
 import { PermissionStore } from './lib/permissions'
+import {
+  generateRandomPassword,
+  ShareStore,
+  type SharePermission,
+  type ShareScope
+} from './lib/share'
 import { Manifest } from './lib/manifest'
 import {
   ALLOWED_DESIGN_EXTENSIONS,
@@ -289,6 +295,8 @@ export function startServer(options: BridgeServerOptions) {
   // 权限台账 + 通知台账（Phase B）：permissions.json 权限引擎，notifications.json 权限申请落库。
   const permissions = new PermissionStore(designRoot)
   const notifications = new NotificationStore(designRoot)
+  // 外链台账（Phase C）：share.json 存外链（token/密码/internet scope），成员权限仍走 permissions.json。
+  const shares = new ShareStore(designRoot)
   // homepage 可见性白名单台账：只展示经首页/工作区创建链路登记的内容（方案 A）。
   const manifest = new Manifest(designRoot)
   const watcher = new FileWatcher(
@@ -788,7 +796,10 @@ export function startServer(options: BridgeServerOptions) {
     if (path !== '' && !isSafeWorkspaceRelPath(path)) {
       return json({ ok: false, error: 'invalid path' }, 400)
     }
-    return json(permissions.resolvePermission(path, user))
+    const resolved = permissions.resolvePermission(path, user)
+    // Phase C：附带最近命中 entry 的成员列表（分享面板成员行用：文件级优先，否则父文件夹继承）。
+    const entry = permissions.getEntryForPath(path)
+    return json({ ...resolved, members: entry?.members ?? [], membersPath: entry?.path ?? '' })
   }
 
   /** 无编辑权用户申请编辑权限 → 通知 owner + 所有 admin（同人同路径未读去重）。 */
@@ -823,6 +834,214 @@ export function startServer(options: BridgeServerOptions) {
     return json({ ok: true, sent: recipients.length })
   }
 
+  // ---- 分享/外链（Phase C：真实台账 + 游客外链 + P0 安全收紧）----
+
+  const SHARE_BASE_URL = 'https://anzainan.iepose.cn'
+
+  function shareUrl(token: string): string {
+    return `${SHARE_BASE_URL}/share/${token}`
+  }
+
+  /** 外链对外视图：绝不暴露密码哈希；非 internet 范围不出 token/url（外链不可访问）。 */
+  function shareView(link: {
+    path: string
+    scope: ShareScope
+    permission: SharePermission
+    passwordHash: string | null
+    token: string
+    members: { userId: string; permission: 'view' | 'edit' | 'none' }[]
+    createdBy: string
+    createdAt: string
+  }): Record<string, unknown> {
+    return {
+      path: link.path,
+      scope: link.scope,
+      permission: link.permission,
+      passwordEnabled: link.passwordHash !== null,
+      token: link.scope === 'internet' ? link.token : null,
+      url: link.scope === 'internet' ? shareUrl(link.token) : null,
+      members: link.members,
+      createdBy: link.createdBy,
+      createdAt: link.createdAt
+    }
+  }
+
+  /** admin 判定通用返回：无 session → 401；非 admin 登录 → 403。 */
+  function adminDenied(request: Request): Response {
+    return sessionUser(request)
+      ? json({ ok: false, error: 'Forbidden' }, 403)
+      : json({ ok: false, error: 'Unauthorized' }, 401)
+  }
+
+  /** GET /api/v1/share?path= → 该文件分享设置（login；无 → 默认空）。 */
+  function getShare(request: Request): Response {
+    const user = sessionUser(request)
+    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+    const url = new URL(request.url)
+    const path = url.searchParams.get('path') ?? ''
+    if (path !== '' && !isSafeWorkspaceRelPath(path)) {
+      return json({ ok: false, error: 'invalid path' }, 400)
+    }
+    const link = shares.getLink(path)
+    if (!link) {
+      return json({
+        exists: false,
+        path,
+        scope: 'self',
+        permission: 'view',
+        passwordEnabled: false,
+        token: null,
+        url: null,
+        members: []
+      })
+    }
+    return json({ exists: true, ...shareView(link) })
+  }
+
+  /**
+   * POST /api/v1/share（admin）→ {path, scope, permission, password?}。
+   * scope=internet → 生成/保留外链 token + url；scope 非 internet → 不开放外链（verify 返回 closed）。
+   * password 语义：不传 = 保留原密码；'' = 清空密码；非空字符串 = 设置新密码。
+   */
+  async function createShare(request: Request): Promise<Response> {
+    const user = adminUser(request)
+    if (!user) return adminDenied(request)
+    let payload: { path?: unknown; scope?: unknown; permission?: unknown; password?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const path = typeof payload.path === 'string' ? payload.path.trim() : ''
+    if (path === '' || !isSafeWorkspaceRelPath(path)) {
+      return json({ ok: false, error: 'invalid path' }, 400)
+    }
+    const scope: ShareScope =
+      payload.scope === 'internet' || payload.scope === 'team' || payload.scope === 'self'
+        ? payload.scope
+        : 'team'
+    const permission: SharePermission = payload.permission === 'edit' ? 'edit' : 'view'
+
+    let password: string | null | undefined
+    if (payload.password === undefined) {
+      password = undefined // 保留原密码
+    } else if (typeof payload.password === 'string') {
+      password = payload.password === '' ? 'clear' : payload.password
+    } else {
+      return json({ ok: false, error: 'invalid password' }, 400)
+    }
+
+    const link = shares.upsertLink(path, { scope, permission, password }, user.id)
+    return json({ ok: true, link: shareView(link) })
+  }
+
+  /** DELETE /api/v1/share?path= → 关闭分享（删外链）。 */
+  function deleteShare(request: Request): Response {
+    const user = adminUser(request)
+    if (!user) return adminDenied(request)
+    const url = new URL(request.url)
+    const path = url.searchParams.get('path') ?? ''
+    if (path === '' || !isSafeWorkspaceRelPath(path)) {
+      return json({ ok: false, error: 'invalid path' }, 400)
+    }
+    shares.deleteLink(path)
+    return json({ ok: true, path, deleted: true })
+  }
+
+  /**
+   * GET /api/v1/share/verify（public）→ 游客落地页校验。
+   * token 无效/已关 → {exists:false}；有密码未提供或错误 → {exists:true, needPassword:true}；
+   * 通过 → {exists:true, path, fileName, permission, scope}。
+   */
+  function verifyShare(request: Request): Response {
+    const url = new URL(request.url)
+    const token = url.searchParams.get('token') ?? ''
+    const password = url.searchParams.get('password') ?? ''
+    if (!token) return json({ exists: false })
+    const result = shares.verifyToken(token)
+    if (!result) return json({ exists: false })
+    const { link } = result
+    if (link.passwordHash && link.passwordSalt) {
+      if (!password) return json({ exists: true, needPassword: true })
+      if (!shares.verifyPassword(link, password)) {
+        return json({ exists: true, needPassword: true, wrongPassword: true })
+      }
+    }
+    return json({
+      exists: true,
+      path: result.path,
+      fileName: result.fileName,
+      permission: link.permission,
+      scope: link.scope
+    })
+  }
+
+  /** GET /api/v1/share/:token/content（public）→ 游客只读读字节（唯一游客文件读通道）。 */
+  function serveShareContent(request: Request, token: string): Response {
+    const result = shares.verifyToken(token)
+    if (!result) return json({ ok: false, error: 'not found' }, 404)
+    const full = resolveDesignPath(designRoot, result.path)
+    if (!full) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (!existsSync(full) || isDirectory(full)) {
+      return json({ ok: false, error: 'not found' }, 404)
+    }
+    const isPen = /\.pen$/i.test(result.path)
+    return new Response(Bun.file(full), {
+      headers: {
+        'Content-Type': isPen ? 'application/json; charset=utf-8' : 'application/octet-stream',
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff'
+      }
+    })
+  }
+
+  /** 随机外链密码生成（供前端「刷新密码」按钮；6 位混合大小写+数字，REQ §9.4）。 */
+  function generateSharePassword(): Response {
+    return json({ password: generateRandomPassword() })
+  }
+
+  /**
+   * POST /api/v1/permissions（admin）→ {path, scope?, members?}：写文件级权限条目。
+   * 供分享面板保存（成员权限 + 范围落 permissions.json，立即生效；resolvePermission 已读它）。
+   */
+  async function upsertFilePermission(request: Request): Promise<Response> {
+    const user = adminUser(request)
+    if (!user) return adminDenied(request)
+    let payload: { path?: unknown; scope?: unknown; members?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const path = typeof payload.path === 'string' ? payload.path.trim() : ''
+    if (path === '' || !isSafeWorkspaceRelPath(path)) {
+      return json({ ok: false, error: 'invalid path' }, 400)
+    }
+    const scope =
+      payload.scope === 'internet' || payload.scope === 'team' || payload.scope === 'self'
+        ? payload.scope
+        : undefined
+    let members: { userId: string; permission: 'view' | 'edit' | 'none' }[] | undefined
+    if (Array.isArray(payload.members)) {
+      members = payload.members.filter(
+        (member): member is { userId: string; permission: 'view' | 'edit' | 'none' } =>
+          !!member &&
+          typeof member.userId === 'string' &&
+          (member.permission === 'view' || member.permission === 'edit' || member.permission === 'none')
+      )
+    }
+    if (scope === undefined && members === undefined) {
+      return json({ ok: false, error: 'nothing to update' }, 400)
+    }
+    const existing = permissions.getEntry(path)
+    const entry = permissions.upsertEntry(path, {
+      type: 'file',
+      scope: scope ?? existing?.scope ?? 'self',
+      members: members ?? existing?.members ?? []
+    })
+    return json({ ok: true, entry })
+  }
+
   // ---- 路由 ----
 
   async function route(
@@ -838,8 +1057,12 @@ export function startServer(options: BridgeServerOptions) {
     }
 
     if (method === 'GET' && path === '/api/v1/config') {
-      // 供同源 SPA 获取写接口 token（安全基线见 deploy-plan §8：LAN 信任 + 外网 NPM Basic Auth）
-      // MCP 可用时下发独立的 MCP auth token（与 BRIDGE_TOKEN 分离），浏览器据此连接 automation。
+      // P0 安全收紧（Phase C）：仅登录态下发完整配置（含 BRIDGE_TOKEN/PEXELS/MCP token）。
+      // 未登录 → 只回公开最小配置（游客拿不到写令牌，杜绝借外链写盘）。
+      const user = sessionUser(request)
+      if (!user) {
+        return json({ ok: true, version: VERSION, designRoot, token: null, pexelsKey: null })
+      }
       return json({
         ok: true,
         version: VERSION,
@@ -1038,6 +1261,9 @@ export function startServer(options: BridgeServerOptions) {
     const metaMatch = path.match(/^\/api\/v1\/files\/(.+)\/meta$/)
     if (metaMatch) {
       if (method !== 'GET') return methodNotAllowed()
+      // P0 安全收紧（Phase C）：文件原始读接口要求 session 或 BRIDGE_TOKEN（游客只走 share/content）。
+      const readDenied = checkAuth(request, token)
+      if (readDenied) return readDenied
       const raw = metaMatch[1]
       if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
       const rel = decodeRelPath(raw)
@@ -1054,7 +1280,12 @@ export function startServer(options: BridgeServerOptions) {
       if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
       const rel = decodeRelPath(raw)
       if (!rel) return json({ ok: false, error: 'bad path encoding' }, 400)
-      if (method === 'GET') return serveDesignFileRel(rel, designRoot)
+      if (method === 'GET') {
+        // P0 安全收紧（Phase C）：文件原始读接口要求 session 或 BRIDGE_TOKEN（游客只走 share/content）。
+        const readDenied = checkAuth(request, token)
+        if (readDenied) return readDenied
+        return serveDesignFileRel(rel, designRoot)
+      }
       const denied = checkAuth(request, token)
       if (denied) return denied
       if (method === 'PUT') return saveFile(request, rel, true)
@@ -1116,13 +1347,45 @@ export function startServer(options: BridgeServerOptions) {
     }
 
     if (path === '/api/v1/permissions') {
-      if (method !== 'GET') return methodNotAllowed()
-      return getPermissions(request)
+      if (method === 'GET') return getPermissions(request)
+      // Phase C：POST = 写文件级权限条目（分享面板成员/范围保存）。
+      if (method === 'POST') return upsertFilePermission(request)
+      return methodNotAllowed()
     }
 
     if (path === '/api/v1/permission-request') {
       if (method !== 'POST') return methodNotAllowed()
       return createPermissionRequest(request)
+    }
+
+    // ---- 分享/外链（Phase C）----
+
+    if (path === '/api/v1/share') {
+      if (method === 'GET') return getShare(request)
+      if (method === 'POST') return createShare(request)
+      if (method === 'DELETE') return deleteShare(request)
+      return methodNotAllowed()
+    }
+
+    if (path === '/api/v1/share/verify') {
+      if (method !== 'GET') return methodNotAllowed()
+      return verifyShare(request)
+    }
+
+    if (path === '/api/v1/share/password') {
+      if (method !== 'GET') return methodNotAllowed()
+      const user = sessionUser(request)
+      if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+      return generateSharePassword()
+    }
+
+    const shareContentMatch = path.match(/^\/api\/v1\/share\/([^/]+)\/content$/)
+    if (shareContentMatch) {
+      const raw = shareContentMatch[1]
+      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
+      if (method !== 'GET') return methodNotAllowed()
+      const token = decodeURIComponent(raw)
+      return serveShareContent(request, token)
     }
 
     if (path.startsWith('/api/')) return json({ ok: false, error: 'not found' }, 404)

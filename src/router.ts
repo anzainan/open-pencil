@@ -5,6 +5,7 @@ import EditorView from './views/EditorView.vue'
 import FolderView from './views/FolderView.vue'
 import HomeView from './views/HomeView.vue'
 import LoginView from './views/LoginView.vue'
+import ShareGuestView from './views/ShareGuestView.vue'
 import TrashView from './views/TrashView.vue'
 
 const router = createRouter({
@@ -17,7 +18,11 @@ const router = createRouter({
     { path: '/editor', component: EditorView },
     { path: '/storage', redirect: '/' },
     { path: '/demo', component: EditorView, meta: { demo: true } },
-    // Yjs 协作房间保留；游客落地页 /share/:token 属 Phase C，本轮不加。
+    // 游客外链落地页 /share/:token（meta.public 不走登录守卫）。
+    // token = randomBytes(16).hex 恰好 32 位 [0-9a-f]；用 \w{32} 与 Yjs 房间号
+    // （8 位 [a-z0-9]，ROOM_ID_LENGTH）区分：先匹配外链，其余长度回落到协作房间。
+    { path: '/share/:token(\\w{32})', component: ShareGuestView, meta: { public: true } },
+    // Yjs 协作房间保留（8 位房间号），与 /share/:token 共存。
     { path: '/share/:roomId', component: EditorView }
   ]
 })

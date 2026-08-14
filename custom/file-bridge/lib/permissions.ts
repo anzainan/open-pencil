@@ -117,6 +117,16 @@ export class PermissionStore {
     return this.entries.get(normalizePath(path)) ?? null
   }
 
+  /** 取指定路径的精确 entry（文件级 / 文件夹级，无 → null）。Phase C 分享面板读成员用。 */
+  getEntry(path: string): PermissionEntry | null {
+    return this.findEntryExact(path)
+  }
+
+  /** 沿路径向上取最近命中的 entry（文件级 > 最近父文件夹，无 → null）。Phase C 分享面板读成员用。 */
+  getEntryForPath(path: string): PermissionEntry | null {
+    return this.findEntryForPath(path).entry
+  }
+
   /**
    * 沿路径逐级向上找最近 entry（test/123.fig → test → 根）。
    * 返回命中的 entry + 命中层级（文件级=file；父文件夹继承=folder）。

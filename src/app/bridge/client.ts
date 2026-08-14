@@ -65,6 +65,7 @@ export interface BridgePermission {
   scope: 'internet' | 'team' | 'self' | null
   source: 'file' | 'folder' | 'default'
   entryPath?: string
+  members?: { userId: string; permission: 'view' | 'edit' | 'none' }[]
 }
 
 export interface BridgeFileEvent {
@@ -89,7 +90,7 @@ function encodeRelPath(path: string): string {
 }
 
 /** 写接口鉴权（Phase A）：优先用登录 session token，否则退回 BRIDGE_TOKEN。 */
-function authHeader(): string | null {
+export function authHeader(): string | null {
   const session = getSessionToken()
   return session ? `Bearer ${session}` : null
 }
@@ -160,13 +161,16 @@ export class BridgeClient {
   }
 
   async getFile(path: string): Promise<Uint8Array> {
-    const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}`)
+    const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}`, {
+      headers: await this.authHeaders()
+    })
     if (!response.ok) throw new Error(`Bridge read failed (${response.status}): ${path}`)
     return new Uint8Array(await response.arrayBuffer())
   }
-
   async getFileMeta(path: string): Promise<BridgeFileInfo | null> {
-    const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}/meta`)
+    const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}/meta`, {
+      headers: await this.authHeaders()
+    })
     if (!response.ok) return null
     return (await response.json()) as BridgeFileInfo
   }

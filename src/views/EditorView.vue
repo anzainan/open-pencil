@@ -19,7 +19,6 @@ import { useEditorStore } from '@/app/editor/active-store'
 import { openPermissionRequest } from '@/app/editor/readonly'
 import { createTab, activeTab, getActiveStore, tabCount } from '@/app/tabs'
 
-import CollabPanel from '@/components/CollabPanel/CollabPanel.vue'
 import EditorCanvas from '@/components/EditorCanvas.vue'
 import PermissionRequestDialog from '@/components/editor/PermissionRequestDialog.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
@@ -30,6 +29,7 @@ import RenameSelectionDialog from '@/components/selection/RenameSelectionDialog.
 import TabBar from '@/components/TabBar.vue'
 import Tip from '@/components/ui/Tip.vue'
 import Toolbar from '@/components/Toolbar/Toolbar.vue'
+import SharePopover from '@/components/workspace/SharePopover.vue'
 
 import type { Tool } from '@open-pencil/core/editor'
 
@@ -235,7 +235,7 @@ onUnmounted(() => {
         <div
           class="flex shrink-0 items-center justify-between border-b border-border px-1.5 py-1.5"
         >
-          <CollabPanel v-if="!store.state.readOnly" />
+          <SharePopover v-if="!store.state.readOnly" />
         </div>
         <PropertiesPanel />
       </SplitterPanel>
