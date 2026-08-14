@@ -9,6 +9,9 @@ export const ALLOWED_FONT_EXTENSIONS = /\.(ttf|otf|woff|woff2)$/i
 /** 工作区字体根目录名（相对设计根）。 */
 export const FONTS_REL_DIR = 'fonts'
 
+/** 系统目录（相对设计根）：设计根内非用户内容的保留目录（web 构建产物/字体/文件系统目录），首次台账迁移统一排除。 */
+export const SYSTEM_REL_DIRS: readonly string[] = ['assets', FONTS_REL_DIR, 'lost+found']
+
 /** 回收站目录名（相对设计根，软删文件的落地目录）。 */
 export const TRASH_REL_DIR = '.trash'
 

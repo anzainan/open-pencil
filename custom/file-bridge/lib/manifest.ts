@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync, type Dirent } from 'node:fs'
 import { join } from 'node:path'
 
-import { OPENPENCIL_REL_DIR } from './paths'
+import { ALLOWED_DESIGN_EXTENSIONS, OPENPENCIL_REL_DIR, SYSTEM_REL_DIRS } from './paths'
 
 export interface ManifestData {
   version: 1
@@ -28,6 +28,11 @@ function rewritePrefix(path: string, from: string, to: string): string {
   return path
 }
 
+/** 迁移排除判断（任意层级）：`.` 开头段（.trash/.openpencil/隐藏文件/目录）或系统目录段（assets/fonts/lost+found）。 */
+function isExcludedRel(rel: string): boolean {
+  return rel.split('/').some((segment) => segment.startsWith('.') || SYSTEM_REL_DIRS.includes(segment))
+}
+
 /**
  * homepage 可见性白名单台账（方案 A）：
  * 只展示经首页/工作区「创建」链路登记的内容；物理文件不动，台账存于
@@ -45,7 +50,10 @@ export class Manifest {
 
   private load(): void {
     try {
-      if (!existsSync(this.file)) return
+      if (!existsSync(this.file)) {
+        this.migrate()
+        return
+      }
       const raw = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<ManifestData>
       if (typeof raw === 'object') {
         this.data = {
@@ -58,6 +66,41 @@ export class Manifest {
       // 文件损坏 → 空台账（宁可少显示），不影响服务启动。
       console.warn('[file-bridge] manifest load failed, using empty ledger', error)
     }
+  }
+
+  /**
+   * 台账首次初始化迁移实盘存量：台账文件不存在时（隔离方案上线前已存在的用户内容），
+   * 递归扫描 designRoot 将用户文件夹与 .fig/.pen 文件登记入台账，再落盘。
+   * 隐藏项（. 开头）与系统目录（assets/fonts/lost+found）任意层级一律跳过、不递归。
+   * 幂等：仅当台账不存在时执行；台账已存在（含手工恢复）不触碰不覆盖。
+   */
+  private migrate(): void {
+    const folders: string[] = []
+    const files: string[] = []
+
+    const walk = (dir: string, relDir: string): void => {
+      let entries: Dirent[]
+      try {
+        entries = readdirSync(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const entry of entries) {
+        const rel = relDir ? `${relDir}/${entry.name}` : entry.name
+        if (isExcludedRel(rel)) continue
+        if (entry.isDirectory()) {
+          folders.push(rel)
+          walk(join(dir, entry.name), rel)
+        } else if (entry.isFile() && ALLOWED_DESIGN_EXTENSIONS.test(entry.name)) {
+          files.push(rel)
+        }
+      }
+    }
+    walk(this.root, '')
+
+    this.data.folders = normalizeList(folders)
+    this.data.files = normalizeList(files)
+    this.persist()
   }
 
   private persist(): void {
