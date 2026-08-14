@@ -185,7 +185,7 @@ function onDragStart(event: DragEvent, photo: StockPhotoResult) {
         </template>
       </AppPlaceholder>
 
-      <div v-else-if="results.length > 0" class="grid grid-cols-2 gap-2">
+      <div v-else-if="results.length > 0" class="grid grid-cols-2 items-start gap-2">
         <div
           v-for="photo in results"
           :key="photo.sourceId"
@@ -194,7 +194,8 @@ function onDragStart(event: DragEvent, photo: StockPhotoResult) {
           data-test-id="stock-photo-item"
           :data-source-id="photo.sourceId"
           :draggable="true"
-          class="group/photo relative aspect-square overflow-hidden rounded bg-canvas/60 outline-none hover:ring-1 hover:ring-accent focus-visible:ring-1 focus-visible:ring-accent"
+          class="group/photo relative overflow-hidden rounded bg-canvas/60 outline-none hover:ring-1 hover:ring-accent focus-visible:ring-1 focus-visible:ring-accent"
+          :style="{ aspectRatio: photo.width / photo.height }"
           @click="insertPhoto(photo)"
           @keydown.enter="insertPhoto(photo)"
           @keydown.space.prevent="insertPhoto(photo)"
