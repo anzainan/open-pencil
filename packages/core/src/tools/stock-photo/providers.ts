@@ -9,16 +9,25 @@ export interface StockPhotoResult {
   sourceId: string
 }
 
+export interface StockPhotoSearchOptions {
+  perPage: number
+  orientation?: 'landscape' | 'portrait' | 'square'
+  targetDim: number
+  page?: number
+  size?: 'small' | 'medium' | 'large'
+  color?: string
+}
+
+export interface StockPhotoPageResult {
+  results: StockPhotoResult[]
+  total: number
+  nextPage: number | null
+}
+
 export interface StockPhotoProvider {
   name: string
-  search(
-    query: string,
-    options: {
-      perPage: number
-      orientation: 'landscape' | 'portrait' | 'square'
-      targetDim: number
-    }
-  ): Promise<StockPhotoResult[]>
+  search(query: string, options: StockPhotoSearchOptions): Promise<StockPhotoResult[]>
+  searchPage?(query: string, options: StockPhotoSearchOptions): Promise<StockPhotoPageResult>
 }
 
 const providers = new Map<string, StockPhotoProvider>()
@@ -75,30 +84,51 @@ export function setPexelsAPIKey(key: string | null): void {
   }
 }
 
+interface PexelsSearchResponse {
+  photos: PexelsPhoto[]
+  total_results: number
+  page: number
+  per_page: number
+  next_page: string | null
+}
+
+async function pexelsSearchPage(
+  query: string,
+  options: StockPhotoSearchOptions
+): Promise<StockPhotoPageResult> {
+  if (!pexelsAPIKey) throw new Error('Pexels API key not configured')
+  const { perPage, orientation, targetDim, page = 1, size, color } = options
+  const params: Record<string, string | number> = { query, per_page: perPage, page }
+  if (orientation) params.orientation = orientation
+  if (size) params.size = size
+  if (color) params.color = color
+
+  const response = await ofetch.raw<PexelsSearchResponse>('https://api.pexels.com/v1/search', {
+    headers: { Authorization: pexelsAPIKey },
+    ignoreResponseError: true,
+    query: params,
+    retry: 0
+  })
+  if (!response.ok) throw new Error(`Pexels ${response.status}`)
+  const data = response._data as PexelsSearchResponse
+  const results = data.photos.map((photo) => ({
+    url: pickPexelsSize(photo.src, targetDim),
+    thumbnail: photo.src.small,
+    width: photo.width,
+    height: photo.height,
+    photographer: photo.photographer,
+    sourceId: String(photo.id)
+  }))
+  const nextPage = page * perPage < data.total_results ? page + 1 : null
+  return { results, total: data.total_results, nextPage }
+}
+
 const pexelsProvider: StockPhotoProvider = {
   name: 'pexels',
-  async search(query, { perPage, orientation, targetDim }) {
-    if (!pexelsAPIKey) throw new Error('Pexels API key not configured')
-    const response = await ofetch.raw<{ photos: PexelsPhoto[] }>(
-      'https://api.pexels.com/v1/search',
-      {
-        headers: { Authorization: pexelsAPIKey },
-        ignoreResponseError: true,
-        query: { query, per_page: perPage, orientation },
-        retry: 0
-      }
-    )
-    if (!response.ok) throw new Error(`Pexels ${response.status}`)
-    const data = response._data as { photos: PexelsPhoto[] }
-    return data.photos.map((photo) => ({
-      url: pickPexelsSize(photo.src, targetDim),
-      thumbnail: photo.src.small,
-      width: photo.width,
-      height: photo.height,
-      photographer: photo.photographer,
-      sourceId: String(photo.id)
-    }))
-  }
+  search(query, options) {
+    return pexelsSearchPage(query, options).then((result) => result.results)
+  },
+  searchPage: pexelsSearchPage
 }
 
 let unsplashAccessKey: string | null = null
@@ -126,32 +156,51 @@ function pickUnsplashSize(urls: UnsplashPhoto['urls'], targetDim: number): strin
   return urls.full
 }
 
+interface UnsplashSearchResponse {
+  results: UnsplashPhoto[]
+  total: number
+  total_pages: number
+}
+
+async function unsplashSearchPage(
+  query: string,
+  options: StockPhotoSearchOptions
+): Promise<StockPhotoPageResult> {
+  if (!unsplashAccessKey) throw new Error('Unsplash access key not configured')
+  const { perPage, orientation, page = 1 } = options
+  const orient = orientation === 'square' ? 'squarish' : orientation
+  const params: Record<string, string | number> = { query, per_page: perPage, page }
+  if (orient) params.orientation = orient
+  const response = await ofetch.raw<UnsplashSearchResponse>(
+    'https://api.unsplash.com/search/photos',
+    {
+      headers: {
+        Authorization: `Client-ID ${unsplashAccessKey}`,
+        'Accept-Version': 'v1'
+      },
+      ignoreResponseError: true,
+      query: params,
+      retry: 0
+    }
+  )
+  if (!response.ok) throw new Error(`Unsplash ${response.status}`)
+  const data = response._data as UnsplashSearchResponse
+  const results = data.results.map((photo) => ({
+    url: pickUnsplashSize(photo.urls, 1080),
+    thumbnail: photo.urls.thumb,
+    width: photo.width,
+    height: photo.height,
+    photographer: photo.user.name,
+    sourceId: photo.id
+  }))
+  const nextPage = page < data.total_pages ? page + 1 : null
+  return { results, total: data.total, nextPage }
+}
+
 const unsplashProvider: StockPhotoProvider = {
   name: 'unsplash',
-  async search(query, { perPage, orientation }) {
-    if (!unsplashAccessKey) throw new Error('Unsplash access key not configured')
-    const orient = orientation === 'square' ? 'squarish' : orientation
-    const response = await ofetch.raw<{ results: UnsplashPhoto[] }>(
-      'https://api.unsplash.com/search/photos',
-      {
-        headers: {
-          Authorization: `Client-ID ${unsplashAccessKey}`,
-          'Accept-Version': 'v1'
-        },
-        ignoreResponseError: true,
-        query: { query, per_page: perPage, orientation: orient },
-        retry: 0
-      }
-    )
-    if (!response.ok) throw new Error(`Unsplash ${response.status}`)
-    const data = response._data as { results: UnsplashPhoto[] }
-    return data.results.map((photo) => ({
-      url: pickUnsplashSize(photo.urls, 1080),
-      thumbnail: photo.urls.thumb,
-      width: photo.width,
-      height: photo.height,
-      photographer: photo.user.name,
-      sourceId: photo.id
-    }))
-  }
+  search(query, options) {
+    return unsplashSearchPage(query, options).then((result) => result.results)
+  },
+  searchPage: unsplashSearchPage
 }

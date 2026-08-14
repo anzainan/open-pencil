@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { watchDebounced } from '@vueuse/core'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { getActiveProvider, type StockPhotoResult } from '@open-pencil/core/tools'
 import { useI18n } from '@open-pencil/vue'
@@ -11,8 +11,11 @@ import { openSettingsDialog } from '@/app/settings/dialog'
 import { toast } from '@/app/shell/ui'
 import AppInput from '@/components/ui/AppInput.vue'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 
 const STOCK_IMAGE_MIME = 'application/x-openpencil-stock-image'
+
+type OrientationOption = 'all' | 'landscape' | 'portrait' | 'square'
 
 const editor = useEditorStore()
 const { panels } = useI18n()
@@ -24,31 +27,55 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const searched = ref(false)
 const insertingId = ref<string | null>(null)
+const orientation = ref<OrientationOption>('all')
+const page = ref(1)
+const nextPage = ref<number | null>(null)
+const requestSeq = ref(0)
 
 const hasKey = computed(() => pexelsKeyStatus.value === 'configured')
 
-async function search(): Promise<void> {
+const orientationOptions = computed(() => [
+  { value: 'all', label: panels.orientationAll },
+  { value: 'landscape', label: panels.orientationLandscape },
+  { value: 'portrait', label: panels.orientationPortrait },
+  { value: 'square', label: panels.orientationSquare }
+])
+
+async function search(reset = true): Promise<void> {
   const term = query.value.trim()
-  if (!term || !hasKey.value || loading.value) return
+  if (!term || !hasKey.value) return
+  if (!reset && loading.value) return
+  const provider = getActiveProvider()
+  if (!provider) throw new Error('No stock photo provider configured')
+
+  const seq = ++requestSeq.value
   loading.value = true
   error.value = null
   try {
-    const provider = getActiveProvider()
-    if (!provider) throw new Error('No stock photo provider configured')
-    results.value = await provider.search(term, {
+    const options = {
       perPage: 20,
-      orientation: 'square',
-      targetDim: 1200
-    })
+      orientation: orientation.value === 'all' ? undefined : orientation.value,
+      targetDim: 1200,
+      page: reset ? 1 : page.value + 1
+    }
+    const fetched = provider.searchPage
+      ? await provider.searchPage(term, options)
+      : { results: await provider.search(term, options), total: 0, nextPage: null }
+    if (seq !== requestSeq.value) return
+    results.value = reset ? fetched.results : [...results.value, ...fetched.results]
+    nextPage.value = fetched.nextPage
+    page.value = fetched.nextPage ?? (reset ? 1 : page.value + 1)
     searched.value = true
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason)
   } finally {
-    loading.value = false
+    if (seq === requestSeq.value) loading.value = false
   }
 }
 
 watchDebounced(query, () => void search(), { debounce: 300 })
+
+watch(orientation, () => void search())
 
 function viewportCenter() {
   const canvasCenter = editor.viewportCanvasCenter()
@@ -101,6 +128,16 @@ function onDragStart(event: DragEvent, photo: StockPhotoResult) {
         class="min-w-0 flex-1"
         :placeholder="panels.searchStockPhotos"
         @keydown.enter="search()"
+      />
+    </div>
+
+    <div class="flex shrink-0 items-center gap-2 px-2 pb-1.5">
+      <SegmentedControl
+        v-model="orientation"
+        data-test-id="stock-photo-orientation"
+        :options="orientationOptions"
+        :label="panels.stockPhotoOrientation"
+        size="sm"
       />
     </div>
 
@@ -177,6 +214,15 @@ function onDragStart(event: DragEvent, photo: StockPhotoResult) {
             </span>
           </div>
         </div>
+        <button
+          v-if="nextPage !== null && !loading"
+          type="button"
+          class="col-span-2 rounded bg-panel-field py-1.5 text-[11px] font-medium text-muted hover:bg-panel-field-hover hover:text-surface"
+          data-test-id="stock-photo-load-more"
+          @click="search(false)"
+        >
+          {{ panels.loadMore }}
+        </button>
       </div>
 
       <AppPlaceholder
