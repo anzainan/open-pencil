@@ -50,6 +50,12 @@ export interface BridgeTrashEntry {
   updatedAt: string
 }
 
+/** 首页文件夹置顶台账条目（pinnedAt 为 ISO 时间，倒序排最前）。 */
+export interface BridgePinEntry {
+  name: string
+  pinnedAt: string
+}
+
 export interface BridgeFileEvent {
   type: 'file.changed' | 'file.created' | 'file.deleted' | 'active.changed'
   path: string
@@ -245,6 +251,36 @@ export class BridgeClient {
     if (!response.ok) throw new Error(`Bridge list dirs failed (${response.status})`)
     const data = (await response.json()) as { dirs?: string[] }
     return data.dirs ?? []
+  }
+
+  /** 列出置顶文件夹台账（pinnedAt 倒序）。 */
+  async listPins(): Promise<BridgePinEntry[]> {
+    const response = await fetch(`${this.apiBase}/pins`)
+    if (!response.ok) throw new Error(`Bridge list pins failed (${response.status})`)
+    const data = (await response.json()) as { pins?: BridgePinEntry[] }
+    return data.pins ?? []
+  }
+
+  /** 置顶文件夹（幂等：重复置顶刷新 pinnedAt）。返回最新置顶条目。 */
+  async pinFolder(path: string): Promise<BridgePinEntry> {
+    const response = await fetch(`${this.apiBase}/pins`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await this.authHeaders()) },
+      body: JSON.stringify({ path })
+    })
+    if (!response.ok) throw new Error(`Bridge pin failed (${response.status}): ${path}`)
+    const data = (await response.json()) as { pin?: BridgePinEntry }
+    if (!data.pin) throw new Error('Bridge pin returned no pin')
+    return data.pin
+  }
+
+  /** 取消置顶文件夹。 */
+  async unpinFolder(path: string): Promise<void> {
+    const response = await fetch(`${this.apiBase}/pins/${encodeRelPath(path)}`, {
+      method: 'DELETE',
+      headers: await this.authHeaders()
+    })
+    if (!response.ok) throw new Error(`Bridge unpin failed (${response.status}): ${path}`)
   }
 
   /** 重命名文件/文件夹（name 为单段新名，不含扩展名）。返回新相对路径。 */

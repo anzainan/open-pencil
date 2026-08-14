@@ -57,6 +57,7 @@ const {
   rootFiles,
   fileCountInFolder,
   loadDirs,
+  loadPins,
   ctxMenu,
   renameState,
   moveState,
@@ -95,6 +96,7 @@ watch(activeStorageProviderID, () => {
   clearPreviews()
   void invalidate()
   void loadDirs()
+  void loadPins()
 })
 
 let sseUnsubscribe: (() => void) | null = null
@@ -108,6 +110,7 @@ function onBridgeFileEvent(event: BridgeFileEvent): void {
     sseRefreshTimer = null
     void refresh()
     void loadDirs()
+    void loadPins()
   }, 200)
 }
 
@@ -118,6 +121,7 @@ watch(settingsDialogOpen, (open, wasOpen) => {
 onMounted(() => {
   void loadWorkspaceFonts()
   void loadDirs()
+  void loadPins()
   sseUnsubscribe = bridgeClient.subscribe(onBridgeFileEvent)
 })
 
@@ -249,6 +253,7 @@ onUnmounted(() => {
       :rename-label="dialogs.rename"
       :move-label="dialogs.move"
       :trash-label="dialogs.moveToTrash"
+      :show-move="ctxMenu?.target.kind === 'file'"
       @rename="onRename"
       @move="onMove"
       @trash="onTrash"

@@ -20,7 +20,9 @@ import MovePrompt from '@/components/workspace/MovePrompt.vue'
 import NewProjectPrompt from '@/components/workspace/NewProjectPrompt.vue'
 import RenamePrompt from '@/components/workspace/RenamePrompt.vue'
 import WorkspaceTopBar from '@/components/workspace/WorkspaceTopBar.vue'
+import { toast } from '@/app/shell/ui'
 import { activeTab, createUntitledTab, openStorageDocumentInNewTab } from '@/app/tabs'
+import AccessDialog from '@/components/workspace/AccessDialog.vue'
 
 const { dialogs } = useI18n()
 const router = useRouter()
@@ -58,6 +60,9 @@ const {
   folderFiles,
   folders,
   loadDirs,
+  loadPins,
+  isFolderPinned,
+  togglePin,
   ctxMenu,
   renameState,
   moveState,
@@ -71,6 +76,27 @@ const {
   onMoveConfirm,
   onNewProjectConfirm
 } = grid
+
+const accessDialogOpen = ref(false)
+const pinBusy = ref(false)
+const pinned = computed(() => isFolderPinned(folderName.value))
+
+async function onTogglePin(): Promise<void> {
+  if (!folderName.value || pinBusy.value) return
+  pinBusy.value = true
+  try {
+    const toggled = await togglePin(folderName.value)
+    if (toggled) {
+      toast.info(
+        pinned.value
+          ? dialogs.value.folderPinSuccess({ name: folderName.value })
+          : dialogs.value.folderUnpinSuccess({ name: folderName.value })
+      )
+    }
+  } finally {
+    pinBusy.value = false
+  }
+}
 
 watch(folderName, () => {
   void refresh()
@@ -97,6 +123,7 @@ watch(activeStorageProviderID, () => {
   clearPreviews()
   void invalidate()
   void loadDirs()
+  void loadPins()
 })
 
 let sseUnsubscribe: (() => void) | null = null
@@ -110,6 +137,7 @@ function onBridgeFileEvent(event: BridgeFileEvent): void {
     sseRefreshTimer = null
     void refresh()
     void loadDirs()
+    void loadPins()
   }, 200)
 }
 
@@ -120,6 +148,7 @@ watch(settingsDialogOpen, (open, wasOpen) => {
 onMounted(() => {
   void loadWorkspaceFonts()
   void loadDirs()
+  void loadPins()
   sseUnsubscribe = bridgeClient.subscribe(onBridgeFileEvent)
 })
 
@@ -149,7 +178,31 @@ onUnmounted(() => {
       </p>
 
       <div v-if="folderFiles.length">
-        <h2 class="mb-3 text-xs text-muted">{{ dialogs.folderFiles }}</h2>
+        <div class="mb-3 flex items-center gap-2">
+          <icon-lucide-file class="size-3.5 text-muted" />
+          <h2 class="text-xs text-muted">{{ dialogs.folderFiles }}</h2>
+          <div class="min-w-0 flex-1" />
+          <button
+            type="button"
+            class="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded border border-border px-2 text-[11px] text-muted hover:bg-hover"
+            :class="pinned ? 'border-accent text-accent' : ''"
+            data-test-id="folder-pin"
+            :disabled="pinBusy"
+            @click="onTogglePin"
+          >
+            <icon-lucide-pin class="size-3" />
+            {{ pinned ? dialogs.folderPinned : dialogs.folderPin }}
+          </button>
+          <button
+            type="button"
+            class="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded border border-border px-2 text-[11px] text-muted hover:bg-hover"
+            data-test-id="folder-access"
+            @click="accessDialogOpen = true"
+          >
+            <icon-lucide-user-cog class="size-3" />
+            {{ dialogs.accessButton }}
+          </button>
+        </div>
         <div class="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
           <button
             v-for="document in folderFiles"
@@ -221,6 +274,7 @@ onUnmounted(() => {
       :rename-label="dialogs.rename"
       :move-label="dialogs.move"
       :trash-label="dialogs.moveToTrash"
+      :show-move="ctxMenu?.target.kind === 'file'"
       @rename="onRename"
       @move="onMove"
       @trash="onTrash"
@@ -261,6 +315,12 @@ onUnmounted(() => {
       :cancel-label="dialogs.cancel"
       @update:open="newProjectOpen = $event"
       @confirm="onNewProjectConfirm"
+    />
+
+    <AccessDialog
+      :open="accessDialogOpen"
+      :folder-name="folderName"
+      @update:open="accessDialogOpen = $event"
     />
   </main>
 </template>

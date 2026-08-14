@@ -553,6 +553,41 @@ export function startServer(options: BridgeServerOptions) {
     return json({ path: rel, deleted: true })
   }
 
+  // ---- 文件夹置顶（Phase 5：可取消 / 多文件夹 / 时间倒序 / 台账持久化）----
+
+  /** 置顶台账清单（pinnedAt 倒序）。 */
+  function listPins(): Response {
+    return json({ pins: manifest.pins })
+  }
+
+  /** 置顶文件夹（幂等：重复置顶刷新 pinnedAt 为最新）。 */
+  async function pinEntry(request: Request): Promise<Response> {
+    let payload: { path?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const path = typeof payload.path === 'string' ? payload.path.trim().replace(/\/+$/, '') : ''
+    if (!isSafeWorkspaceRelPath(path)) return json({ ok: false, error: 'invalid dir path' }, 400)
+    const full = resolveWithin(designRoot, `/${path}`)
+    if (!full) return json({ ok: false, error: 'unsafe path' }, 403)
+    if (!existsSync(full) || !isDirectory(full)) {
+      return json({ ok: false, error: `not a folder: ${path}` }, 404)
+    }
+    const pin = manifest.pinFolder(path)
+    return json({ pin })
+  }
+
+  /** 取消置顶。 */
+  function unpinEntry(rel: string): Response {
+    if (!isSafeWorkspaceRelPath(rel)) return json({ ok: false, error: 'invalid dir path' }, 400)
+    const full = resolveWithin(designRoot, `/${rel}`)
+    if (!full) return json({ ok: false, error: 'unsafe path' }, 403)
+    manifest.unpinFolder(rel)
+    return json({ path: rel, unpinned: true })
+  }
+
   // ---- 工作区字体（fonts/ 文件夹）----
 
   function listFonts(): Response {
@@ -741,6 +776,28 @@ export function startServer(options: BridgeServerOptions) {
         return createDir(request)
       }
       return methodNotAllowed()
+    }
+
+    if (path === '/api/v1/pins') {
+      if (method === 'GET') return listPins()
+      if (method === 'POST') {
+        const denied = checkAuth(request, token)
+        if (denied) return denied
+        return pinEntry(request)
+      }
+      return methodNotAllowed()
+    }
+
+    const pinMatch = path.match(/^\/api\/v1\/pins\/(.+)$/)
+    if (pinMatch) {
+      const raw = pinMatch[1]
+      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
+      if (method !== 'DELETE') return methodNotAllowed()
+      const denied = checkAuth(request, token)
+      if (denied) return denied
+      const rel = decodeRelPath(raw)
+      if (!rel) return json({ ok: false, error: 'bad path encoding' }, 400)
+      return unpinEntry(rel)
     }
 
     if (path === '/api/v1/trash') {

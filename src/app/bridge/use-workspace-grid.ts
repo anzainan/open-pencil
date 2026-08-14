@@ -29,6 +29,8 @@ export function useWorkspaceGrid(options: {
   currentFolder?: Ref<string>
 }) {
   const dirs = ref<string[]>([])
+  /** 置顶台账：文件夹名 → pinnedAt（ISO）。首页排序用。Map 便于动态增删。 */
+  const pins = ref(new Map<string, string>())
   const ctxMenu = ref<MenuState | null>(null)
   const renameState = ref<RenameDialogState>({ open: false, target: null })
   const moveState = ref<MoveDialogState>({ open: false, target: null })
@@ -52,7 +54,15 @@ export function useWorkspaceGrid(options: {
     for (const dir of dirs.value) {
       if (!dir.includes('/')) names.add(dir)
     }
-    return [...names].sort((a, b) => a.localeCompare(b))
+    return [...names].sort((a, b) => {
+      // 置顶文件夹按 pinnedAt 倒序排最前（最后置顶的最前）；其余保持原名排序。
+      const pinnedA = pins.value.get(a)
+      const pinnedB = pins.value.get(b)
+      if (pinnedA && pinnedB) return pinnedB.localeCompare(pinnedA)
+      if (pinnedA) return -1
+      if (pinnedB) return 1
+      return a.localeCompare(b)
+    })
   })
 
   /** 根目录散文件（无 `/`）。 */
@@ -81,6 +91,39 @@ export function useWorkspaceGrid(options: {
       dirs.value = await bridgeClient.listDirs()
     } catch (error) {
       console.warn('[workspace-grid] list dirs failed', error)
+    }
+  }
+
+  /** 拉取置顶台账（首页/文件夹页挂载时调用；置顶变化影响首页排序）。 */
+  async function loadPins(): Promise<void> {
+    if (activeStorageProviderID.value !== BRIDGE_STORAGE_PROVIDER.id) return
+    try {
+      const entries = await bridgeClient.listPins()
+      pins.value = new Map(entries.map((entry) => [entry.name, entry.pinnedAt]))
+    } catch (error) {
+      console.warn('[workspace-grid] list pins failed', error)
+    }
+  }
+
+  function isFolderPinned(name: string): boolean {
+    return pins.value.has(name)
+  }
+
+  /** 置顶/取消置顶（幂等由服务端保证）；成功后同步本地台账并刷新目录排序。 */
+  async function togglePin(name: string): Promise<boolean> {
+    if (activeStorageProviderID.value !== BRIDGE_STORAGE_PROVIDER.id) return false
+    try {
+      if (isFolderPinned(name)) {
+        await bridgeClient.unpinFolder(name)
+        pins.value.delete(name)
+      } else {
+        const pin = await bridgeClient.pinFolder(name)
+        pins.value.set(name, pin.pinnedAt)
+      }
+      return true
+    } catch (error) {
+      console.warn('[workspace-grid] toggle pin failed', error)
+      return false
     }
   }
 
@@ -135,6 +178,9 @@ export function useWorkspaceGrid(options: {
     folderFiles,
     fileCountInFolder,
     loadDirs,
+    loadPins,
+    isFolderPinned,
+    togglePin,
     ctxMenu,
     renameState,
     moveState,

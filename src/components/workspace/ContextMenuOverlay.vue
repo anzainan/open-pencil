@@ -4,11 +4,19 @@ import { ref, watch } from 'vue'
 
 import type { ContextMenuPosition } from './context-menu'
 
-const { position, renameLabel, moveLabel, trashLabel } = defineProps<{
+const {
+  position,
+  renameLabel,
+  moveLabel,
+  trashLabel,
+  showMove = true
+} = defineProps<{
   position: ContextMenuPosition | null
   renameLabel: string
   moveLabel: string
   trashLabel: string
+  /** 是否显示「移动」项。文件夹禁止移动（防嵌套/消失），仅文件显示。 */
+  showMove?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -56,6 +64,7 @@ function onKeydown(event: KeyboardEvent) {
         {{ renameLabel }}
       </button>
       <button
+        v-if="showMove"
         type="button"
         class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[11px] text-surface select-none hover:bg-hover"
         @click="emit('move')"

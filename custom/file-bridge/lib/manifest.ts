@@ -3,12 +3,21 @@ import { join } from 'node:path'
 
 import { ALLOWED_DESIGN_EXTENSIONS, OPENPENCIL_REL_DIR, SYSTEM_REL_DIRS } from './paths'
 
+export interface ManifestPinEntry {
+  /** 被置顶文件夹的相对路径（相对 designRoot，顶层文件夹名）。 */
+  name: string
+  /** 置顶时间（ISO），同文件夹重复置顶刷新为最新；首页按倒序排最前。 */
+  pinnedAt: string
+}
+
 export interface ManifestData {
   version: 1
   /** 经首页「新建项目」（POST /dirs）登记的文件夹，相对 designRoot。 */
   folders: string[]
   /** 经工作区新建/保存（PUT /files 首次写盘、rename/move/restore 同步）登记的文件，相对 designRoot。 */
   files: string[]
+  /** 首页文件夹置顶台账（Phase 5 新功能）：多文件夹、置顶时间倒序、可取消；独立字段，旧台账兼容。 */
+  pinnedFolders: ManifestPinEntry[]
 }
 
 const MANIFEST_VERSION = 1
@@ -19,6 +28,21 @@ function norm(path: string): string {
 
 function normalizeList(list: string[]): string[] {
   return [...new Set(list.map(norm).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+}
+
+/** 置顶台账规范化：去重（同名保留最新 pinnedAt）、剔空、按 pinnedAt 倒序（最后置顶的最前）。 */
+function normalizePins(list: ManifestPinEntry[]): ManifestPinEntry[] {
+  const byName = new Map<string, string>()
+  for (const entry of list) {
+    const name = norm(String(entry?.name ?? ''))
+    if (!name) continue
+    const pinnedAt = String(entry?.pinnedAt ?? '')
+    const previous = byName.get(name)
+    if (!previous || pinnedAt > previous) byName.set(name, pinnedAt)
+  }
+  return [...byName.entries()]
+    .map(([name, pinnedAt]) => ({ name, pinnedAt }))
+    .sort((a, b) => b.pinnedAt.localeCompare(a.pinnedAt))
 }
 
 /** 将 from 前缀整体改写为 to（from 本身或 from/ 下任意子路径）。 */
@@ -40,7 +64,12 @@ function isExcludedRel(rel: string): boolean {
  * 安全兜底：所有列表输出均为「台账条目 ∩ 实盘」（join），漏登记/已删 = 不显示。
  */
 export class Manifest {
-  private data: ManifestData = { version: MANIFEST_VERSION, folders: [], files: [] }
+  private data: ManifestData = {
+    version: MANIFEST_VERSION,
+    folders: [],
+    files: [],
+    pinnedFolders: []
+  }
   private readonly file: string
 
   constructor(private readonly root: string) {
@@ -59,7 +88,16 @@ export class Manifest {
         this.data = {
           version: MANIFEST_VERSION,
           folders: Array.isArray(raw.folders) ? normalizeList(raw.folders.map(String)) : [],
-          files: Array.isArray(raw.files) ? normalizeList(raw.files.map(String)) : []
+          files: Array.isArray(raw.files) ? normalizeList(raw.files.map(String)) : [],
+          // 旧台账无 pinnedFolders → 空数组；合法数组直接规范化（防破坏兼容）。
+          pinnedFolders: Array.isArray(raw.pinnedFolders)
+            ? normalizePins(
+                raw.pinnedFolders.map((entry) => ({
+                  name: String((entry as { name?: unknown })?.name ?? ''),
+                  pinnedAt: String((entry as { pinnedAt?: unknown })?.pinnedAt ?? '')
+                }))
+              )
+            : []
         }
       }
     } catch (error) {
@@ -122,6 +160,44 @@ export class Manifest {
     return [...this.data.files]
   }
 
+  /** 首页置顶台账（pinnedAt 倒序：最后置顶的最前）。 */
+  get pins(): ManifestPinEntry[] {
+    return this.data.pinnedFolders.map((entry) => ({ name: entry.name, pinnedAt: entry.pinnedAt }))
+  }
+
+  isPinned(rel: string): boolean {
+    return this.data.pinnedFolders.some((entry) => entry.name === norm(rel))
+  }
+
+  /**
+   * 置顶文件夹（幂等）：同文件夹重复置顶 → 刷新 pinnedAt 为最新，不产生重复条目。
+   * 时间戳单调递增（同毫秒并发 → +1ms），保证「最后置顶的最前」稳定；
+   * 排序由 normalizePins 统一按 pinnedAt 倒序维护。
+   */
+  pinFolder(path: string): ManifestPinEntry {
+    const rel = norm(path)
+    let pinnedAt = new Date().toISOString()
+    let maxMs = 0
+    for (const entry of this.data.pinnedFolders) {
+      const ms = Date.parse(entry.pinnedAt)
+      if (Number.isFinite(ms) && ms > maxMs) maxMs = ms
+    }
+    if (Date.parse(pinnedAt) <= maxMs) pinnedAt = new Date(maxMs + 1).toISOString()
+    this.data.pinnedFolders = normalizePins([
+      ...this.data.pinnedFolders.filter((entry) => entry.name !== rel),
+      { name: rel, pinnedAt }
+    ])
+    this.persist()
+    return { name: rel, pinnedAt }
+  }
+
+  /** 取消置顶。 */
+  unpinFolder(path: string): void {
+    const rel = norm(path)
+    this.data.pinnedFolders = this.data.pinnedFolders.filter((entry) => entry.name !== rel)
+    this.persist()
+  }
+
   isFileRegistered(rel: string): boolean {
     return this.data.files.includes(norm(rel))
   }
@@ -144,6 +220,12 @@ export class Manifest {
   renamePath(from: string, to: string): void {
     this.data.folders = normalizeList(this.data.folders.map((p) => rewritePrefix(p, from, to)))
     this.data.files = normalizeList(this.data.files.map((p) => rewritePrefix(p, from, to)))
+    this.data.pinnedFolders = normalizePins(
+      this.data.pinnedFolders.map((entry) => ({
+        name: rewritePrefix(entry.name, from, to),
+        pinnedAt: entry.pinnedAt
+      }))
+    )
     this.persist()
   }
 
@@ -154,6 +236,10 @@ export class Manifest {
       normalizeList(list.filter((p) => p !== rel && !p.startsWith(`${rel}/`)))
     this.data.folders = next(this.data.folders)
     this.data.files = next(this.data.files)
+    // 文件夹被删除/回收 → 其置顶同步清除（不残留死条目）。
+    this.data.pinnedFolders = normalizePins(
+      this.data.pinnedFolders.filter((entry) => !(entry.name === rel || entry.name.startsWith(`${rel}/`)))
+    )
     this.persist()
   }
 }
