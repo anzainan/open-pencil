@@ -46,17 +46,20 @@ const permissionOptions = computed(() => [
 
 function applyExisting(members: BridgeMemberInfo[], existing: { userId: string; permission: string }[]): void {
   const existingMap = new Map(existing.map((member) => [member.userId, member.permission]))
-  rows.value = members.map((member) => {
-    const stored = existingMap.get(member.id)
-    const permission: Perm = stored === 'edit' ? 'edit' : 'view'
-    return {
-      id: member.id,
-      name: member.name,
-      avatar: member.avatar,
-      selected: stored === 'view' || stored === 'edit',
-      permission
-    }
-  })
+  // owner（fixed）默认全权限：不出现在权限设置列表，不下拉、不可被移除（B1）。
+  rows.value = members
+    .filter((member) => !member.fixed)
+    .map((member) => {
+      const stored = existingMap.get(member.id)
+      const permission: Perm = stored === 'edit' ? 'edit' : 'view'
+      return {
+        id: member.id,
+        name: member.name,
+        avatar: member.avatar,
+        selected: stored === 'view' || stored === 'edit',
+        permission
+      }
+    })
   if (existing.length === 0) {
     // 无既有权限 → 默认「团队成员（所有成员可访问）」。
     mode.value = 'team'
@@ -104,7 +107,7 @@ async function save(): Promise<void> {
   try {
     let members: { userId: string; permission: Perm }[]
     if (mode.value === 'team') {
-      // 团队成员（所有成员可访问）：全部成员 view（owner 有 admin 特权恒可访问，写入无害），
+      // 团队成员（所有成员可访问）：全部非 owner 成员 view（owner 有 admin 特权恒可访问，不在 rows），
       // 文件夹权限自动继承到内部文件（REQ §5）。
       members = rows.value.map((row) => ({ userId: row.id, permission: 'view' as Perm }))
     } else {

@@ -65,8 +65,6 @@ const addMemberOpen = ref(false)
 const removeDialogOpen = ref(false)
 const removeTarget = ref<MemberRow | null>(null)
 
-const owner = computed(() => allMembers.value.find((member) => member.fixed) ?? null)
-
 const scopeOptions = computed(() => [
   { value: 'internet' as Scope, label: dialogs.value['share.scope.internet'] },
   { value: 'team' as Scope, label: dialogs.value['share.scope.team'] },
@@ -122,8 +120,10 @@ async function load(): Promise<void> {
       linkURL.value = share.url ?? ''
     }
     const permMembers = (perm?.members ?? []) as { userId: string; permission: MemberPerm }[]
+    // owner（fixed）默认全权限：不进权限设置成员列表，也不被保存/移除（B1）。
+    const ownerId = allMembers.value.find((member) => member.fixed)?.id
     members.value = permMembers
-      .filter((member) => member.permission !== 'none')
+      .filter((member) => member.permission !== 'none' && member.userId !== ownerId)
       .map((member) => ({
         userId: member.userId,
         permission: member.permission,
@@ -407,24 +407,8 @@ onMounted(() => {
               </button>
             </div>
 
-            <!-- member list -->
+            <!-- member list（owner 默认全权限，不渲染，B1） -->
             <div class="max-h-40 overflow-y-auto border-t border-border px-3 py-2">
-              <!-- owner row（固定不可移除） -->
-              <div
-                v-if="owner"
-                class="flex h-7 items-center gap-2 rounded px-1 text-[11px]"
-                data-test-id="share-member-row-owner"
-              >
-                <span
-                  class="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] leading-[11px] text-white"
-                  :style="{ backgroundColor: owner.avatar.bg }"
-                >
-                  {{ owner.avatar.char }}
-                </span>
-                <span class="min-w-0 flex-1 truncate text-surface">{{ owner.name }}</span>
-                <span class="text-muted">{{ dialogs['share.owner'] }}</span>
-              </div>
-
               <div
                 v-for="member in members"
                 :key="member.userId"
@@ -448,7 +432,7 @@ onMounted(() => {
               </div>
 
               <div
-                v-if="!owner && members.length === 0"
+                v-if="members.length === 0"
                 class="py-3 text-center text-[11px] text-muted"
               >
                 {{ dialogs['share.noMembers'] }}

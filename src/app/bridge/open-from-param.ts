@@ -1,3 +1,4 @@
+import { hasSession, restoreSession } from '@/app/auth/session'
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { clearRememberedWorkspaceFile } from '@/app/bridge/restore'
 import { activeStorageProviderID, type StorageDocument } from '@/app/integrations/storage'
@@ -5,19 +6,24 @@ import { toast } from '@/app/shell/ui'
 import { openStorageDocumentInNewTab } from '@/app/tabs'
 import { IS_BROWSER } from '@/constants'
 
-export function openFileFromQueryParam(): void {
+export async function openFileFromQueryParam(): Promise<void> {
   if (!IS_BROWSER) return
 
   const params = new URLSearchParams(window.location.search)
   const relPath = params.get('file')
   if (!relPath || relPath.trim() === '') return
 
+  // B2：打开前先恢复登录态（restoreSession 幂等）——getFileMeta 必须带 session token，
+  // 否则服务端 401 会被误判成「文件已删除」并清掉 ?file=。未登录交路由守卫跳登录，保留参数。
+  await restoreSession()
+  if (!hasSession()) return
+
   activeStorageProviderID.value = BRIDGE_PROVIDER_ID
   const name = relPath.split(/[\\/]/).pop() ?? 'file.fig'
-  void (async () => {
-    const meta = await bridgeClient.getFileMeta(relPath).catch(() => null)
+  try {
+    const meta = await bridgeClient.getFileMeta(relPath)
     if (!meta) {
-      // 刷新恢复指向的工作区文件已在远端（NAS）删除：绝不打开本地缓存复活，
+      // 真 404：刷新恢复指向的工作区文件已在远端（NAS）删除：绝不打开本地缓存复活，
       // 清掉 URL 恢复参数并停留在当前页。
       toast.error(`工作区文件已被删除：${name}`)
       clearRememberedWorkspaceFile()
@@ -35,7 +41,9 @@ export function openFileFromQueryParam(): void {
       const { default: router } = await import('@/router')
       await router.replace('/editor')
     }
-  })().catch((error) => {
-    console.warn('[open-from-param]', error)
-  })
+  } catch (error) {
+    // 401（会话失效/未就绪）或网络/服务端错误：不清 ?file=、不弹「已删除」；
+    // 会话失效由路由守卫/登录页接管，刷新后仍可恢复原文件。
+    console.warn('[open-from-param] meta check failed, keep ?file=', error)
+  }
 }

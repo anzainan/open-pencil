@@ -1,4 +1,4 @@
-import { getSessionToken } from '@/app/auth/session'
+import { AuthError, getSessionToken } from '@/app/auth/session'
 
 export const BRIDGE_PROVIDER_ID = 'bridge-fs'
 
@@ -171,7 +171,10 @@ export class BridgeClient {
     const response = await fetch(`${this.apiBase}/files/${encodeRelPath(path)}/meta`, {
       headers: await this.authHeaders()
     })
-    if (!response.ok) return null
+    // B2：401（未登录/会话未就绪）抛 AuthError 不坍缩成 null；null 仅表示真 404。
+    if (response.status === 401) throw new AuthError(response.status, `未登录或会话已失效：${path}`)
+    if (response.status === 404) return null
+    if (!response.ok) throw new Error(`Bridge meta failed (${response.status}): ${path}`)
     return (await response.json()) as BridgeFileInfo
   }
 
@@ -536,10 +539,12 @@ export class BridgeClient {
   watchPath(path: string, getLastWriteTime: () => number, reloadFromDisk: () => void): () => void {
     this.ensureConnection()
     let lastMtime = ''
-    void this.getFileMeta(path).then((meta) => {
-      lastMtime = meta?.mtime ?? ''
-      return lastMtime
-    })
+    void this.getFileMeta(path)
+      .then((meta) => {
+        lastMtime = meta?.mtime ?? ''
+        return lastMtime
+      })
+      .catch(() => undefined)
 
     const handleEvent = async (event: BridgeFileEvent): Promise<void> => {
       try {
@@ -576,16 +581,18 @@ export class BridgeClient {
       // oxlint-disable-next-line open-pencil/prefer-vueuse-intervals
       pollTimer = setInterval(() => {
         if (this.connected) return
-        void this.getFileMeta(path).then(async (meta) => {
-          const mtime = meta?.mtime ?? ''
-          if (!mtime || mtime === lastMtime) return mtime
-          lastMtime = mtime
-          if (this.isSelfWrite(path)) return mtime
-          if (await this.isSelfWriteEcho(path)) return mtime
-          if (Date.now() - getLastWriteTime() < this.recentWriteMs) return mtime
-          reloadFromDisk()
-          return mtime
-        })
+        void this.getFileMeta(path)
+          .then(async (meta) => {
+            const mtime = meta?.mtime ?? ''
+            if (!mtime || mtime === lastMtime) return mtime
+            lastMtime = mtime
+            if (this.isSelfWrite(path)) return mtime
+            if (await this.isSelfWriteEcho(path)) return mtime
+            if (Date.now() - getLastWriteTime() < this.recentWriteMs) return mtime
+            reloadFromDisk()
+            return mtime
+          })
+          .catch(() => undefined)
       }, this.pollMs)
     }
     startPoll()
