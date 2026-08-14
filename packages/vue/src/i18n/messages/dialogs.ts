@@ -269,6 +269,14 @@ export const dialogMessageDefaults = {
   'logout.desc': 'After signing out, saved login info in this browser will be cleared.',
   'logout.confirm': 'Sign out',
   'logout.cancel': 'Cancel',
+  'perm.noAccess': 'No permission to access this file',
+  'perm.readOnly': 'Read-only mode — no edit permission',
+  'perm.request': 'Request permission',
+  'perm.requestTitle': 'Need edit permission',
+  'perm.requestDesc':
+    'You don\u2019t have edit permission for this file. Would you like to request it from an admin?',
+  'perm.requestConfirm': 'Request permission',
+  'perm.requestSent': 'Request sent — waiting for admin approval',
   saveAsPrompt: 'Save as:',
   browserFileAPINotSupported:
     "Your browser doesn't support the local file API. Files will be downloaded instead of saved in place.",

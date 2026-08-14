@@ -299,5 +299,12 @@
   "logout.title": "Disconnettersi?",
   "logout.desc": "Dopo la disconnessione, le informazioni di accesso salvate in questo browser verranno cancellate.",
   "logout.confirm": "Esci",
-  "logout.cancel": "Annulla"
+  "logout.cancel": "Annulla",
+  "perm.noAccess": "Nessuna autorizzazione per accedere a questo file",
+  "perm.readOnly": "Modalità sola lettura — nessun permesso di modifica",
+  "perm.request": "Richiedi autorizzazione",
+  "perm.requestTitle": "Servono permessi di modifica",
+  "perm.requestDesc": "Non hai il permesso di modificare questo file. Vuoi richiederlo a un amministratore?",
+  "perm.requestConfirm": "Richiedi autorizzazione",
+  "perm.requestSent": "Richiesta inviata — in attesa dell'approvazione"
 }

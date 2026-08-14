@@ -299,5 +299,12 @@
   "logout.title": "¿Cerrar sesión?",
   "logout.desc": "Al cerrar sesión, se borrará la información de inicio de sesión guardada en este navegador.",
   "logout.confirm": "Cerrar sesión",
-  "logout.cancel": "Cancelar"
+  "logout.cancel": "Cancelar",
+  "perm.noAccess": "Sin permiso para acceder a este archivo",
+  "perm.readOnly": "Modo de solo lectura — sin permiso de edición",
+  "perm.request": "Solicitar permiso",
+  "perm.requestTitle": "Se necesita permiso de edición",
+  "perm.requestDesc": "No tienes permiso de edición para este archivo. ¿Quieres solicitarlo a un administrador?",
+  "perm.requestConfirm": "Solicitar permiso",
+  "perm.requestSent": "Solicitud enviada — esperando la aprobación del administrador"
 }

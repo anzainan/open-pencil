@@ -299,5 +299,12 @@
   "logout.title": "ログアウトしますか？",
   "logout.desc": "ログアウトすると、このブラウザに保存されたログイン情報が削除されます。",
   "logout.confirm": "ログアウト",
-  "logout.cancel": "キャンセル"
+  "logout.cancel": "キャンセル",
+  "perm.noAccess": "このファイルにアクセスする権限がありません",
+  "perm.readOnly": "読み取り専用モード — 編集権限がありません",
+  "perm.request": "権限をリクエスト",
+  "perm.requestTitle": "編集権限が必要です",
+  "perm.requestDesc": "このファイルの編集権限がありません。管理者にリクエストしますか？",
+  "perm.requestConfirm": "権限をリクエスト",
+  "perm.requestSent": "リクエストを送信しました。管理者の承認をお待ちください"
 }

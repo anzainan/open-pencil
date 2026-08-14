@@ -3,6 +3,7 @@ import { shallowRef, computed, triggerRef } from 'vue'
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
 import { readFigFile } from '@open-pencil/core/io/formats/fig'
 import { computeAllLayouts } from '@open-pencil/core/layout'
+import { dialogMessages } from '@open-pencil/vue'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
@@ -182,6 +183,21 @@ export async function openStorageDocumentInNewTab(document: StorageDocument): Pr
 
   const store = reusableTabStore()
   store.state.loading = true
+  // Phase B：bridge 工作区文件打开前先查权限（无权限 → toast 拒绝，不打开）。
+  // 权限校验失败按「有权限」降级打开，不阻断既有流程（bridge 不可达时回归现状）。
+  let canEdit = true
+  if (providerId === BRIDGE_PROVIDER_ID) {
+    try {
+      const permission = await bridgeClient.getPermissions(document.id)
+      if (!permission.canView) {
+        toast.error(dialogMessages.get()['perm.noAccess'])
+        return
+      }
+      canEdit = permission.canEdit
+    } catch (error) {
+      console.warn('[tabs] permission check failed, opening with default access', error)
+    }
+  }
   try {
     const resolved = await resolveStorageDocumentBytes(
       providerId,
@@ -210,12 +226,17 @@ export async function openStorageDocumentInNewTab(document: StorageDocument): Pr
       document.name,
       stale ? { stale: true } : undefined
     )
+    // 只读权限：标记编辑器只读态（禁编辑/保存/导出，工具栏只留 hand/select）+ 强制关 autosave。
+    if (!canEdit) {
+      store.state.readOnly = true
+      store.state.autosaveEnabled = false
+    }
     store.clearSelection()
     const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
     await store.switchPage(pageId)
     if (stale) {
       toast.warning('该文件已在工作区被删除，已作为副本打开（不会自动保存回云端，可另存为或下载）')
-    } else if (providerId === BRIDGE_PROVIDER_ID) {
+    } else if (providerId === BRIDGE_PROVIDER_ID && canEdit) {
       await restoreBridgeWorkspaceSession(store, document.id)
     }
     await store.fitCurrentPageToViewport()

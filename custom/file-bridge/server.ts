@@ -14,6 +14,8 @@ import { EventBus, FileWatcher, sseResponse } from './lib/events'
 import { createMcpProxy, type McpProxyHandle } from './mcp-proxy'
 import { handleMcpRequest, type McpDeps } from './mcp'
 import { AuthStore, isAdminRole, type User, type UserRole } from './lib/auth'
+import { NotificationStore } from './lib/notifications'
+import { PermissionStore } from './lib/permissions'
 import { Manifest } from './lib/manifest'
 import {
   ALLOWED_DESIGN_EXTENSIONS,
@@ -284,6 +286,9 @@ export function startServer(options: BridgeServerOptions) {
   const bus = new EventBus(SSE_PING_MS)
   // 账号/会话台账（Phase A）：users.json seed 默认管理员，sessions.json 跨容器持久化。
   authStore = new AuthStore(designRoot)
+  // 权限台账 + 通知台账（Phase B）：permissions.json 权限引擎，notifications.json 权限申请落库。
+  const permissions = new PermissionStore(designRoot)
+  const notifications = new NotificationStore(designRoot)
   // homepage 可见性白名单台账：只展示经首页/工作区创建链路登记的内容（方案 A）。
   const manifest = new Manifest(designRoot)
   const watcher = new FileWatcher(
@@ -772,6 +777,52 @@ export function startServer(options: BridgeServerOptions) {
     return json({ deleted: true })
   }
 
+  // ---- 权限模型（Phase B：真实拦截。文件权限 > 文件夹权限 > 默认，16:28 拍板）----
+
+  /** 解析当前登录用户对某路径的权限（打开/编辑前真实校验；path 空 → 根默认）。 */
+  function getPermissions(request: Request): Response {
+    const user = sessionUser(request)
+    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+    const url = new URL(request.url)
+    const path = url.searchParams.get('path') ?? ''
+    if (path !== '' && !isSafeWorkspaceRelPath(path)) {
+      return json({ ok: false, error: 'invalid path' }, 400)
+    }
+    return json(permissions.resolvePermission(path, user))
+  }
+
+  /** 无编辑权用户申请编辑权限 → 通知 owner + 所有 admin（同人同路径未读去重）。 */
+  async function createPermissionRequest(request: Request): Promise<Response> {
+    const user = sessionUser(request)
+    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+    let payload: { path?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const path = typeof payload.path === 'string' ? payload.path.trim() : ''
+    if (path !== '' && !isSafeWorkspaceRelPath(path)) {
+      return json({ ok: false, error: 'invalid path' }, 400)
+    }
+    // 去重：同人同路径已有未读申请 → 不再追加（返回成功，幂等）。
+    if (notifications.hasUnreadPermissionRequest(user.id, path)) {
+      return json({ ok: true, deduped: true })
+    }
+    const recipients = authStore?.listUsers().filter((member) => isAdminRole(member.role)) ?? []
+    for (const recipient of recipients) {
+      notifications.addNotification({
+        type: 'permission_request',
+        fromUserId: user.id,
+        targetUserId: recipient.id,
+        path,
+        title: `${user.name} 请求编辑权限`,
+        detail: `请求编辑 ${path}`
+      })
+    }
+    return json({ ok: true, sent: recipients.length })
+  }
+
   // ---- 路由 ----
 
   async function route(
@@ -1062,6 +1113,16 @@ export function startServer(options: BridgeServerOptions) {
       if (method === 'PATCH') return updateMember(request, id)
       if (method === 'DELETE') return deleteMember(id)
       return methodNotAllowed()
+    }
+
+    if (path === '/api/v1/permissions') {
+      if (method !== 'GET') return methodNotAllowed()
+      return getPermissions(request)
+    }
+
+    if (path === '/api/v1/permission-request') {
+      if (method !== 'POST') return methodNotAllowed()
+      return createPermissionRequest(request)
     }
 
     if (path.startsWith('/api/')) return json({ ok: false, error: 'not found' }, 404)

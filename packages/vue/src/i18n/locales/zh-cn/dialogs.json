@@ -299,5 +299,12 @@
   "logout.title": "确定要退出登录吗？",
   "logout.desc": "退出后将清除此浏览器中保存的登录信息",
   "logout.confirm": "退出登录",
-  "logout.cancel": "取消"
+  "logout.cancel": "取消",
+  "perm.noAccess": "无权限访问此文件",
+  "perm.readOnly": "只读模式 - 无编辑权限",
+  "perm.request": "申请权限",
+  "perm.requestTitle": "需要编辑权限",
+  "perm.requestDesc": "你没有此文件的编辑权限，是否向管理员申请？",
+  "perm.requestConfirm": "申请权限",
+  "perm.requestSent": "申请已发送，等待管理员批准"
 }

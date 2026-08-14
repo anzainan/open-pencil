@@ -299,5 +299,12 @@
   "logout.title": "Wylogować się?",
   "logout.desc": "Po wylogowaniu informacje logowania zapisane w tej przeglądarce zostaną usunięte.",
   "logout.confirm": "Wyloguj się",
-  "logout.cancel": "Anuluj"
+  "logout.cancel": "Anuluj",
+  "perm.noAccess": "Brak uprawnień do dostępu do tego pliku",
+  "perm.readOnly": "Tryb tylko do odczytu — brak uprawnień do edycji",
+  "perm.request": "Poproś o uprawnienia",
+  "perm.requestTitle": "Wymagane uprawnienia do edycji",
+  "perm.requestDesc": "Nie masz uprawnień do edycji tego pliku. Czy chcesz poprosić o nie administratora?",
+  "perm.requestConfirm": "Poproś o uprawnienia",
+  "perm.requestSent": "Prośba wysłana — oczekiwanie na zatwierdzenie"
 }

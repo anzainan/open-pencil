@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, provide, ref } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { useEventListener, useUrlSearchParams } from '@vueuse/core'
 import { useRoute } from 'vue-router'
 import { useHead } from '@unhead/vue'
@@ -16,10 +16,12 @@ import { isTauri } from '@/app/tauri/env'
 import { appMenuShortcut } from '@/app/shell/menu/shortcut'
 import { createDemoShapes } from '@/app/demo/document'
 import { useEditorStore } from '@/app/editor/active-store'
+import { openPermissionRequest } from '@/app/editor/readonly'
 import { createTab, activeTab, getActiveStore, tabCount } from '@/app/tabs'
 
 import CollabPanel from '@/components/CollabPanel/CollabPanel.vue'
 import EditorCanvas from '@/components/EditorCanvas.vue'
+import PermissionRequestDialog from '@/components/editor/PermissionRequestDialog.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
 import MobileDrawer from '@/components/MobileDrawer.vue'
 import MobileHud from '@/components/MobileHud/MobileHud.vue'
@@ -28,6 +30,8 @@ import RenameSelectionDialog from '@/components/selection/RenameSelectionDialog.
 import TabBar from '@/components/TabBar.vue'
 import Tip from '@/components/ui/Tip.vue'
 import Toolbar from '@/components/Toolbar/Toolbar.vue'
+
+import type { Tool } from '@open-pencil/core/editor'
 
 const route = useRoute()
 const params = useUrlSearchParams('history')
@@ -57,6 +61,55 @@ useEditorMenu()
 
 const collab = useCollab(getActiveStore)
 provide(COLLAB_KEY, collab)
+
+// ── 只读模式拦截（Phase B：无编辑权限只读打开）──
+// 1) 只读时若切到编辑工具（键盘快捷键等）→ 弹权限申请 + 复位回选择工具；
+// 2) 只读时发生图变更（delete/拖拽/粘贴/属性面板等）→ 弹权限申请 + 尝试 undo 回滚
+//    （磁盘不受影响：autosave 已强制关闭）。loadings 归零后才武装，避免打开过程误触发。
+function isViewTool(tool: Tool): boolean {
+  return tool === 'SELECT' || tool === 'HAND'
+}
+
+let sceneBaseline: number | null = null
+let lastInterceptedVersion = -1
+
+watch(
+  [() => store.state.readOnly, () => store.state.loading],
+  ([readOnly, loading]) => {
+    if (readOnly && !loading) {
+      sceneBaseline = store.state.sceneVersion
+      lastInterceptedVersion = -1
+      if (!isViewTool(store.state.activeTool)) store.setTool('SELECT')
+    } else if (!readOnly) {
+      sceneBaseline = null
+      lastInterceptedVersion = -1
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => store.state.activeTool,
+  (tool) => {
+    if (!store.state.readOnly) return
+    if (isViewTool(tool)) return
+    openPermissionRequest()
+    store.setTool('SELECT')
+  }
+)
+
+watch(
+  () => store.state.sceneVersion,
+  (version) => {
+    if (!store.state.readOnly || sceneBaseline === null) return
+    if (version === sceneBaseline || version === lastInterceptedVersion) return
+    lastInterceptedVersion = version
+    openPermissionRequest()
+    // 回滚只读态内存改动（undo 栈在打开时已清空，此处只会回退只读期间自己的改动）。
+    if (store.undo.canUndo) store.undo.undo()
+    sceneBaseline = store.state.sceneVersion
+  }
+)
 
 useEventListener(
   document,
@@ -126,9 +179,19 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div data-test-id="editor-root" class="flex h-screen w-screen flex-col">
+  <div data-test-id="editor-root" class="relative flex h-screen w-screen flex-col">
     <RenameSelectionDialog />
+    <PermissionRequestDialog />
     <TabBar />
+
+    <!-- 只读提示条（无编辑权限时固定显示） -->
+    <div
+      v-if="store.state.readOnly"
+      data-test-id="readonly-banner"
+      class="pointer-events-none absolute top-3 left-1/2 z-30 -translate-x-1/2 rounded-md bg-[#2A2A2A] px-3 py-1.5 text-[11px] font-medium text-white shadow-md ring-1 ring-white/10"
+    >
+      {{ dialogs['perm.readOnly'] }}
+    </div>
 
     <!-- Desktop layout -->
     <SplitterGroup
@@ -172,7 +235,7 @@ onUnmounted(() => {
         <div
           class="flex shrink-0 items-center justify-between border-b border-border px-1.5 py-1.5"
         >
-          <CollabPanel />
+          <CollabPanel v-if="!store.state.readOnly" />
         </div>
         <PropertiesPanel />
       </SplitterPanel>

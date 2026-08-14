@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@open-pencil/vue'
 
+import mobaiLogo from '@/assets/mobai-logo.svg'
 import { login } from '@/app/auth/session'
 
 defineOptions({ name: 'LoginView' })
@@ -43,21 +44,20 @@ async function submit(): Promise<void> {
       class="flex h-[530px] w-[400px] max-w-full flex-col items-center rounded-2xl border border-[#3A3A3A] bg-[#2A2A2A] px-10 py-9"
       data-test-id="login-card"
     >
-      <div class="flex h-[60px] w-[129px] items-center gap-3">
-        <span
-          class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#3B82F6]"
-          aria-hidden="true"
-        >
-          <icon-lucide-pencil class="size-5 text-white" />
-        </span>
-        <span class="text-xl leading-none font-bold tracking-wide text-white">MoBai</span>
+      <!-- LogoSlot（90 高居中）：白色 M 形 logo，与设计稿 LoginCard 0:1614 一致 -->
+      <div class="flex h-[90px] items-center justify-center" data-test-id="login-logo">
+        <img :src="mobaiLogo" alt="MoBai" class="h-[60px] w-[129px]" />
       </div>
 
-      <p class="mt-2 text-[13px] text-muted" data-test-id="login-title">
-        {{ dialogs['login.title'] }}
-      </p>
+      <!-- BrandTexts：MoBai 大标题 + 云端协作白板 副标题 -->
+      <div class="mt-1 flex flex-col items-center gap-1.5">
+        <span class="text-2xl leading-none font-bold tracking-wide text-white">MoBai</span>
+        <p class="text-[13px] text-muted" data-test-id="login-title">
+          {{ dialogs['login.title'] }}
+        </p>
+      </div>
 
-      <div class="mt-7 flex w-full flex-col gap-3">
+      <div class="mt-6 flex w-full flex-col gap-3">
         <input
           v-model="username"
           type="text"
@@ -106,9 +106,6 @@ async function submit(): Promise<void> {
       </button>
 
       <div class="mt-auto flex flex-col items-center gap-1 pt-6">
-        <p class="text-[10px] text-muted/80" data-test-id="login-footer-1">
-          {{ dialogs['login.footer1'] }}
-        </p>
         <p class="text-[10px] text-muted/80" data-test-id="login-footer-2">
           {{ dialogs['login.footer2'] }}
         </p>

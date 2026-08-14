@@ -8,6 +8,7 @@ import { useActionToast } from '@/app/shell/toast/action'
 import { useEditorStore } from '@/app/editor/active-store'
 import { toolIcons } from '@/app/editor/icons'
 import { useMenuUI } from '@/components/ui/menu'
+import { EDITOR_TOOLS } from '@open-pencil/core/editor'
 import {
   ToolbarRoot,
   useEditorCommands,
@@ -16,7 +17,7 @@ import {
   useViewportKind
 } from '@open-pencil/vue'
 
-import type { Tool } from '@open-pencil/vue'
+import type { EditorToolDef, Tool } from '@open-pencil/core/editor'
 import type { ToolbarActionItem } from '@/components/Toolbar/types'
 
 const store = useEditorStore()
@@ -24,6 +25,13 @@ const { isMobile } = useViewportKind()
 const { getCommand } = useEditorCommands()
 const { showActionToast } = useActionToast()
 const { menu, tools: toolTexts } = useI18n()
+
+// 只读模式（无编辑权限）：工具栏只留 hand/select，其余编辑工具隐藏；
+// 编辑/排列动作组（delete/duplicate/arrange/layer）一并清空禁用。
+const readOnly = computed(() => store.state.readOnly)
+const readonlyTools = computed<EditorToolDef[]>(() =>
+  EDITOR_TOOLS.filter((tool) => tool.key === 'SELECT' || tool.key === 'HAND')
+)
 
 const toolLabels = computed<Record<Tool, string>>(() => ({
   SELECT: toolTexts.value.move,
@@ -57,6 +65,13 @@ const flyoutMenuCls = useMenuUI({ content: 'min-w-32' })
 const toolbarUI = { flyoutContent: flyoutMenuCls.content }
 const { editActions, arrangeActions } = useToolbarActions({ store, getCommand, menu })
 
+const visibleEditActions = computed<ToolbarActionItem[]>(() =>
+  readOnly.value ? [] : editActions.value
+)
+const visibleArrangeActions = computed<ToolbarActionItem[]>(() =>
+  readOnly.value ? [] : arrangeActions.value
+)
+
 const { mobileCategory, slideDirection, hasPrev, hasNext, goPrev, goNext } = useToolbarState()
 
 function onActionTap(item: ToolbarActionItem) {
@@ -66,7 +81,10 @@ function onActionTap(item: ToolbarActionItem) {
 </script>
 
 <template>
-  <ToolbarRoot v-slot="{ tools, activeTool, flyoutSelections, actions }">
+  <ToolbarRoot
+    v-slot="{ tools, activeTool, flyoutSelections, actions }"
+    :tools="readOnly ? readonlyTools : undefined"
+  >
     <DesktopToolbar
       v-if="!isMobile"
       :tools="tools"
@@ -92,8 +110,8 @@ function onActionTap(item: ToolbarActionItem) {
       :slide-direction="slideDirection"
       :has-prev="hasPrev"
       :has-next="hasNext"
-      :edit-actions="editActions"
-      :arrange-actions="arrangeActions"
+      :edit-actions="visibleEditActions"
+      :arrange-actions="visibleArrangeActions"
       @set-tool="actions.setTool"
       @prev="goPrev"
       @next="goNext"

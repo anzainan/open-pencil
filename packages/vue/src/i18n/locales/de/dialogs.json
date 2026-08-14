@@ -299,5 +299,12 @@
   "logout.title": "Abmelden?",
   "logout.desc": "Nach dem Abmelden werden die in diesem Browser gespeicherten Anmeldedaten gelöscht.",
   "logout.confirm": "Abmelden",
-  "logout.cancel": "Abbrechen"
+  "logout.cancel": "Abbrechen",
+  "perm.noAccess": "Keine Berechtigung zum Zugriff auf diese Datei",
+  "perm.readOnly": "Nur-Lese-Modus — keine Bearbeitungsrechte",
+  "perm.request": "Berechtigung anfordern",
+  "perm.requestTitle": "Bearbeitungsrechte erforderlich",
+  "perm.requestDesc": "Sie haben keine Bearbeitungsrechte für diese Datei. Möchten Sie sie bei einem Administrator anfordern?",
+  "perm.requestConfirm": "Berechtigung anfordern",
+  "perm.requestSent": "Anfrage gesendet — warten auf Genehmigung durch den Administrator"
 }
