@@ -7,7 +7,7 @@ import { rememberWorkspaceFile } from '@/app/bridge/restore'
 import { resolveUniqueWorkspacePath, sanitizeWorkspaceFileName } from '@/app/bridge/workspace-name'
 import { downloadBlob } from '@/app/document/io/browser'
 import { documentNameFromFigPath } from '@/app/document/io/names'
-import { chooseBrowserFigSaveHandle, chooseTauriFigSavePath } from '@/app/document/io/save-targets'
+import { chooseTauriFigSavePath } from '@/app/document/io/save-targets'
 import type { DocumentSourceAccess } from '@/app/document/io/types'
 import { createDocumentWriter } from '@/app/document/io/write'
 import { toast } from '@/app/shell/ui'
@@ -173,27 +173,6 @@ export function createSaveActions({
         toast.error(`保存失败：${saveErrorMessage(error)}`)
         throw error
       }
-      startWatchingFile()
-      return
-    }
-
-    if (window.showSaveFilePicker) {
-      const handle = await chooseBrowserFigSaveHandle()
-      if (!handle) return
-      setStorageBinding(null)
-      setFileHandle(handle)
-      setFilePath(null)
-      state.documentName = documentNameFromFigPath(handle.name)
-      state.autosaveEnabled = true
-      const docPath = await journalDocPathForSource(null, null)
-      try {
-        const wrote = await withAIOpsLock(docPath, async () => writeFile(await buildExportData()))
-        if (wrote) setSourceIdentity({ handle, path: null })
-      } catch (error) {
-        toast.error(`保存失败：${saveErrorMessage(error)}`)
-        throw error
-      }
-      if (hadWritableSource) restorePrevSource()
       startWatchingFile()
       return
     }

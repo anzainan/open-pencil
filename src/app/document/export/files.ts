@@ -158,25 +158,5 @@ export async function saveExportedFile(
     return
   }
 
-  if (window.showSaveFilePicker) {
-    try {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: fileName,
-        types: [
-          {
-            description: `${format} file`,
-            accept: { [mime]: [ext] }
-          }
-        ]
-      })
-      const writable = await handle.createWritable()
-      await writable.write(new Uint8Array(data))
-      await writable.close()
-      return
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') return
-    }
-  }
-
   downloadBlob(data, fileName, mime)
 }
