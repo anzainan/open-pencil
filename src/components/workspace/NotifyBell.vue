@@ -15,35 +15,37 @@ import {
 import { toast } from '@/app/shell/ui'
 import { usePopoverUI } from '@/components/ui/popover'
 import Tip from '@/components/ui/Tip.vue'
-import IconUserCog from '~icons/lucide/user-cog'
-import IconUserMinus from '~icons/lucide/user-minus'
-import IconUserPlus from '~icons/lucide/user-plus'
-import IconKey from '~icons/lucide/key'
 
 defineOptions({ name: 'NotifyBell' })
 
 const { dialogs } = useI18n()
 const open = ref(false)
-const cls = usePopoverUI({ content: 'z-[120] w-[21rem] p-3' })
+const cls = usePopoverUI({ content: 'z-[120] flex w-[340px] flex-col gap-1.5 rounded-lg border border-border p-2' })
 
 const POLL_MS = 15_000
 let pollTimer: ReturnType<typeof setInterval> | null = null
+
+/**
+ * 通知项 → 设计稿 §5.1 三类展示：
+ *   类型 1 请求加入（join_request / permission_request，带「同意」操作按钮）
+ *   类型 2 权限变更（permission_change，无按钮）
+ *   类型 3 移除访问（removed，无按钮）
+ */
+const TYPE_BG: Record<AppNotification['type'], string> = {
+  join_request: '#3B82F6',
+  permission_request: '#3B82F6',
+  permission_change: '#9747FF',
+  removed: '#F59E0B'
+}
 
 const actionable = (item: AppNotification): boolean =>
   item.status === 'unread' &&
   (item.type === 'permission_request' || item.type === 'join_request')
 
-const TYPE_ICONS: Record<AppNotification['type'], typeof IconUserCog> = {
-  join_request: IconUserPlus,
-  permission_request: IconKey,
-  removed: IconUserMinus,
-  permission_change: IconUserCog
-}
-
-function typeColor(item: AppNotification): string {
-  if (item.type === 'removed') return 'bg-error/15 text-error'
-  if (item.type === 'permission_change') return 'bg-success/15 text-success'
-  return 'bg-accent/15 text-accent'
+/** 从标题前缀取发起人（标题形如「小田 请求加入团队」→「小田」）。 */
+function actorChar(item: AppNotification): string {
+  const first = item.title.split(/\s+/)[0] ?? ''
+  return [...first][0]?.toUpperCase() ?? '?'
 }
 
 function startOfDay(date: Date): number {
@@ -150,7 +152,8 @@ onUnmounted(() => {
         side="bottom"
         align="end"
       >
-        <div class="flex items-center justify-between border-b border-border pb-2">
+        <!-- np-header（设计稿 §5.1） -->
+        <div class="flex items-center justify-between px-4 py-2">
           <span class="text-xs text-surface">{{ dialogs.notifications }}</span>
           <button
             type="button"
@@ -162,62 +165,58 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div v-if="notifications.length" class="mt-2 flex flex-col gap-2">
+        <div v-if="notifications.length" class="flex flex-col gap-1.5">
           <div
             v-for="item in notifications"
             :key="item.id"
-            class="flex items-start gap-3 rounded-lg bg-canvas p-2"
+            class="flex items-center gap-2 rounded-md bg-canvas p-2"
             :data-test-id="`notify-item-${item.id}`"
             :data-type="item.type"
             :data-status="item.status"
           >
-            <div
-              class="flex size-6 shrink-0 items-center justify-center rounded-full"
-              :class="typeColor(item)"
+            <span
+              class="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium text-white"
+              :style="{ backgroundColor: TYPE_BG[item.type] }"
+              :data-test-id="`notify-avatar-${item.id}`"
             >
-              <component :is="TYPE_ICONS[item.type]" class="size-3.5" />
-            </div>
+              {{ actorChar(item) }}
+            </span>
             <div class="min-w-0 flex-1">
-              <div class="flex items-start justify-between gap-2">
-                <p class="truncate text-xs text-surface" :data-test-id="`notify-title-${item.id}`">
-                  {{ item.title }}
-                </p>
-                <span class="shrink-0 text-[9px] text-muted">
-                  {{ relativeTime(item.createdAt) }}
-                </span>
-              </div>
-              <p v-if="item.detail" class="truncate text-[10px] text-muted">{{ item.detail }}</p>
-
-              <div
-                v-if="actionable(item)"
-                class="mt-1.5 flex items-center gap-1.5"
-              >
-                <button
-                  type="button"
-                  class="rounded bg-accent px-2 py-0.5 text-[10px] font-medium text-white hover:bg-accent/90"
-                  :data-test-id="`notify-approve-${item.id}`"
-                  @click="onResolve(item, 'approve')"
-                >
-                  {{ item.type === 'join_request' ? dialogs['notify.agree'] : dialogs['notify.approve'] }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded border border-border px-2 py-0.5 text-[10px] font-medium text-muted hover:bg-hover hover:text-surface"
-                  :data-test-id="`notify-reject-${item.id}`"
-                  @click="onResolve(item, 'reject')"
-                >
-                  {{ dialogs['notify.reject'] }}
-                </button>
-              </div>
-
-              <p
-                v-else-if="statusLabel(item)"
-                class="mt-1 text-[9px] text-muted"
-                :data-test-id="`notify-status-${item.id}`"
-              >
-                {{ statusLabel(item) }}
+              <p class="truncate text-[11px] leading-tight text-surface" :data-test-id="`notify-title-${item.id}`">
+                {{ item.title }}
+              </p>
+              <p class="text-[10px] leading-tight text-muted">
+                {{ relativeTime(item.createdAt) }}
               </p>
             </div>
+
+            <div v-if="actionable(item)" class="flex shrink-0 items-center gap-1.5">
+              <!-- np-btn-accept（设计稿 §5.1：22 高 #3B82F6 圆角4） -->
+              <button
+                type="button"
+                class="h-[22px] cursor-pointer rounded bg-accent px-2 text-[10px] font-medium text-white hover:bg-accent/90"
+                :data-test-id="`notify-approve-${item.id}`"
+                @click="onResolve(item, 'approve')"
+              >
+                {{ item.type === 'join_request' ? dialogs['notify.agree'] : dialogs['notify.approve'] }}
+              </button>
+              <button
+                type="button"
+                class="h-[22px] cursor-pointer rounded border border-border px-2 text-[10px] font-medium text-muted hover:bg-hover hover:text-surface"
+                :data-test-id="`notify-reject-${item.id}`"
+                @click="onResolve(item, 'reject')"
+              >
+                {{ dialogs['notify.reject'] }}
+              </button>
+            </div>
+
+            <p
+              v-else-if="statusLabel(item)"
+              class="shrink-0 text-[10px] text-muted"
+              :data-test-id="`notify-status-${item.id}`"
+            >
+              {{ statusLabel(item) }}
+            </p>
           </div>
         </div>
 

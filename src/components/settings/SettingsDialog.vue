@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DialogClose } from 'reka-ui'
+import { DialogClose, DialogContent, DialogOverlay, DialogPortal, DialogRoot } from 'reka-ui'
 import { computed, ref } from 'vue'
 import { useI18n } from '@open-pencil/vue'
 import { IS_TAURI } from '@open-pencil/core/constants'
@@ -47,7 +47,7 @@ async function saveSettings(): Promise<void> {
   saving.value = true
   try {
     const count = await commitPendingMembers()
-    toast.info(count > 0 ? dialogs.value['team.saved'] : dialogs.value['settingsSaved'])
+    toast.saved(count > 0 ? dialogs.value['team.saved'] : dialogs.value['settingsSaved'])
   } catch (error) {
     console.warn('[settings] save failed', error)
     toast.error(dialogs.value['team.saveFailed'])
@@ -216,42 +216,62 @@ const navigationClass =
     </AppDialogFooter>
   </AppDialogRoot>
 
-  <!-- 未保存更改提示（设计稿 0:1663 UnsavedDialog） -->
-  <AppDialogRoot
-    :open="unsavedDialogOpen"
-    size="sm"
-    data-test-id="unsaved-dialog"
-  >
-    <AppDialogHeader :heading="dialogs['unsaved.title']" :close-label="dialogs.close" />
-    <div class="px-5 pb-4">
-      <p class="text-sm text-surface">{{ dialogs['unsaved.desc'] }}</p>
-    </div>
-    <AppDialogFooter>
-      <button
-        type="button"
-        class="h-8 cursor-pointer rounded px-3 text-xs font-medium text-surface hover:bg-hover"
-        data-test-id="unsaved-discard"
-        @click="discardAndClose"
+  <!-- 未保存更改提示（设计稿 §6.1 UnsavedDialog 360×200） -->
+  <DialogRoot v-model:open="unsavedDialogOpen">
+    <DialogPortal>
+      <DialogOverlay class="fixed inset-0 z-40 bg-black/50" />
+      <DialogContent
+        class="fixed top-1/2 left-1/2 z-50 flex h-[200px] w-[360px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-[#3A3A3A] bg-[#2A2A2A] p-5 shadow-[0_8px_30px_rgb(0_0_0/0.5)] outline-none"
+        data-test-id="unsaved-dialog"
       >
-        {{ dialogs['unsaved.discard'] }}
-      </button>
-      <button
-        type="button"
-        class="h-8 cursor-pointer rounded px-3 text-xs font-medium text-surface hover:bg-hover"
-        data-test-id="unsaved-cancel"
-        @click="cancelUnsaved"
-      >
-        {{ dialogs['unsaved.cancel'] }}
-      </button>
-      <button
-        type="button"
-        :disabled="saving"
-        class="h-8 cursor-pointer rounded bg-accent px-3 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
-        data-test-id="unsaved-save-leave"
-        @click="saveAndLeave"
-      >
-        {{ dialogs['unsaved.saveLeave'] }}
-      </button>
-    </AppDialogFooter>
-  </AppDialogRoot>
+        <div class="flex items-center justify-between">
+          <span class="flex items-center gap-2">
+            <icon-lucide-alert-triangle class="size-4 text-muted" />
+            <span class="text-sm font-medium text-surface">{{ dialogs['unsaved.title'] }}</span>
+          </span>
+          <button
+            type="button"
+            class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+            :aria-label="dialogs.close"
+            data-test-id="unsaved-close"
+            @click="cancelUnsaved"
+          >
+            <icon-lucide-x class="size-3.5" />
+          </button>
+        </div>
+        <div class="mt-3 h-px w-full bg-[#3A3A3A]" />
+        <p class="mt-4 text-xs leading-[18px] text-surface" data-test-id="unsaved-desc">
+          {{ dialogs['unsaved.desc'] }}
+        </p>
+        <p class="mt-1 text-[11px] leading-[16px] text-muted">{{ dialogs['unsaved.subDesc'] }}</p>
+        <div class="mt-auto flex items-center justify-end gap-2">
+          <button
+            type="button"
+            class="h-7 cursor-pointer rounded-md border border-[#3A3A3A] px-3 text-[11px] text-surface hover:bg-hover"
+            data-test-id="unsaved-discard"
+            @click="discardAndClose"
+          >
+            {{ dialogs['unsaved.discard'] }}
+          </button>
+          <button
+            type="button"
+            class="h-7 cursor-pointer rounded-md border border-[#3A3A3A] px-3 text-[11px] text-surface hover:bg-hover"
+            data-test-id="unsaved-cancel"
+            @click="cancelUnsaved"
+          >
+            {{ dialogs['unsaved.cancel'] }}
+          </button>
+          <button
+            type="button"
+            :disabled="saving"
+            class="h-7 cursor-pointer rounded-md bg-accent px-3 text-[11px] font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            data-test-id="unsaved-save-leave"
+            @click="saveAndLeave"
+          >
+            {{ dialogs['unsaved.saveLeave'] }}
+          </button>
+        </div>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
 </template>

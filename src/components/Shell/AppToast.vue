@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ToastProvider, ToastRoot, ToastDescription, ToastViewport, ToastClose } from 'reka-ui'
 
 import { useClipboard } from '@vueuse/core'
@@ -15,18 +16,25 @@ const { dialogs } = useI18n()
 const defaultToastClass = useToastUI({ tone: 'default' }).base
 const warningToastClass = useToastUI({ tone: 'warning' }).base
 const errorToastClass = useToastUI({ tone: 'error' }).base
+const savedToastClass = useToastUI({ tone: 'saved', ui: { base: 'w-[180px] items-center' } }).base
 
 function toastClass(tone: ToastVariant) {
   if (tone === 'error') return errorToastClass
   if (tone === 'warning') return warningToastClass
+  if (tone === 'saved') return savedToastClass
   return defaultToastClass
 }
+
+// 设计稿 §3.1 toast-saved：右上角独立 viewport，与常规 toast 分离。
+const mainToasts = computed(() => toast.toasts.value.filter((item) => item.variant !== 'saved'))
+const savedToasts = computed(() => toast.toasts.value.filter((item) => item.variant === 'saved'))
 </script>
 
 <template>
+  <!-- 常规 toast（默认/警告/错误，顶部居中） -->
   <ToastProvider swipe-direction="up">
     <ToastRoot
-      v-for="t in toast.toasts.value"
+      v-for="t in mainToasts"
       :key="t.id"
       data-test-id="toast-item"
       :duration="t.variant === 'error' ? toast.ERROR_TOAST_DURATION : toast.TOAST_DURATION"
@@ -67,6 +75,32 @@ function toastClass(tone: ToastVariant) {
     <ToastViewport
       :label="`${dialogs.notifications} (F8)`"
       class="fixed top-2 left-1/2 z-[9999] flex -translate-x-1/2 flex-col items-center gap-1.5"
+    />
+  </ToastProvider>
+
+  <!-- 保存成功 toast（设计稿 §3.1 toast-saved：右上 180×36 #1E1E1E 描边 #3B82F6 圆角6） -->
+  <ToastProvider swipe-direction="up">
+    <ToastRoot
+      v-for="t in savedToasts"
+      :key="t.id"
+      data-test-id="toast-item-saved"
+      :duration="toast.TOAST_DURATION"
+      :class="savedToastClass"
+      @update:open="
+        (open) => {
+          if (!open) toast.remove(t.id)
+        }
+      "
+    >
+      <icon-lucide-check-circle class="size-3.5 shrink-0 text-accent" />
+      <ToastDescription class="min-w-0 flex-1 select-text text-[11px]">
+        {{ t.message }}
+      </ToastDescription>
+    </ToastRoot>
+
+    <ToastViewport
+      :label="dialogs.notifications"
+      class="fixed top-4 right-4 z-[9999] flex flex-col items-end gap-1.5"
     />
   </ToastProvider>
 </template>

@@ -47,6 +47,11 @@ function info(message: string) {
   push(message, 'default')
 }
 
+/** 保存成功暗底描边 toast（设计稿 §3.1 toast-saved）。 */
+function saved(message: string) {
+  push(message, 'saved')
+}
+
 function warning(message: string) {
   push(message, 'warning')
 }
@@ -74,6 +79,7 @@ function setupGlobalErrorHandler() {
 
 export const toast = {
   info,
+  saved,
   warning,
   error,
   remove,

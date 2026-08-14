@@ -35,7 +35,7 @@ async function confirmLogout(): Promise<void> {
         data-test-id="logout-dialog"
       >
         <div class="flex items-center justify-between">
-          <span class="text-[13px] font-medium text-surface" data-test-id="logout-title">
+          <span class="text-sm font-medium text-surface" data-test-id="logout-title">
             {{ dialogs['logout.title'] }}
           </span>
           <button
@@ -49,16 +49,19 @@ async function confirmLogout(): Promise<void> {
           </button>
         </div>
 
-        <div class="mt-1 h-px w-full bg-[#3A3A3A]" />
+        <div class="mt-3 h-px w-full bg-[#3A3A3A]" />
 
-        <p class="mt-4 text-[11px] leading-[18px] text-muted" data-test-id="logout-desc">
+        <p class="mt-4 text-xs leading-[18px] text-surface" data-test-id="logout-question">
+          {{ dialogs['logout.question'] }}
+        </p>
+        <p class="mt-1 text-[11px] leading-[16px] text-muted" data-test-id="logout-desc">
           {{ dialogs['logout.desc'] }}
         </p>
 
         <div class="mt-auto flex items-center justify-end gap-2">
           <button
             type="button"
-            class="h-9 cursor-pointer rounded-md border border-[#3A3A3A] px-4 text-[12px] text-surface hover:bg-hover"
+            class="h-7 cursor-pointer rounded-md border border-[#3A3A3A] px-3 text-[11px] text-surface hover:bg-hover"
             data-test-id="logout-cancel"
             @click="closeLogoutDialog"
           >
@@ -66,7 +69,7 @@ async function confirmLogout(): Promise<void> {
           </button>
           <button
             type="button"
-            class="h-9 cursor-pointer rounded-md bg-[#EF4444] px-4 text-[12px] font-medium text-white hover:bg-[#EF4444]/90 disabled:cursor-not-allowed disabled:opacity-50"
+            class="h-7 cursor-pointer rounded-md bg-[#EF4444] px-3 text-[11px] font-medium text-white hover:bg-[#EF4444]/90 disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="confirming"
             data-test-id="logout-confirm"
             @click="confirmLogout"
