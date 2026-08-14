@@ -17,13 +17,21 @@ function colorLuminance(color: Color): number {
 }
 
 /**
- * Picks a caret color that stays visible against the text node's effective
- * background. TEXT node fills are glyph colors, not a background, so the page
- * background governs; for other nodes a visible solid fill is treated as the
- * caret's backdrop. Dark backgrounds get a light caret, light backgrounds keep
- * the default `TEXT_CARET_COLOR` black.
+ * Picks a caret color for the text node currently being edited.
+ * The caret follows the text color itself: a solid first fill on a TEXT node
+ * is the glyph color, so the caret reuses it (black text → black caret, white
+ * text → white caret, red text → red caret). Without a solid fill (gradient /
+ * image / empty) the caret falls back to the page-background luminance logic:
+ * dark page → light caret, light page → default `TEXT_CARET_COLOR` black.
+ * Non-TEXT nodes keep the visible-solid-fill backdrop behavior.
  */
 export function resolveCaretColor(node: SceneNode, pageColor: Color): Color {
+  if (node.type === 'TEXT' && node.fills.length > 0) {
+    const fill = node.fills[0]
+    if (fill.type === 'SOLID' && fill.visible && fill.opacity > 0 && fill.color.a > 0) {
+      return { r: fill.color.r, g: fill.color.g, b: fill.color.b, a: 1 }
+    }
+  }
   const hasSolidBackground =
     node.type !== 'TEXT' &&
     node.fills.length > 0 &&
