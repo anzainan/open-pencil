@@ -126,7 +126,7 @@
   "storageNotConfigured": "Configura el almacenamiento antes de usar este espacio.",
   "copyStorageCors": "Copiar JSON de CORS",
   "storageEndpoint": "Punto de conexión",
-  "storageBucket": "Bucket",
+  "storageBucket": "Depósito",
   "storageRegion": "Región",
   "storageAccessKeyID": "ID de clave de acceso",
   "storageSecretAccessKey": "Clave de acceso secreta",
