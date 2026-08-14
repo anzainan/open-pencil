@@ -78,13 +78,13 @@ function cloneTypedArray(view: ArrayBufferView): ArrayBufferView {
   const bytes = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength)
   if (view instanceof DataView) return new DataView(bytes, 0, view.byteLength)
   const Ctor = view.constructor as new (buffer: ArrayBuffer) => ArrayBufferView
-  return new Ctor(bytes)
+  return new Ctor(bytes as ArrayBuffer)
 }
 
 function cloneValue(value: unknown, path: string, onSkip?: (path: string, kind: CloneSkipKind) => void): unknown {
   const cls = classify(value)
   if (!cls.cloneable) {
-    reportSkip(path, cls.kind, onSkip)
+    reportSkip(path, cls.kind as CloneSkipKind, onSkip)
     return undefined
   }
   switch (cls.kind) {
@@ -123,7 +123,7 @@ function cloneValue(value: unknown, path: string, onSkip?: (path: string, kind: 
           return out
         }
         const out: Record<string, unknown> = {}
-        for (const key of Object.keys(value)) {
+        for (const key of Object.keys(value as DataRecord)) {
           out[key] = cloneValue((value as DataRecord)[key], `${path}/${key}`, onSkip)
         }
         return out
