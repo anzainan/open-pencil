@@ -12,6 +12,17 @@ export const FONTS_REL_DIR = 'fonts'
 /** 回收站目录名（相对设计根，软删文件的落地目录）。 */
 export const TRASH_REL_DIR = '.trash'
 
+/** file-bridge 内部隐藏索引目录名（相对设计根，homepage 可见性白名单台账所在目录）。 */
+export const OPENPENCIL_REL_DIR = '.openpencil'
+
+/** 内部隐藏目录前缀判断（.trash / .openpencil），扫描与 watcher 统一跳过。 */
+export function isHiddenRelDir(rel: string): boolean {
+  return rel === TRASH_REL_DIR ||
+    rel.startsWith(`${TRASH_REL_DIR}/`) ||
+    rel === OPENPENCIL_REL_DIR ||
+    rel.startsWith(`${OPENPENCIL_REL_DIR}/`)
+}
+
 function isSafeRelSegments(rel: string, lastMustMatch: RegExp): boolean {
   if (!rel || rel.length === 0) return false
   if (rel.includes('\0')) return false

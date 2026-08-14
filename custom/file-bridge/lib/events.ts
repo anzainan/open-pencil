@@ -1,7 +1,7 @@
 import { statSync, watch, type FSWatcher } from 'node:fs'
 import { join, sep } from 'node:path'
 
-import { ALLOWED_DESIGN_EXTENSIONS, TRASH_REL_DIR } from './paths'
+import { ALLOWED_DESIGN_EXTENSIONS, isHiddenRelDir } from './paths'
 
 export type EventType =
   | 'hello'
@@ -61,21 +61,33 @@ export interface WatchEvent {
   brand: string
 }
 
+export interface FileWatcherOptions {
+  debounceMs?: number
+  /** 台账白名单过滤：返回 false 的路径不进入 known、不广播（SSE/known/reconcile 全链路干净）。 */
+  shouldTrack?: (rel: string) => boolean
+}
+
 /**
  * 递归监听设计目录（fs.watch recursive）。维护 known 集合区分 created/changed；
  * 短防抖合并同一路径的密集事件；reconcile() 提供对丢失事件的兜底校正。
+ * 非台账（shouldTrack=false）路径直接丢弃，深层/既有文件不会污染 SSE。
  */
 export class FileWatcher {
   private known = new Set<string>()
   private pending = new Map<string, ReturnType<typeof setTimeout>>()
   private watcher?: FSWatcher
   private stopped = false
+  private readonly debounceMs: number
+  private readonly shouldTrack?: (rel: string) => boolean
 
   constructor(
     private readonly root: string,
     private readonly onEvent: (event: WatchEvent) => void,
-    private readonly debounceMs = 80
-  ) {}
+    options: FileWatcherOptions = {}
+  ) {
+    this.debounceMs = options.debounceMs ?? 80
+    this.shouldTrack = options.shouldTrack
+  }
 
   seed(paths: string[]): void {
     this.known = new Set(paths)
@@ -87,7 +99,8 @@ export class FileWatcher {
         if (this.stopped || typeof filename !== 'string') return
         const rel = filename.split(sep).join('/')
         if (!ALLOWED_DESIGN_EXTENSIONS.test(rel)) return
-        if (isTrashRelPath(rel)) return
+        if (isHiddenRelDir(rel)) return
+        if (this.shouldTrack && !this.shouldTrack(rel)) return
         this.schedule(rel)
       })
       this.watcher.on('error', (error) => console.error('[file-watcher]', error))
@@ -116,7 +129,8 @@ export class FileWatcher {
   }
 
   private handle(rel: string): void {
-    if (isTrashRelPath(rel)) return
+    if (isHiddenRelDir(rel)) return
+    if (this.shouldTrack && !this.shouldTrack(rel)) return
     const full = join(this.root, rel)
     let isFile = false
     try {
@@ -156,10 +170,6 @@ export class FileWatcher {
       }
     }
   }
-}
-
-function isTrashRelPath(rel: string): boolean {
-  return rel === TRASH_REL_DIR || rel.startsWith(`${TRASH_REL_DIR}/`)
 }
 
 /** 构造 SSE 响应；连接断开时取消订阅（Bun 会在流关闭时调用 cancel）。 */

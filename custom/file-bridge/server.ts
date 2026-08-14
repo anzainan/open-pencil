@@ -2,10 +2,18 @@ import { existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, join, resolve, sep } from 'node:path'
 
-import { fileMeta, scanDesignDirs, scanDesignRoot, scanFontsRoot, scanTrashRoot } from './lib/design'
+import {
+  fileMeta,
+  listingFromFiles,
+  scanFontsRoot,
+  scanManifestDirs,
+  scanManifestFiles,
+  scanTrashRoot
+} from './lib/design'
 import { EventBus, FileWatcher, sseResponse } from './lib/events'
 import { createMcpProxy, type McpProxyHandle } from './mcp-proxy'
 import { handleMcpRequest, type McpDeps } from './mcp'
+import { Manifest } from './lib/manifest'
 import {
   ALLOWED_DESIGN_EXTENSIONS,
   isSafeBrand,
@@ -253,15 +261,21 @@ export function startServer(options: BridgeServerOptions) {
 
   const state = new StateStore(stateDir)
   const bus = new EventBus(SSE_PING_MS)
-  const watcher = new FileWatcher(designRoot, (event) => {
-    bus.broadcast(event.type, { path: event.path, brand: event.brand })
-  })
+  // homepage 可见性白名单台账：只展示经首页/工作区创建链路登记的内容（方案 A）。
+  const manifest = new Manifest(designRoot)
+  const watcher = new FileWatcher(
+    designRoot,
+    (event) => {
+      bus.broadcast(event.type, { path: event.path, brand: event.brand })
+    },
+    { shouldTrack: (rel) => manifest.isFileRegistered(rel) }
+  )
 
-  watcher.seed(scanDesignRoot(designRoot).flat.map((file) => file.path))
+  watcher.seed(scanManifestFiles(designRoot, manifest.files).map((file) => file.path))
   const watcherActive = watcher.start()
 
   const reconcileTimer = setInterval(() => {
-    watcher.reconcile(scanDesignRoot(designRoot).flat)
+    watcher.reconcile(scanManifestFiles(designRoot, manifest.files))
   }, RECONCILE_MS)
 
   const mcpDeps: McpDeps = { designRoot, state, token }
@@ -287,8 +301,9 @@ export function startServer(options: BridgeServerOptions) {
 
   // ---- 文件 API ----
 
+  /** 台账 join 后清单：只返回经首页/工作区创建链路登记且实盘存在的文件。 */
   function listFiles(): Response {
-    return json(scanDesignRoot(designRoot))
+    return json(listingFromFiles(scanManifestFiles(designRoot, manifest.files)))
   }
 
   async function createFileEntry(request: Request): Promise<Response> {
@@ -333,12 +348,16 @@ export function startServer(options: BridgeServerOptions) {
     if (!overwrite && existsSync(full)) {
       return json({ ok: false, error: `already exists: ${rel}` }, 409)
     }
+    // 新文件首次写盘（新建白板保存 / MCP save_file / op-eval --write）→ 登记台账，
+    // 首页文件区可见；既有文件再次保存不新登记（台账保持「首页创建内容」语义）。
+    const existedBefore = existsSync(full)
     try {
       mkdirSync(dirname(full), { recursive: true })
       await withWriteQueue(full, () => writeFileAtomic(full, request))
     } catch (error) {
       return json({ ok: false, error: `write failed: ${String(error)}` }, 500)
     }
+    if (!existedBefore) manifest.registerFile(rel)
     const meta = fileMeta(designRoot, rel)
     return json(
       { path: rel, size: meta?.size ?? 0, mtime: meta?.mtime ?? null, updatedAt: meta?.mtime ?? null },
@@ -356,13 +375,15 @@ export function startServer(options: BridgeServerOptions) {
     } catch (error) {
       return json({ ok: false, error: `delete failed: ${String(error)}` }, 500)
     }
+    manifest.removePath(rel)
     return json({ path: rel, deleted: true })
   }
 
   // ---- 文件夹 / 重命名 / 移动 / 回收站（Phase 2/3 新增端点）----
 
+  /** 台账 join 后目录清单：只返回经「新建项目」登记且实盘存在的文件夹。 */
   function listDirs(): Response {
-    return json({ dirs: scanDesignDirs(designRoot) })
+    return json({ dirs: scanManifestDirs(designRoot, manifest.folders) })
   }
 
   async function createDir(request: Request): Promise<Response> {
@@ -382,6 +403,7 @@ export function startServer(options: BridgeServerOptions) {
     } catch (error) {
       return json({ ok: false, error: `create dir failed: ${String(error)}` }, 500)
     }
+    manifest.registerFolder(path)
     return json({ path }, 201)
   }
 
@@ -430,6 +452,7 @@ export function startServer(options: BridgeServerOptions) {
     } catch (error) {
       return json({ ok: false, error: `rename failed: ${String(error)}` }, 500)
     }
+    manifest.renamePath(rel, newRel)
     bus.broadcast('file.deleted', { path: rel, brand: rel.split('/')[0] ?? '' })
     bus.broadcast('file.created', { path: newRel, brand: newRel.split('/')[0] ?? '' })
     return json({ path: newRel })
@@ -458,6 +481,7 @@ export function startServer(options: BridgeServerOptions) {
     } catch (error) {
       return json({ ok: false, error: `move failed: ${String(error)}` }, 500)
     }
+    manifest.renamePath(rel, newRel)
     bus.broadcast('file.deleted', { path: rel, brand: rel.split('/')[0] ?? '' })
     bus.broadcast('file.created', { path: newRel, brand: newRel.split('/')[0] ?? '' })
     return json({ path: newRel })
@@ -477,6 +501,8 @@ export function startServer(options: BridgeServerOptions) {
     } catch (error) {
       return json({ ok: false, error: `trash failed: ${String(error)}` }, 500)
     }
+    // 移入回收站 = 不再展示 → 从台账移除（恢复端点再登记回来）。
+    manifest.removePath(rel)
     bus.broadcast('file.deleted', { path: rel, brand: rel.split('/')[0] ?? '' })
     return json({ path: rel, trashed: true })
   }
@@ -507,6 +533,9 @@ export function startServer(options: BridgeServerOptions) {
     } catch (error) {
       return json({ ok: false, error: `restore failed: ${String(error)}` }, 500)
     }
+    // 台账同步恢复：按被恢复条目类型重新登记，首页重新可见。
+    if (statSync(targetFull).isFile()) manifest.registerFile(rel)
+    else manifest.registerFolder(rel)
     bus.broadcast('file.created', { path: rel, brand: rel.split('/')[0] ?? '' })
     return json({ path: rel, restored: true })
   }
@@ -520,6 +549,7 @@ export function startServer(options: BridgeServerOptions) {
     } catch (error) {
       return json({ ok: false, error: `delete failed: ${String(error)}` }, 500)
     }
+    manifest.removePath(rel)
     return json({ path: rel, deleted: true })
   }
 

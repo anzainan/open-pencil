@@ -1,7 +1,13 @@
 import { readdirSync, statSync, type Dirent } from 'node:fs'
 import { join } from 'node:path'
 
-import { ALLOWED_DESIGN_EXTENSIONS, ALLOWED_FONT_EXTENSIONS, FONTS_REL_DIR, TRASH_REL_DIR } from './paths'
+import {
+  ALLOWED_DESIGN_EXTENSIONS,
+  ALLOWED_FONT_EXTENSIONS,
+  FONTS_REL_DIR,
+  isHiddenRelDir,
+  TRASH_REL_DIR
+} from './paths'
 
 export interface DesignFileInfo {
   path: string
@@ -49,13 +55,13 @@ export function fileMeta(root: string, rel: string): DesignFileInfo | null {
   }
 }
 
-/** 递归扫描设计目录，按顶层品牌目录分组。根目录下的散文件归入 brand: ''。回收站目录被排除。 */
+/** 递归扫描设计目录，按顶层品牌目录分组。根目录下的散文件归入 brand: ''。回收站与内部隐藏目录被排除。 */
 export function scanDesignRoot(root: string): DesignListing {
   const byBrand = new Map<string, DesignFileInfo[]>()
   const flat: DesignFileInfo[] = []
 
   const walk = (dir: string, relDir: string) => {
-    if (relDir === TRASH_REL_DIR) return
+    if (isHiddenRelDir(relDir)) return
     let entries: Dirent[]
     try {
       entries = readdirSync(dir, { withFileTypes: true })
@@ -87,7 +93,51 @@ export function scanDesignRoot(root: string): DesignListing {
   return { groups, flat }
 }
 
-/** 递归列目录（含空文件夹），返回相对设计根的目录路径。回收站目录被排除。 */
+/** 台账 join：只返回台账登记且实盘存在的文件（漏登记/已删 → 不显示，安全侧冗余）。 */
+export function scanManifestFiles(root: string, registered: string[]): DesignFileInfo[] {
+  const out: DesignFileInfo[] = []
+  for (const rel of registered) {
+    const info = fileMeta(root, rel)
+    if (info) out.push(info)
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/** 台账 join：只返回台账登记且实盘存在的目录（含空目录，漏登记 → 不显示）。 */
+export function scanManifestDirs(root: string, registered: string[]): string[] {
+  const out: string[] = []
+  for (const rel of registered) {
+    if (rel === '.trash' || rel.startsWith('.trash/') || rel.startsWith('.openpencil')) continue
+    if (isDirectory(join(root, rel))) out.push(rel)
+  }
+  return out.sort((a, b) => a.localeCompare(b))
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+/** 由平铺文件清单构建与 scanDesignRoot 同构的 { groups, flat } 列表。 */
+export function listingFromFiles(files: DesignFileInfo[]): DesignListing {
+  const flat = [...files].sort((a, b) => a.path.localeCompare(b.path))
+  const byBrand = new Map<string, DesignFileInfo[]>()
+  for (const info of flat) {
+    const brand = info.path.includes('/') ? info.path.split('/')[0] : ''
+    const list = byBrand.get(brand)
+    if (list) list.push(info)
+    else byBrand.set(brand, [info])
+  }
+  const groups: BrandGroup[] = [...byBrand.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([brand, files]) => ({ brand, files }))
+  return { groups, flat }
+}
+
+/** 递归列目录（含空文件夹），返回相对设计根的目录路径。回收站与内部隐藏目录被排除。 */
 export function scanDesignDirs(root: string): string[] {
   const dirs: string[] = []
 
@@ -101,7 +151,7 @@ export function scanDesignDirs(root: string): string[] {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
       const rel = relDir ? `${relDir}/${entry.name}` : entry.name
-      if (rel === TRASH_REL_DIR || rel.startsWith(`${TRASH_REL_DIR}/`)) continue
+      if (isHiddenRelDir(rel)) continue
       dirs.push(rel)
       walk(join(dir, entry.name), rel)
     }
