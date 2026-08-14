@@ -204,6 +204,7 @@ export const dialogMessageDefaults = {
   projectCreated: params('Project "{name}" created'),
   createProjectFailed: 'Create project failed',
   new: 'New',
+  newWhiteboard: 'New whiteboard',
   trash: 'Trash',
   backToTeamSpace: 'Back to team space',
   folders: 'Folders',
