@@ -116,6 +116,7 @@
   "vectorization": "Bildvektorisierung",
   "vectorizationDescription": "Sendet Bildebenen an Recraft oder fal.ai und gibt bearbeitbare Vektoren zurück. Es können Anbietergebühren anfallen.",
   "vectorizeProvider": "Vektorisierungsdienst",
+  "vectorizeKeyOptional": "Optional — nur verwendet, wenn die Vektorisierung aktiviert ist.",
   "settingsStorage": "Cloud-Speicher",
   "storageWorkspace": "Speicher-Arbeitsbereich",
   "openStorageWorkspace": "Arbeitsbereich öffnen",
@@ -154,6 +155,7 @@
   "keySavedReplace": "Schlüssel gespeichert — neuen eingeben, um zu ersetzen",
   "getAPIKeyGeneric": "API-Schlüssel abrufen →",
   "pexelsAPIKey": "Pexels-API-Schlüssel (Stockfotos)",
+  "pexelsServerConfigured": "Pexels-API-Schlüssel von der Cloud konfiguriert (vom Server)",
   "unsplashAccessKey": "Unsplash-Zugriffsschlüssel",
   "stockPhotoToolOptional": "Optional — für das stock_photo-Tool",
   "pexelsAlternativeOptional": "Optional — Alternative zu Pexels",
@@ -358,7 +360,9 @@
   "team.colName": "Name",
   "team.colPassword": "Passwort",
   "team.colRole": "Rolle",
+  "team.manageDescription": "Teammitglieder und Zusammenarbeitsrechte verwalten",
   "team.addMember": "Mitglied hinzufügen",
+  "team.addName": "Mitgliedsname",
   "team.addNamePlaceholder": "Mitgliedsname eingeben…",
   "team.addPasswordPlaceholder": "Zugriffspasswort festlegen…",
   "team.addAndCopy": "Hinzufügen & kopieren",
@@ -381,6 +385,7 @@
   "team.randomPassword": "Passwort generieren",
   "team.passwordPlaceholder": "Passwort festlegen…",
   "settingsSaved": "Einstellungen gespeichert",
+  "saveChanges": "Änderungen speichern",
   "unsaved.title": "Ungespeicherte Änderungen",
   "unsaved.desc": "Sie haben Einstellungen geändert, aber nicht gespeichert. Beim Verlassen gehen alle Änderungen verloren.",
   "unsaved.discard": "Änderungen verwerfen",
@@ -402,5 +407,8 @@
   "access.saveFailed": "Speichern fehlgeschlagen",
   "access.loadFailed": "Mitglieder konnten nicht geladen werden",
   "access.teamDesc": "Alle Teammitglieder können auf diesen Ordner zugreifen. Die Rechte gelten automatisch für alle enthaltenen Dateien.",
-  "access.readOnly": "Nur Administratoren können Zugriffsrechte ändern"
+  "access.readOnly": "Nur Administratoren können Zugriffsrechte ändern",
+  "team.memberCount": "{count} Mitglieder",
+  "team.addRole": "Rolle",
+  "team.random": "Zufällig"
 }

@@ -77,5 +77,8 @@ onMounted(() => void refreshStatus())
       @change="saveCredential"
       @clear="clearCredential"
     />
+    <p class="text-[10px] text-muted" data-vectorize-key-optional>
+      {{ dialogs.vectorizeKeyOptional }}
+    </p>
   </section>
 </template>

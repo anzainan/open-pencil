@@ -92,7 +92,7 @@ const credentialBackendLabel = computed(() => {
 })
 
 const navigationClass =
-  'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-muted transition-colors hover:bg-hover hover:text-surface data-[state=active]:bg-hover data-[state=active]:text-surface'
+  'flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[11px] text-muted transition-colors hover:bg-hover hover:text-surface data-[state=active]:bg-accent data-[state=active]:text-white'
 </script>
 
 <template>
@@ -100,6 +100,7 @@ const navigationClass =
     :open="settingsDialogOpen"
     size="lg"
     height="tall"
+    :ui="{ content: 'h-[540px]' }"
     data-test-id="app-settings-dialog"
     @update:open="onOpenChange"
   >
@@ -107,10 +108,14 @@ const navigationClass =
       :heading="dialogs.settings"
       :description="dialogs.settingsDescription"
       :close-label="dialogs.close"
+      :ui="{ title: 'text-base' }"
     />
 
     <div class="flex min-h-0 flex-1">
-      <nav class="w-40 shrink-0 border-r border-border p-2" :aria-label="dialogs.settings">
+      <nav
+        class="flex w-40 shrink-0 flex-col gap-1 border-r border-border p-2"
+        :aria-label="dialogs.settings"
+      >
         <button
           type="button"
           :class="navigationClass"
@@ -179,7 +184,7 @@ const navigationClass =
           data-test-id="settings-remember-credentials"
         />
         <div>
-          <p v-if="!IS_TAURI" class="text-[10px] text-surface">
+          <p v-if="!IS_TAURI" class="text-[11px] text-surface">
             {{ dialogs.rememberCredentials }}
           </p>
           <p class="text-[10px] text-muted" data-test-id="settings-credential-backend">
@@ -192,11 +197,11 @@ const navigationClass =
           v-if="settingsDirty"
           type="button"
           :disabled="saving"
-          class="rounded bg-accent px-3 py-1.5 text-[11px] font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+          class="flex h-7 cursor-pointer items-center rounded-md bg-accent px-3 text-[11px] font-medium text-white hover:bg-accent/90 disabled:opacity-50"
           data-test-id="settings-save"
           @click="saveSettings"
         >
-          {{ dialogs.save }}
+          {{ dialogs.saveChanges }}
         </button>
         <DialogClose as-child>
           <button

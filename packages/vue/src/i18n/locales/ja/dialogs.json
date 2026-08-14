@@ -116,6 +116,7 @@
   "vectorization": "画像のベクター化",
   "vectorizationDescription": "画像レイヤーを Recraft または fal.ai に送信し、編集可能なベクターを返します。プロバイダー料金が発生する場合があります。",
   "vectorizeProvider": "ベクター化サービス",
+  "vectorizeKeyOptional": "任意 — ベクタライズを有効にしたときのみ使用します。",
   "settingsStorage": "クラウドストレージ",
   "storageWorkspace": "ストレージワークスペース",
   "openStorageWorkspace": "ワークスペースを開く",
@@ -154,6 +155,7 @@
   "keySavedReplace": "キーが保存されました - 上書きするには新しいキーを入力してください",
   "getAPIKeyGeneric": "APIキーを取得 →",
   "pexelsAPIKey": "PexelsのAPIキー (ストックフォト)",
+  "pexelsServerConfigured": "Pexels APIキーはクラウド（サーバー）によって設定済みです",
   "unsplashAccessKey": "Unsplashのアクセスキー",
   "stockPhotoToolOptional": "任意 — stock_photoツール用",
   "pexelsAlternativeOptional": "任意 — Pexelsの代替案",
@@ -358,7 +360,9 @@
   "team.colName": "名前",
   "team.colPassword": "パスワード",
   "team.colRole": "権限",
+  "team.manageDescription": "チームメンバーとコラボレーション権限を管理",
   "team.addMember": "メンバーを追加",
+  "team.addName": "メンバー名",
   "team.addNamePlaceholder": "メンバー名を入力…",
   "team.addPasswordPlaceholder": "アクセスパスワードを設定…",
   "team.addAndCopy": "追加してコピー",
@@ -381,6 +385,7 @@
   "team.randomPassword": "パスワードを生成",
   "team.passwordPlaceholder": "パスワードを設定…",
   "settingsSaved": "設定を保存しました",
+  "saveChanges": "変更を保存",
   "unsaved.title": "未保存の変更",
   "unsaved.desc": "設定を変更しましたが保存していません。このまま離れると変更は失われます。",
   "unsaved.discard": "変更を破棄",
@@ -402,5 +407,8 @@
   "access.saveFailed": "保存に失敗しました",
   "access.loadFailed": "メンバーを読み込めませんでした",
   "access.teamDesc": "すべてのメンバーがこのフォルダーにアクセスできます。権限は中の全ファイルに自動適用されます。",
-  "access.readOnly": "アクセス権限を変更できるのは管理者のみです"
+  "access.readOnly": "アクセス権限を変更できるのは管理者のみです",
+  "team.memberCount": "{count} 名のメンバー",
+  "team.addRole": "ロール",
+  "team.random": "ランダム"
 }

@@ -28,7 +28,9 @@ async function clearPexelsKey(): Promise<void> {
 <template>
   <template v-if="serverPexelsConfigured">
     <ProviderSettingsField :label="dialogs.pexelsAPIKey">
-      <p class="text-sm text-muted-foreground">Pexels API 密钥已由云端配置（来自服务器）</p>
+      <p class="text-sm text-surface" data-test-id="provider-settings-pexels-configured">
+        {{ dialogs.pexelsServerConfigured }}
+      </p>
     </ProviderSettingsField>
   </template>
   <template v-else>

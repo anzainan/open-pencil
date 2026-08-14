@@ -5,14 +5,12 @@ import { DialogContent, DialogOverlay, DialogPortal, DialogRoot } from 'reka-ui'
 
 import { useI18n } from '@open-pencil/vue'
 
-import { isAdmin } from '@/app/auth/session'
+import { isAdmin, useCurrentUser } from '@/app/auth/session'
 import { createMember } from '@/app/bridge/share'
 import { toast } from '@/app/shell/ui'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import {
-  commitPendingMembers,
   loadTeamMembers,
-  pendingCount,
   randomPassword,
   removeSelectedMembers,
   selectedCount,
@@ -28,8 +26,14 @@ defineOptions({ name: 'TeamSettingsPanel' })
 
 const { dialogs } = useI18n()
 const { copy: copyText } = useClipboard()
+const currentUser = useCurrentUser()
 
 const canOperate = computed(() => isAdmin.value)
+
+const teamName = computed(() => currentUser.value?.name ?? '—')
+
+/** 成员列表：owner（fixed）行不渲染（B1 裁决：权限设置 UI 不出现 owner）。 */
+const memberRows = computed(() => teamMembers.value.filter((member) => !member.fixed))
 
 const roleOptions = computed(() => [
   { value: 'admin', label: dialogs.value['role.admin'] },
@@ -125,164 +129,132 @@ async function confirmRemove(): Promise<void> {
     removing.value = false
   }
 }
-
-async function savePending(): Promise<void> {
-  try {
-    const count = await commitPendingMembers()
-    if (count > 0) toast.info(dialogs.value['team.saved'])
-  } catch (error) {
-    console.warn('[team] save pending failed', error)
-    toast.error(dialogs.value['team.saveFailed'])
-  }
-}
 </script>
 
 <template>
   <section class="flex flex-col gap-3" data-test-id="settings-team-panel">
-    <div class="flex items-center justify-between">
-      <h3 class="text-xs font-semibold text-surface">{{ dialogs.settingsTeam }}</h3>
+    <!-- SecTitle（设计稿 §4.1） -->
+    <div>
+      <h3 class="text-base font-semibold text-surface">{{ dialogs.settingsTeam }}</h3>
+      <p class="mt-0.5 text-xs text-muted">{{ dialogs['team.manageDescription'] }}</p>
+    </div>
+
+    <!-- TeamCard（设计稿 §4.1） -->
+    <div class="flex items-center gap-3 rounded-lg border border-border bg-panel p-3" data-test-id="team-card">
+      <span
+        class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-component"
+        data-test-id="team-card-icon"
+      >
+        <icon-lucide-users class="size-5 text-white" />
+      </span>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-[13px] font-medium text-surface" data-test-id="team-card-name">
+          {{ teamName }}
+        </p>
+        <p class="text-[10px] text-muted" data-test-id="team-card-count">
+          {{ dialogs['team.memberCount']({ count: teamMembers.length }) }}
+        </p>
+      </div>
       <button
         v-if="canOperate"
         type="button"
-        class="flex h-7 cursor-pointer items-center gap-1 rounded border border-border px-2 text-[11px] text-surface hover:bg-hover"
+        class="h-7 shrink-0 cursor-pointer rounded border border-border px-2 text-[11px] text-muted hover:bg-hover hover:text-surface disabled:cursor-not-allowed disabled:opacity-40"
+        :disabled="selectedCount === 0"
+        data-test-id="team-remove-top"
+        @click="openRemove"
+      >
+        {{ dialogs['team.removeConfirmAction'] }}
+      </button>
+      <button
+        v-if="canOperate"
+        type="button"
+        class="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded bg-accent px-2 text-[11px] font-medium text-white hover:bg-accent/90"
         data-test-id="team-add-member"
         @click="openAdd"
       >
-        <icon-lucide-user-plus class="size-3.5" />
+        <icon-lucide-user-plus class="size-3" />
         {{ dialogs['team.addMember'] }}
       </button>
     </div>
 
-    <div
-      class="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-2 px-2 pb-1 text-[10px] text-muted"
-      data-test-id="team-column-headers"
-    >
-      <span class="w-4" />
-      <span>{{ dialogs['team.colName'] }}</span>
-      <span>{{ dialogs['team.colPassword'] }}</span>
-      <span class="text-right">{{ dialogs['team.colRole'] }}</span>
-    </div>
-
-    <div class="flex max-h-64 flex-col gap-1 overflow-y-auto pr-1">
+    <!-- MemberList（设计稿 §4.1；行高 32 / px 4 / gap 8，owner 行不渲染） -->
+    <div class="flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1">
       <div
-        v-if="teamMembersLoaded && teamMembers.length === 0"
+        v-if="teamMembersLoaded && memberRows.length === 0"
         class="py-4 text-center text-[11px] text-muted"
       >
         {{ dialogs['team.noMembers'] }}
       </div>
 
       <div
-        v-for="member in teamMembers"
+        v-for="member in memberRows"
         :key="member.id"
-        class="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-hover"
+        class="flex h-8 items-center gap-2 rounded-md px-1 hover:bg-hover"
         :data-test-id="`team-member-row-${member.id}`"
-        :data-fixed="member.fixed ?? false"
       >
         <button
-          v-if="canOperate && !member.fixed"
+          v-if="canOperate"
           type="button"
-          class="flex size-4 cursor-pointer items-center justify-center rounded-[3px] border border-muted"
-          :class="member.selected ? 'bg-accent border-accent' : 'bg-panel'"
+          class="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] border border-muted bg-panel data-[selected]:border-accent data-[selected]:bg-accent"
+          :data-selected="member.selected || undefined"
           :aria-label="dialogs['team.selectMember']"
           data-test-id="team-member-check"
           @click="toggleMemberSelected(member.id)"
         >
           <icon-lucide-check v-if="member.selected" class="size-2.5 text-white" />
         </button>
-        <span v-else class="flex size-4 items-center justify-center">
-          <icon-lucide-lock v-if="member.fixed" class="size-3 text-muted" />
-        </span>
+        <span v-else class="flex size-4 shrink-0 items-center justify-center" />
 
-        <span class="flex min-w-0 items-center gap-1.5">
-          <span
-            class="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] text-white"
-            :style="{ backgroundColor: member.avatar.bg }"
-          >
-            {{ member.avatar.char }}
-          </span>
-          <span class="truncate text-[11px] text-surface">{{ member.name }}</span>
-          <span v-if="member.fixed" class="shrink-0 text-[9px] text-muted">
-            {{ dialogs['share.owner'] }}
-          </span>
+        <span class="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] text-white" :style="{ backgroundColor: member.avatar.bg }">
+          {{ member.avatar.char }}
         </span>
+        <span class="min-w-0 truncate text-xs text-surface">{{ member.name }}</span>
 
-        <template v-if="canOperate && !member.fixed">
-          <span class="flex items-center gap-1">
+        <template v-if="canOperate">
+          <span class="ml-auto flex shrink-0 items-center gap-1">
             <input
               :value="member.passwordDraft"
               type="text"
-              class="h-6 w-24 rounded border border-border bg-panel px-1.5 text-[11px] text-surface outline-none placeholder:text-muted focus:border-accent"
+              class="h-[22px] w-[92px] rounded-[4px] bg-panel-field px-1.5 text-[10px] text-surface outline-none placeholder:text-muted focus:bg-panel-field-hover"
               :placeholder="dialogs['team.passwordPlaceholder']"
               data-test-id="team-member-password"
               @input="onPasswordInput(member.id, $event)"
             />
             <button
               type="button"
-              class="flex size-5 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+              class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
               :aria-label="dialogs['team.randomPassword']"
               data-test-id="team-member-password-random"
               @click="onRandomPassword(member.id)"
             >
-              <icon-lucide-refresh-cw class="size-3" />
+              <icon-lucide-refresh-cw class="size-[11px]" />
             </button>
+            <AppSelect
+              :model-value="member.roleDraft"
+              :options="roleOptions"
+              :ui="{ trigger: 'h-6 min-w-0 text-[11px]' }"
+              data-test-id="team-member-role"
+              @update:model-value="(value: string) => onRoleChange(member.id, value)"
+            />
           </span>
         </template>
-        <template v-else>
-          <span class="text-[10px] text-muted">—</span>
-        </template>
-
-        <span class="flex justify-end">
-          <AppSelect
-            v-if="canOperate && !member.fixed"
-            :model-value="member.roleDraft"
-            :options="roleOptions"
-            :ui="{ trigger: 'h-6 min-w-0 text-[11px]' }"
-            data-test-id="team-member-role"
-            @update:model-value="(value: string) => onRoleChange(member.id, value)"
-          />
-          <span v-else class="text-[10px] text-muted">
-            {{ dialogs[`role.${member.role}`] }}
-          </span>
+        <span v-else class="ml-auto shrink-0 text-[11px] text-muted">
+          {{ dialogs[`role.${member.role}`] }}
         </span>
       </div>
     </div>
-
-    <div v-if="canOperate" class="flex items-center justify-between border-t border-border pt-2">
-      <div class="flex items-center gap-2">
-        <button
-          v-if="pendingCount > 0"
-          type="button"
-          class="h-7 cursor-pointer rounded px-2.5 text-[11px] font-medium text-accent hover:bg-hover"
-          data-test-id="team-save-pending"
-          @click="savePending"
-        >
-          {{ dialogs['team.savePending'] }}
-        </button>
-      </div>
-      <button
-        type="button"
-        class="flex h-7 cursor-pointer items-center gap-1 rounded border px-2.5 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-40"
-        :class="selectedCount > 0 ? 'border-red-600/50 text-red-500 hover:bg-red-600/10' : 'border-border text-muted'"
-        :disabled="selectedCount === 0"
-        data-test-id="team-remove-members"
-        @click="openRemove"
-      >
-        <icon-lucide-user-minus class="size-3.5" />
-        {{ dialogs['team.removeMembers'] }}
-      </button>
-    </div>
   </section>
 
-  <!-- 添加成员弹窗（设计稿 0:2507 AddMemberDialog 360×300） -->
+  <!-- 添加成员弹窗（设计稿 §4.3 AddMemberDialog 360×300） -->
   <DialogRoot v-model:open="addOpen">
     <DialogPortal>
       <DialogOverlay class="fixed inset-0 z-40 bg-black/50" />
       <DialogContent
-        class="fixed top-1/2 left-1/2 z-50 flex w-[360px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-xl border border-[#3A3A3A] bg-[#2A2A2A] p-5 shadow-[0_8px_30px_rgb(0_0_0/0.5)] outline-none"
+        class="fixed top-1/2 left-1/2 z-50 flex h-[300px] w-[360px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-xl border border-[#3A3A3A] bg-[#2A2A2A] p-5 shadow-[0_8px_30px_rgb(0_0_0/0.5)] outline-none"
         data-test-id="team-add-dialog"
       >
         <div class="flex items-center justify-between">
-          <span class="text-[13px] font-medium text-surface">{{ dialogs['team.addMember'] }}</span>
+          <span class="text-sm font-medium text-surface">{{ dialogs['team.addMember'] }}</span>
           <button
             type="button"
             class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
@@ -296,11 +268,11 @@ async function savePending(): Promise<void> {
         <div class="h-px w-full bg-[#3A3A3A]" />
 
         <label class="flex flex-col gap-1">
-          <span class="text-[10px] text-muted">{{ dialogs['team.colName'] }}</span>
+          <span class="text-[10px] text-muted">{{ dialogs['team.addName'] }}</span>
           <input
             v-model="addName"
             type="text"
-            class="h-8 w-full rounded-md border border-[#3A3A3A] bg-[#1E1E1E] px-2.5 text-[12px] text-surface outline-none placeholder:text-muted focus:border-accent"
+            class="h-8 w-full rounded-[4px] bg-panel-field px-2.5 text-xs text-surface outline-none placeholder:text-muted focus:bg-panel-field-hover"
             :placeholder="dialogs['team.addNamePlaceholder']"
             data-test-id="team-add-name"
           />
@@ -312,28 +284,29 @@ async function savePending(): Promise<void> {
             <input
               v-model="addPassword"
               type="text"
-              class="h-8 w-full rounded-md border border-[#3A3A3A] bg-[#1E1E1E] px-2.5 text-[12px] text-surface outline-none placeholder:text-muted focus:border-accent"
+              class="h-8 w-full rounded-[4px] bg-panel-field px-2.5 text-xs text-surface outline-none placeholder:text-muted focus:bg-panel-field-hover"
               :placeholder="dialogs['team.addPasswordPlaceholder']"
               data-test-id="team-add-password"
             />
             <button
               type="button"
-              class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-[#3A3A3A] text-muted hover:bg-hover hover:text-surface"
+              class="flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] border border-[#3A3A3A] px-2.5 text-[11px] text-muted hover:bg-hover hover:text-surface"
               :aria-label="dialogs['team.randomPassword']"
               data-test-id="team-add-password-random"
               @click="addPassword = randomPassword()"
             >
-              <icon-lucide-refresh-cw class="size-3.5" />
+              <icon-lucide-refresh-cw class="size-3" />
+              {{ dialogs['team.random'] }}
             </button>
           </span>
         </label>
 
         <label class="flex flex-col gap-1">
-          <span class="text-[10px] text-muted">{{ dialogs['team.colRole'] }}</span>
+          <span class="text-[10px] text-muted">{{ dialogs['team.addRole'] }}</span>
           <AppSelect
             v-model="addRole"
             :options="roleOptions"
-            :ui="{ trigger: 'h-8 w-full text-[12px]' }"
+            :ui="{ trigger: 'h-8 w-full text-xs' }"
             data-test-id="team-add-role"
           />
         </label>
@@ -341,7 +314,7 @@ async function savePending(): Promise<void> {
         <div class="mt-auto flex items-center justify-end gap-2">
           <button
             type="button"
-            class="h-9 cursor-pointer rounded-md border border-[#3A3A3A] px-4 text-[12px] text-surface hover:bg-hover"
+            class="h-7 cursor-pointer rounded-md border border-[#3A3A3A] px-3 text-[11px] text-surface hover:bg-hover"
             data-test-id="team-add-cancel"
             @click="addOpen = false"
           >
@@ -350,10 +323,11 @@ async function savePending(): Promise<void> {
           <button
             type="button"
             :disabled="adding"
-            class="h-9 cursor-pointer rounded-md bg-accent px-4 text-[12px] font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            class="flex h-7 cursor-pointer items-center gap-1 rounded-md bg-accent px-3 text-[11px] font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
             data-test-id="team-add-submit"
             @click="addAndCopy"
           >
+            <icon-lucide-copy-plus class="size-3" />
             {{ dialogs['team.addAndCopy'] }}
           </button>
         </div>
@@ -361,7 +335,7 @@ async function savePending(): Promise<void> {
     </DialogPortal>
   </DialogRoot>
 
-  <!-- 移除成员确认（设计稿 0:1372 RemoveDialog） -->
+  <!-- 移除成员确认（设计稿 §4.4 RemoveDialog 360×200） -->
   <DialogRoot v-model:open="removeOpen">
     <DialogPortal>
       <DialogOverlay class="fixed inset-0 z-40 bg-black/50" />
@@ -370,7 +344,7 @@ async function savePending(): Promise<void> {
         data-test-id="team-remove-dialog"
       >
         <div class="flex items-center justify-between">
-          <span class="text-[13px] font-medium text-surface">{{ dialogs['team.removeTitle'] }}</span>
+          <span class="text-sm font-medium text-surface">{{ dialogs['team.removeTitle'] }}</span>
           <button
             type="button"
             class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
@@ -382,14 +356,14 @@ async function savePending(): Promise<void> {
           </button>
         </div>
         <div class="mt-1 h-px w-full bg-[#3A3A3A]" />
-        <p class="mt-4 text-[11px] leading-[18px] text-muted" data-test-id="team-remove-desc">
+        <p class="mt-4 text-xs leading-[18px] text-surface" data-test-id="team-remove-desc">
           {{ removeConfirmText }}
         </p>
-        <p class="mt-1 text-[10px] text-muted/70">{{ dialogs['team.removeDesc'] }}</p>
+        <p class="mt-1 text-[11px] text-muted">{{ dialogs['team.removeDesc'] }}</p>
         <div class="mt-auto flex items-center justify-end gap-2">
           <button
             type="button"
-            class="h-9 cursor-pointer rounded-md border border-[#3A3A3A] px-4 text-[12px] text-surface hover:bg-hover"
+            class="h-7 cursor-pointer rounded-md border border-[#3A3A3A] px-3 text-[11px] text-surface hover:bg-hover"
             data-test-id="team-remove-cancel"
             @click="removeOpen = false"
           >
@@ -398,7 +372,7 @@ async function savePending(): Promise<void> {
           <button
             type="button"
             :disabled="removing"
-            class="h-9 cursor-pointer rounded-md bg-[#EF4444] px-4 text-[12px] font-medium text-white hover:bg-[#EF4444]/90 disabled:cursor-not-allowed disabled:opacity-50"
+            class="h-7 cursor-pointer rounded-md bg-[#EF4444] px-3 text-[11px] font-medium text-white hover:bg-[#EF4444]/90 disabled:cursor-not-allowed disabled:opacity-50"
             data-test-id="team-remove-confirm"
             @click="confirmRemove"
           >
