@@ -42,7 +42,7 @@ function closeDialog(): void {
     <DialogPortal>
       <DialogOverlay class="fixed inset-0 z-40 bg-black/50" />
       <DialogContent
-        class="fixed top-1/2 left-1/2 z-50 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-xl border border-[#3A3A3A] bg-[#2A2A2A] p-5 shadow-[0_8px_30px_rgb(0_0_0/0.5)] outline-none"
+        class="fixed top-1/2 left-1/2 z-50 flex w-[480px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-xl border border-[#3A3A3A] bg-[#2A2A2A] p-5 shadow-[0_8px_30px_rgb(0_0_0/0.5)] outline-none"
         data-test-id="folder-access-dialog"
       >
         <div class="flex items-center justify-between">
