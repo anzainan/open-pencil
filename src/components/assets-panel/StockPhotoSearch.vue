@@ -35,10 +35,10 @@ const requestSeq = ref(0)
 const hasKey = computed(() => pexelsKeyStatus.value === 'configured')
 
 const orientationOptions = computed(() => [
-  { value: 'all', label: panels.orientationAll },
-  { value: 'landscape', label: panels.orientationLandscape },
-  { value: 'portrait', label: panels.orientationPortrait },
-  { value: 'square', label: panels.orientationSquare }
+  { value: 'all', label: panels.value.orientationAll },
+  { value: 'landscape', label: panels.value.orientationLandscape },
+  { value: 'portrait', label: panels.value.orientationPortrait },
+  { value: 'square', label: panels.value.orientationSquare }
 ])
 
 async function search(reset = true): Promise<void> {
