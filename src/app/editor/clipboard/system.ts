@@ -33,8 +33,15 @@ export async function copySelectionToTauriClipboard(store: EditorStore) {
 export async function pasteFromTauriClipboard(store: EditorStore, cursorPos?: Vector) {
   if (!isTauri()) return false
   try {
-    const text = await readTauriClipboardText()
-    if (!text || !isDesignClipboardHTML(text)) return false
+    const text = (await readTauriClipboardText())?.trim()
+    if (!text) return false
+    if (text.startsWith('<svg')) {
+      const cx = cursorPos?.x ?? (-store.state.panX + window.innerWidth / 2) / store.state.zoom
+      const cy = cursorPos?.y ?? (-store.state.panY + window.innerHeight / 2) / store.state.zoom
+      store.placeSVGSource(text, cx, cy)
+      return true
+    }
+    if (!isDesignClipboardHTML(text)) return false
     await store.pasteFromHTML(text, cursorPos)
     return true
   } catch (error) {

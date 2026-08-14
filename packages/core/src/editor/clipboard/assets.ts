@@ -180,5 +180,35 @@ export function createClipboardAssetActions(
     )
   }
 
-  return { storeImage, placeFiles, placeImageFiles }
+  /** Pastes inline SVG source (e.g. `text/plain` clipboard containing `<svg>`) as a vector frame centered at (cx, cy). */
+  function placeSVGSource(svgSource: string, cx: number, cy: number): string | undefined {
+    const data = prepareSVGImport(svgSource)
+    if (!data) return undefined
+
+    const previousSelection = new Set(ctx.state.selectedIds)
+    const parentId = resolvePasteTarget(ctx)
+    const center = parentLocalPoint(parentId, cx, cy)
+    const created: string[] = []
+
+    try {
+      const node = createSVGNodesFromImport(ctx.graph, parentId, data, {
+        name: 'SVG',
+        x: center.x - data.width / 2,
+        y: center.y - data.height / 2
+      })
+      if (node) created.push(node.id)
+    } catch (error) {
+      for (const id of created.reverse()) ctx.graph.deleteNode(id)
+      throw error
+    }
+
+    if (created.length === 0) return undefined
+    computeAllLayouts(ctx.graph, ctx.state.currentPageId)
+    ctx.setSelectedIds(new Set(created))
+    pushCreatedNodesUndo(created, previousSelection, 'Paste SVG')
+    ctx.requestRender()
+    return created[0]
+  }
+
+  return { storeImage, placeFiles, placeImageFiles, placeSVGSource }
 }

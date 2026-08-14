@@ -60,6 +60,14 @@ export function bindEditorClipboard(store: EditorStore) {
       return
     }
 
+    const plainText = e.clipboardData?.getData('text/plain').trim() ?? ''
+    if (plainText.startsWith('<svg')) {
+      const cx = cursorPos?.x ?? (-store.state.panX + window.innerWidth / 2) / store.state.zoom
+      const cy = cursorPos?.y ?? (-store.state.panY + window.innerHeight / 2) / store.state.zoom
+      store.placeSVGSource(plainText, cx, cy)
+      return
+    }
+
     if (isTauri()) void pasteFromTauriClipboard(store, cursorPos)
   })
 }
