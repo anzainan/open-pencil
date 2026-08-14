@@ -177,32 +177,33 @@ onUnmounted(() => {
         {{ errorMessage }}
       </p>
 
+      <div class="mb-3 flex items-center gap-2">
+        <icon-lucide-file class="size-3.5 text-muted" />
+        <h2 class="text-xs text-muted">{{ dialogs.folderFiles }}</h2>
+        <div class="min-w-0 flex-1" />
+        <button
+          type="button"
+          class="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded border border-border px-2 text-[11px] text-muted hover:bg-hover"
+          :class="pinned ? 'border-accent text-accent' : ''"
+          data-test-id="folder-pin"
+          :disabled="pinBusy"
+          @click="onTogglePin"
+        >
+          <icon-lucide-pin class="size-3" />
+          {{ pinned ? dialogs.folderPinned : dialogs.folderPin }}
+        </button>
+        <button
+          type="button"
+          class="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded border border-border px-2 text-[11px] text-muted hover:bg-hover"
+          data-test-id="folder-access"
+          @click="accessDialogOpen = true"
+        >
+          <icon-lucide-user-cog class="size-3" />
+          {{ dialogs.accessButton }}
+        </button>
+      </div>
+
       <div v-if="folderFiles.length">
-        <div class="mb-3 flex items-center gap-2">
-          <icon-lucide-file class="size-3.5 text-muted" />
-          <h2 class="text-xs text-muted">{{ dialogs.folderFiles }}</h2>
-          <div class="min-w-0 flex-1" />
-          <button
-            type="button"
-            class="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded border border-border px-2 text-[11px] text-muted hover:bg-hover"
-            :class="pinned ? 'border-accent text-accent' : ''"
-            data-test-id="folder-pin"
-            :disabled="pinBusy"
-            @click="onTogglePin"
-          >
-            <icon-lucide-pin class="size-3" />
-            {{ pinned ? dialogs.folderPinned : dialogs.folderPin }}
-          </button>
-          <button
-            type="button"
-            class="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded border border-border px-2 text-[11px] text-muted hover:bg-hover"
-            data-test-id="folder-access"
-            @click="accessDialogOpen = true"
-          >
-            <icon-lucide-user-cog class="size-3" />
-            {{ dialogs.accessButton }}
-          </button>
-        </div>
         <div class="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
           <button
             v-for="document in folderFiles"
