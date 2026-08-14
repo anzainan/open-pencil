@@ -281,8 +281,8 @@ function appendVariablesForCollection(
 }
 
 function applyImportedCanvasFields(page: FigExportPage, canvasNc: KiwiNodeChange): void {
-  if (!page.source.id) return
-  if (!('pageType' in page.source.fig.rawNodeFields)) delete canvasNc.pageType
+  // Background fields must persist for pages created in-app (no source.id) as
+  // well as imported ones — setPageColor writes them into rawNodeFields.
   if ('backgroundColor' in page.source.fig.rawNodeFields) {
     canvasNc.backgroundColor = dataSafeClone(page.source.fig.rawNodeFields.backgroundColor)
   }
@@ -291,6 +291,8 @@ function applyImportedCanvasFields(page: FigExportPage, canvasNc: KiwiNodeChange
       page.source.fig.rawNodeFields.backgroundPaints
     ) as NodeChange['backgroundPaints']
   }
+  if (!page.source.id) return
+  if (!('pageType' in page.source.fig.rawNodeFields)) delete canvasNc.pageType
   if ('guides' in page.source.fig.rawNodeFields) {
     canvasNc.guides = dataSafeClone(page.source.fig.rawNodeFields.guides)
   }

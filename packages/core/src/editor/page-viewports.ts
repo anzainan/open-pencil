@@ -1,6 +1,7 @@
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import { CANVAS_BG_COLOR } from '#core/constants'
+import { getPageBackgrounds } from '#core/figma-api/page-backgrounds'
 
 import type { EditorContext } from './types'
 
@@ -23,20 +24,27 @@ export function createPageViewportStore(ctx: EditorContext) {
     })
   }
 
+  function resolvePageBackgroundColor(pageId: string): Color {
+    const page = ctx.graph.getNode(pageId)
+    if (page?.type === 'CANVAS') {
+      const background = getPageBackgrounds(page).find((fill) => fill.type === 'SOLID')
+      if (background) return { ...background.color }
+    }
+    return { ...CANVAS_BG_COLOR }
+  }
+
   function restorePageViewport(pageId: string) {
     const viewport = pageViewports.get(pageId)
     if (viewport) {
       ctx.state.panX = viewport.panX
       ctx.state.panY = viewport.panY
       ctx.state.zoom = viewport.zoom
-      ctx.state.pageColor = { ...viewport.pageColor }
-      return
+    } else {
+      ctx.state.panX = 0
+      ctx.state.panY = 0
+      ctx.state.zoom = 1
     }
-
-    ctx.state.panX = 0
-    ctx.state.panY = 0
-    ctx.state.zoom = 1
-    ctx.state.pageColor = { ...CANVAS_BG_COLOR }
+    ctx.state.pageColor = resolvePageBackgroundColor(pageId)
   }
 
   function deletePageViewport(pageId: string) {

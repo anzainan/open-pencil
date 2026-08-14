@@ -1,5 +1,8 @@
+import { fillToKiwiPaint } from '@open-pencil/fig/node-change'
+import type { Fill } from '@open-pencil/scene-graph'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
+import { dataSafeClone } from '#core/io/formats/fig/clone-safe'
 import { populateLazyFigImportRoots } from '#core/kiwi/fig/lazy-import'
 import {
   canUseFigPopulationWorker,
@@ -136,6 +139,19 @@ export function createPageActions(ctx: EditorContext) {
 
   function setPageColor(color: Color) {
     ctx.state.pageColor = color
+    const page = ctx.graph.getNode(ctx.state.currentPageId)
+    if (page?.type === 'CANVAS') {
+      const rawNodeFields = dataSafeClone(page.source.fig.rawNodeFields)
+      const fill: Fill = { type: 'SOLID', color: { ...color }, opacity: 1, visible: true }
+      rawNodeFields.backgroundPaints = [fillToKiwiPaint(fill)]
+      rawNodeFields.backgroundColor = dataSafeClone(color)
+      ctx.graph.updateNode(page.id, {
+        source: {
+          ...dataSafeClone(page.source),
+          fig: { ...dataSafeClone(page.source.fig), rawNodeFields }
+        }
+      })
+    }
     ctx.requestRender()
   }
 
