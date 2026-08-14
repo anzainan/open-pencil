@@ -20,7 +20,7 @@ const { dialogs } = useI18n()
 
 const token = computed(() => String(route.params.token ?? ''))
 
-type Stage = 'loading' | 'notFound' | 'password' | 'ready'
+type Stage = 'loading' | 'notFound' | 'error' | 'password' | 'ready'
 
 const stage = ref<Stage>('loading')
 const passwordInput = ref('')
@@ -36,7 +36,16 @@ async function load(): Promise<void> {
     stage.value = 'notFound'
     return
   }
-  const verify = await verifyShare(token.value).catch(() => ({ exists: false }))
+  // 真实失败（网络 / 非 2xx / 200 但非 JSON）与「链接不存在」区分开：
+  // 只有服务端明确 exists:false 才进 notFound，其余一律独立 error 态并打日志定位。
+  const verify = await verifyShare(token.value).catch((error: unknown) => {
+    console.error('[share] verify failed', error)
+    return null
+  })
+  if (verify === null) {
+    stage.value = 'error'
+    return
+  }
   if (!verify.exists) {
     stage.value = 'notFound'
     return
@@ -53,7 +62,14 @@ async function submitPassword(): Promise<void> {
   submitting.value = true
   passwordError.value = false
   try {
-    const verify = await verifyShare(token.value, passwordInput.value)
+    const verify = await verifyShare(token.value, passwordInput.value).catch((error: unknown) => {
+      console.error('[share] verify failed', error)
+      return null
+    })
+    if (verify === null) {
+      stage.value = 'error'
+      return
+    }
     if (!verify.exists) {
       stage.value = 'notFound'
       return
@@ -97,8 +113,9 @@ async function openPreview(verify: BridgeShareVerify): Promise<void> {
     await target.fitCurrentPageToViewport()
     stage.value = 'ready'
   } catch (error) {
-    console.warn('[share] preview load failed', error)
-    stage.value = 'notFound'
+    // 内容拉取/解析失败同样进入独立 error 态，不再伪装成「链接不存在」。
+    console.error('[share] preview load failed', error)
+    stage.value = 'error'
   } finally {
     const current = getActiveEditorStoreOrNull()
     if (current) current.state.loading = false
@@ -208,6 +225,19 @@ function goLogin(): void {
       <div class="text-center">
         <p class="text-sm font-medium text-surface">{{ dialogs['share.linkNotFound'] }}</p>
         <p class="mt-1 text-xs text-muted">{{ dialogs['share.linkNotFoundDesc'] }}</p>
+      </div>
+    </div>
+
+    <!-- 加载失败 / 网络错误（与「链接不存在」区分：非服务端明确 exists:false） -->
+    <div
+      v-else-if="stage === 'error'"
+      class="flex flex-1 flex-col items-center justify-center gap-3"
+      data-test-id="share-load-error"
+    >
+      <icon-lucide-alert-circle class="size-10 text-muted/50" />
+      <div class="text-center">
+        <p class="text-sm font-medium text-surface">{{ dialogs['share.loadError'] }}</p>
+        <p class="mt-1 text-xs text-muted">{{ dialogs['share.loadErrorDesc'] }}</p>
       </div>
     </div>
 

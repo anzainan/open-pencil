@@ -1,73 +1,49 @@
-import { useLocalStorage } from '@vueuse/core'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
-export interface AppNotification {
-  id: string
-  /** 头像底色（tailwind bg 类） */
-  color: string
-  /** 头像 emoji */
-  emoji: string
-  title: string
-  detail: string
-  createdAt: number
-  /** 操作按钮文案（如「接受」），缺省不显示按钮 */
-  actionLabel?: string
-  accepted?: boolean
+import {
+  listNotifications,
+  markAllNotificationsRead,
+  resolveNotification,
+  type BridgeNotification
+} from '@/app/bridge/share'
+
+export type { BridgeNotification as AppNotification } from '@/app/bridge/share'
+
+/**
+ * 通知中心 store（Phase D）：服务端数据源（GET /api/v1/notifications）。
+ * 登录态首页铃铛按人拉取（targetUserId = 当前用户）；未读红点 = unread 计数；
+ * 「全部已读」→ POST read-all；批准/拒绝 → POST :id/action 后刷新列表。
+ */
+const items = ref<BridgeNotification[]>([])
+
+export const notifications = computed(() => items.value)
+
+export const unreadCount = computed(
+  () => items.value.filter((item) => item.status === 'unread').length
+)
+
+export const hasUnread = computed(() => unreadCount.value > 0)
+
+/** 拉取当前用户通知列表（登录态）。 */
+export async function loadNotifications(): Promise<void> {
+  items.value = await listNotifications()
 }
 
-const STORAGE_KEY = 'openpencil:notifications'
-const READ_KEY = 'openpencil:notifications-read'
-const SEEDED_KEY = 'openpencil:notifications-seeded'
-
-/** 纯前端本地通知列表（内网版数据源：示例事件；生产事件等团队功能接入后替换）。 */
-export const notifications = useLocalStorage<AppNotification[]>(STORAGE_KEY, [])
-
-/** 面板是否已读（面板展开即置 true → 红点消失；「全部已读」也置 true）。 */
-const readMark = useLocalStorage<boolean>(READ_KEY, false)
-
-/** 是否已注入过示例事件（避免每次进入首页都重复注入）。 */
-const seeded = useLocalStorage<boolean>(SEEDED_KEY, false)
-
-export const hasUnread = computed(() => !readMark.value && notifications.value.length > 0)
-
-export const unreadCount = computed(() => (hasUnread.value ? notifications.value.length : 0))
-
-export function markAllRead(): void {
-  readMark.value = true
+/** 全部已读（服务端 + 本地同步标记）。 */
+export async function markAllRead(): Promise<void> {
+  await markAllNotificationsRead()
+  items.value = items.value.map((item) =>
+    item.status === 'unread' ? { ...item, status: 'read' as const } : item
+  )
 }
 
-/** 首次注入 1~2 个示例事件（团队功能接入前的事件源）。 */
-export function seedSampleNotifications(): void {
-  if (seeded.value || notifications.value.length > 0) return
-  const now = Date.now()
-  notifications.value = [
-    {
-      id: 'sample-join-request',
-      color: 'bg-accent',
-      emoji: '👋',
-      title: '收到新的加入团队请求',
-      detail: '张伟 请求加入「团队空间」',
-      createdAt: now,
-      actionLabel: '接受'
-    },
-    {
-      id: 'sample-permission',
-      color: 'bg-success',
-      emoji: '🔓',
-      title: '权限变更通知',
-      detail: '李娜 已将「首页.fig」设为可查看',
-      createdAt: now - 1000,
-      actionLabel: '接受'
-    }
-  ]
-  seeded.value = true
+/** 处理通知（批准/拒绝）→ 成功后刷新列表。 */
+export async function actOnNotification(id: string, action: 'approve' | 'reject'): Promise<void> {
+  await resolveNotification(id, action)
+  await loadNotifications()
 }
 
+/** 清空本地列表（登出/切用户时调用，避免残留他人通知）。 */
 export function clearNotifications(): void {
-  notifications.value = []
-}
-
-export function acceptNotification(id: string): void {
-  const found = notifications.value.find((item) => item.id === id)
-  if (found) found.accepted = true
+  items.value = []
 }

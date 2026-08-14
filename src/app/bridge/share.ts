@@ -48,6 +48,96 @@ export async function listMembers(): Promise<BridgeMemberInfo[]> {
   return data.members ?? []
 }
 
+/** 添加成员（admin）→ 返回含明文密码（「添加并复制」用）。 */
+export async function createMember(input: {
+  name: string
+  password: string
+  role: 'admin' | 'member'
+}): Promise<{ user: BridgeMemberInfo; password: string }> {
+  const response = await fetch(`${API_BASE}/members`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
+    body: JSON.stringify(input)
+  })
+  if (!response.ok) throw new Error(`Bridge member create failed (${response.status})`)
+  const data = (await response.json()) as { user?: BridgeMemberInfo; password?: string }
+  if (!data.user || typeof data.password !== 'string') {
+    throw new Error('Bridge member create returned no user')
+  }
+  return { user: data.user, password: data.password }
+}
+
+/** 修改成员密码/角色（admin；owner 服务端拒绝）。 */
+export async function updateMember(
+  id: string,
+  input: { password?: string; role?: 'admin' | 'member' }
+): Promise<void> {
+  const body: Record<string, unknown> = {}
+  if (input.password !== undefined) body.password = input.password
+  if (input.role !== undefined) body.role = input.role
+  const response = await fetch(`${API_BASE}/members/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
+    body: JSON.stringify(body)
+  })
+  if (!response.ok) throw new Error(`Bridge member update failed (${response.status})`)
+}
+
+/** 移除成员（admin；owner 服务端拒绝）。 */
+export async function deleteMember(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/members/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: authHeader() ?? '' }
+  })
+  if (!response.ok) throw new Error(`Bridge member delete failed (${response.status})`)
+}
+
+/** 通知中心条目（GET /api/v1/notifications 视图）。 */
+export interface BridgeNotification {
+  id: string
+  type: 'join_request' | 'permission_change' | 'removed' | 'permission_request'
+  fromUserId: string
+  targetUserId?: string
+  path?: string
+  title: string
+  detail: string
+  action?: 'approve' | 'reject'
+  status: 'unread' | 'read' | 'approved' | 'rejected'
+  createdAt: string
+}
+
+/** 通知列表（login，时间倒序）。 */
+export async function listNotifications(): Promise<BridgeNotification[]> {
+  const response = await fetch(`${API_BASE}/notifications`, {
+    headers: { Authorization: authHeader() ?? '' }
+  })
+  if (!response.ok) throw new Error(`Bridge notifications failed (${response.status})`)
+  const data = (await response.json()) as { notifications?: BridgeNotification[] }
+  return data.notifications ?? []
+}
+
+/** 全部已读（login）。 */
+export async function markAllNotificationsRead(): Promise<void> {
+  const response = await fetch(`${API_BASE}/notifications/read-all`, {
+    method: 'POST',
+    headers: { Authorization: authHeader() ?? '' }
+  })
+  if (!response.ok) throw new Error(`Bridge notifications read-all failed (${response.status})`)
+}
+
+/** 处理通知（approve/reject，login；处理完列表自动刷新）。 */
+export async function resolveNotification(
+  id: string,
+  action: 'approve' | 'reject'
+): Promise<void> {
+  const response = await fetch(`${API_BASE}/notifications/${encodeURIComponent(id)}/action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
+    body: JSON.stringify({ action })
+  })
+  if (!response.ok) throw new Error(`Bridge notification action failed (${response.status})`)
+}
+
 /** 取某文件分享设置（login）。 */
 export async function getShare(path: string): Promise<BridgeShareSettings> {
   const response = await fetch(`${API_BASE}/share?path=${encodeURIComponent(path)}`, {
@@ -110,7 +200,15 @@ export async function verifyShare(token: string, password?: string): Promise<Bri
   if (password) query.set('password', password)
   const response = await fetch(`${API_BASE}/share/verify?${query.toString()}`)
   if (!response.ok) throw new Error(`Bridge share verify failed (${response.status})`)
-  return (await response.json()) as BridgeShareVerify
+  // 先读 text 再防御性解析：代理回落 / SPA fallback 会返回 200 HTML，
+  // 盲 response.json() 抛 SyntaxError 会被上层 catch 坍缩成「链接不存在」。
+  // 这里把「200 但非 JSON」变成带上下文的错误，让前端能进入独立 error 态而非误报 notFound。
+  const text = await response.text()
+  try {
+    return JSON.parse(text) as BridgeShareVerify
+  } catch {
+    throw new Error('Bridge share verify returned non-JSON (SPA fallback?)')
+  }
 }
 
 /** 游客：读外链文件字节（唯一游客文件读通道）。 */

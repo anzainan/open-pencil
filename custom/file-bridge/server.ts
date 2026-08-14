@@ -828,10 +828,91 @@ export function startServer(options: BridgeServerOptions) {
         targetUserId: recipient.id,
         path,
         title: `${user.name} 请求编辑权限`,
-        detail: `请求编辑 ${path}`
+        detail: `请求编辑 ${path}`,
+        action: 'approve'
       })
     }
     return json({ ok: true, sent: recipients.length })
+  }
+
+  // ---- 通知中心（Phase D：列表 / action 批准拒绝 / 全部已读）----
+
+  /** GET /api/v1/notifications（login）→ 当前用户通知列表（时间倒序）。 */
+  function listNotifications(request: Request): Response {
+    const user = sessionUser(request)
+    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+    return json({ notifications: notifications.listNotificationsFor(user.id) })
+  }
+
+  /**
+   * POST /api/v1/notifications/:id/action（login）→ {action: approve|reject}。
+   * permission_request 批准 → 给申请者写该文件可编辑权限（permissions.json upsert）；
+   * join_request 批准 → 解析请求状态（现状无独立注册流，申请者已是成员则无需再添加）；
+   * 处理完成后给申请者生成结果通知。
+   */
+  async function resolveNotificationAction(request: Request, id: string): Promise<Response> {
+    const user = sessionUser(request)
+    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+    let payload: { action?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    const action = payload.action === 'approve' || payload.action === 'reject' ? payload.action : ''
+    if (!action) return json({ ok: false, error: 'action must be approve or reject' }, 400)
+
+    const item = notifications.getById(id)
+    if (!item) return json({ ok: false, error: 'not found' }, 404)
+    if (item.targetUserId !== undefined && item.targetUserId !== user.id) {
+      return json({ ok: false, error: 'Forbidden' }, 403)
+    }
+    if (item.status !== 'unread') return json({ ok: false, error: 'already processed' }, 409)
+
+    const applicant = authStore?.getUserById(item.fromUserId) ?? null
+
+    if (action === 'approve' && item.type === 'permission_request' && item.path) {
+      // 批准 = 给申请者写该路径可编辑权限（保留既有 entry 的 scope/type，防覆盖文件夹继承）。
+      const existing = permissions.getEntry(item.path)
+      const members = [
+        ...(existing?.members ?? []).filter((member) => member.userId !== item.fromUserId),
+        { userId: item.fromUserId, permission: 'edit' as const }
+      ]
+      const scope = existing?.scope ?? 'team'
+      let type = existing?.type ?? 'file'
+      if (!existing) {
+        // 无既有 entry 时按路径是否为目录决定类型（文件夹级权限继承到内部文件）。
+        const full = resolveWithin(designRoot, `/${item.path}`)
+        if (full && isDirectory(full)) type = 'folder'
+      }
+      permissions.upsertEntry(item.path, { type, scope, members })
+    }
+
+    notifications.updateStatus(id, action === 'approve' ? 'approved' : 'rejected')
+
+    // 生成结果通知给申请者（非本人处理时才通知，避免自己批准自己时收到冗余通知）。
+    if (applicant && applicant.id !== user.id) {
+      notifications.addNotification({
+        type: 'permission_change',
+        fromUserId: user.id,
+        targetUserId: applicant.id,
+        path: item.path,
+        title:
+          action === 'approve'
+            ? `${user.name} 已批准你的权限申请`
+            : `${user.name} 拒绝了你的权限申请`,
+        detail: item.path ? `关于 ${item.path}` : '团队申请'
+      })
+    }
+    return json({ ok: true, status: action === 'approve' ? 'approved' : 'rejected' })
+  }
+
+  /** POST /api/v1/notifications/read-all（login）→ 当前用户全部已读。 */
+  function markNotificationsRead(request: Request): Response {
+    const user = sessionUser(request)
+    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+    notifications.markAllReadFor(user.id)
+    return json({ ok: true })
   }
 
   // ---- 分享/外链（Phase C：真实台账 + 游客外链 + P0 安全收紧）----
@@ -1034,8 +1115,14 @@ export function startServer(options: BridgeServerOptions) {
       return json({ ok: false, error: 'nothing to update' }, 400)
     }
     const existing = permissions.getEntry(path)
+    // 路径为目录 → 文件夹级权限（自动继承到内部文件，REQ §5）；否则文件级。
+    let type: 'folder' | 'file' = existing?.type ?? 'file'
+    if (!existing) {
+      const full = resolveWithin(designRoot, `/${path}`)
+      if (full && isDirectory(full)) type = 'folder'
+    }
     const entry = permissions.upsertEntry(path, {
-      type: 'file',
+      type,
       scope: scope ?? existing?.scope ?? 'self',
       members: members ?? existing?.members ?? []
     })
@@ -1356,6 +1443,27 @@ export function startServer(options: BridgeServerOptions) {
     if (path === '/api/v1/permission-request') {
       if (method !== 'POST') return methodNotAllowed()
       return createPermissionRequest(request)
+    }
+
+    // ---- 通知中心（Phase D）----
+
+    if (path === '/api/v1/notifications') {
+      if (method !== 'GET') return methodNotAllowed()
+      return listNotifications(request)
+    }
+
+    if (path === '/api/v1/notifications/read-all') {
+      if (method !== 'POST') return methodNotAllowed()
+      return markNotificationsRead(request)
+    }
+
+    const notificationMatch = path.match(/^\/api\/v1\/notifications\/([^/]+)\/action$/)
+    if (notificationMatch) {
+      const raw = notificationMatch[1]
+      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
+      if (method !== 'POST') return methodNotAllowed()
+      const id = decodeURIComponent(raw)
+      return resolveNotificationAction(request, id)
     }
 
     // ---- 分享/外链（Phase C）----

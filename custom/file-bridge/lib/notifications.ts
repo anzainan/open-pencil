@@ -20,6 +20,8 @@ export interface NotificationItem {
   path?: string
   title: string
   detail: string
+  /** 允许的操作：join_request/permission_request 类带 approve|reject，其余缺省。 */
+  action?: 'approve' | 'reject'
   status: NotificationStatus
   createdAt: string
 }
@@ -66,7 +68,9 @@ export class NotificationStore {
   }
 
   /** 追加一条通知（新条目在最新，时间倒序展示用）。 */
-  addNotification(input: Omit<NotificationItem, 'id' | 'createdAt' | 'status'>): NotificationItem {
+  addNotification(
+    input: Omit<NotificationItem, 'id' | 'createdAt' | 'status'>
+  ): NotificationItem {
     const item: NotificationItem = {
       ...input,
       id: `n_${randomUUID()}`,
@@ -78,19 +82,37 @@ export class NotificationStore {
     return item
   }
 
-  /** 通知列表（时间倒序：最新在前）。 */
-  listNotifications(): NotificationItem[] {
-    return [...this.items]
+  /** 按 id 取通知（无 → null）。 */
+  getById(id: string): NotificationItem | null {
+    return this.items.find((item) => item.id === id) ?? null
   }
 
-  /** 全部已读（Phase D 通知中心「全部已读」按钮）。 */
-  markAllRead(): void {
+  /** 指定接收人的通知列表（时间倒序：最新在前；targetUserId 缺省的广播也包含）。 */
+  listNotificationsFor(targetUserId: string): NotificationItem[] {
+    return this.items.filter(
+      (item) => item.targetUserId === undefined || item.targetUserId === targetUserId
+    )
+  }
+
+  /** 更新单条状态（批准/拒绝/已读，Phase D 通知中心 action + 已读）。 */
+  updateStatus(id: string, status: NotificationStatus): NotificationItem | null {
+    const index = this.items.findIndex((item) => item.id === id)
+    if (index < 0) return null
+    const updated: NotificationItem = { ...this.items[index], status }
+    this.items[index] = updated
+    this.persist()
+    return updated
+  }
+
+  /** 指定接收人全部已读（Phase D 通知中心「全部已读」按钮）。 */
+  markAllReadFor(targetUserId: string): void {
     let changed = false
     for (let i = 0; i < this.items.length; i++) {
-      if (this.items[i].status === 'unread') {
-        this.items[i] = { ...this.items[i], status: 'read' }
-        changed = true
-      }
+      const item = this.items[i]
+      if (item.status !== 'unread') continue
+      if (item.targetUserId !== undefined && item.targetUserId !== targetUserId) continue
+      this.items[i] = { ...item, status: 'read' }
+      changed = true
     }
     if (changed) this.persist()
   }
