@@ -1,7 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useClipboard } from '@vueuse/core'
-import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
+import {
+  PopoverContent,
+  PopoverPortal,
+  PopoverRoot,
+  PopoverTrigger,
+  SelectContent,
+  SelectItem,
+  SelectItemText,
+  SelectPortal,
+  SelectRoot,
+  SelectTrigger,
+  SelectViewport
+} from 'reka-ui'
 
 import { useI18n } from '@open-pencil/vue'
 
@@ -19,7 +31,6 @@ import { bridgeClient } from '@/app/bridge/client'
 import { useEditorStore } from '@/app/editor/active-store'
 import { toast } from '@/app/shell/ui'
 import { usePopoverUI } from '@/components/ui/popover'
-import AppSelect from '@/components/ui/AppSelect.vue'
 import {
   AppDialogBody,
   AppDialogFooter,
@@ -65,22 +76,34 @@ const addMemberOpen = ref(false)
 const removeDialogOpen = ref(false)
 const removeTarget = ref<MemberRow | null>(null)
 
-const scopeOptions = computed(() => [
-  { value: 'internet' as Scope, label: dialogs.value['share.scope.internet'] },
-  { value: 'team' as Scope, label: dialogs.value['share.scope.team'] },
-  { value: 'self' as Scope, label: dialogs.value['share.scope.self'] }
+const scopeMenuOptions = computed(() => [
+  { value: 'internet' as Scope, label: dialogs.value['share.scope.internet'], icon: 'globe' },
+  { value: 'team' as Scope, label: dialogs.value['share.scope.team'], icon: 'users' },
+  { value: 'self' as Scope, label: dialogs.value['share.scope.self'], icon: 'lock' }
 ])
+
+/** 访问范围触发器文案：team（仅协作者）时高亮显示「仅协作者可访问」（§1.2 C）。 */
+const scopeLabel = computed(() => {
+  if (scope.value === 'team') return dialogs.value['share.scope.collab']
+  return scopeMenuOptions.value.find((opt) => opt.value === scope.value)?.label ?? ''
+})
 
 const permissionOptions = computed(() => [
   { value: 'view' as Perm, label: dialogs.value['share.permission.view'] },
   { value: 'edit' as Perm, label: dialogs.value['share.permission.edit'] }
 ])
 
+const permissionLabel = computed(
+  () => permissionOptions.value.find((opt) => opt.value === permission.value)?.label ?? ''
+)
+
 const memberPermOptions = computed(() => [
   { value: 'view', label: dialogs.value['share.member.view'] },
   { value: 'edit', label: dialogs.value['share.member.edit'] },
   { value: 'remove', label: dialogs.value['share.member.remove'] }
 ])
+
+const memberPermLabel = (perm: MemberPerm): string => dialogs.value[`share.member.${perm}`]
 
 const searchableMembers = computed(() => {
   const query = memberSearch.value.trim().toLowerCase()
@@ -283,13 +306,21 @@ function doRemove(): void {
   withSaving(saveMembers)
 }
 
+function openAddMember(): void {
+  memberSearch.value = ''
+  addMemberOpen.value = true
+}
+
 onMounted(() => {
   void load()
 })
 </script>
 
 <template>
-  <PopoverRoot v-model:open="popoverOpen" @update:open="(open: boolean) => open && load()">
+  <PopoverRoot
+    v-model:open="popoverOpen"
+    @update:open="(open: boolean) => { if (open) { addMemberOpen = false; void load() } }"
+  >
     <PopoverTrigger as-child>
       <button
         type="button"
@@ -309,133 +340,294 @@ onMounted(() => {
         side="bottom"
         align="end"
       >
-        <div class="flex flex-col">
-          <!-- header -->
-          <div class="flex items-center justify-between border-b border-border px-3 py-2">
-            <span class="text-[13px] font-semibold text-surface">{{ dialogs['share.title'] }}</span>
-            <span class="flex size-3.5 text-muted">
-              <icon-lucide-share-2 class="size-3.5" />
-            </span>
-          </div>
-
+        <div class="relative overflow-hidden rounded-xl">
           <div v-if="loading" class="flex h-40 items-center justify-center text-xs text-muted">
             …
           </div>
 
           <template v-else>
-            <div class="flex flex-col gap-2 px-3 py-2">
-              <!-- scope + board permission -->
-              <div class="flex items-center gap-1.5">
-                <AppSelect
-                  v-model="scope"
-                  :options="scopeOptions"
-                  :disabled="!canEdit"
-                  @update:model-value="changeScope"
-                />
-                <AppSelect
-                  v-model="permission"
-                  :options="permissionOptions"
-                  :disabled="!canEdit"
-                  @update:model-value="changePermission"
-                />
+            <div class="flex flex-col gap-2.5 p-3">
+              <!-- ① title-row（§1.1）：分享文件 + 关闭 -->
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-surface">{{ dialogs['share.title'] }}</span>
+                <button
+                  type="button"
+                  class="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-hover"
+                  :aria-label="dialogs.close"
+                  @click="popoverOpen = false"
+                >
+                  <icon-lucide-x class="size-3.5 text-muted" />
+                </button>
               </div>
 
-              <!-- internet: copy link + password -->
-              <template v-if="scope === 'internet'">
-                <button
-                  v-if="canEdit"
-                  type="button"
-                  class="flex h-8 w-full cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] text-surface hover:bg-hover"
-                  data-test-id="share-copy-link"
-                  @click="copyLink"
-                >
-                  <icon-lucide-link-2 class="size-3.5 text-muted" />
-                  <span class="flex-1 truncate text-left">{{ dialogs['share.copyLink'] }}</span>
-                  <span class="max-w-[46%] truncate text-muted">{{ linkURL || '…' }}</span>
-                </button>
-
-                <label
-                  v-if="canEdit"
-                  class="flex cursor-pointer items-center gap-2 text-[11px] text-surface"
-                >
-                  <input
-                    type="checkbox"
-                    class="accent-accent"
-                    :checked="passwordEnabled"
-                    @change="togglePassword"
-                  />
-                  <span class="flex-1">{{ dialogs['share.password.enable'] }}</span>
-                  <template v-if="passwordEnabled">
-                    <code class="rounded bg-hover px-1.5 py-0.5 font-mono text-[11px] tracking-wide text-accent">
-                      {{ password }}
-                    </code>
-                    <button
-                      type="button"
-                      class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
-                      :aria-label="dialogs['share.password.refresh']"
-                      @click="refreshPasswordAction"
+              <!-- ② perm-row（§1.1）：访问范围 + 权限 -->
+              <div class="flex items-center justify-between">
+                <SelectRoot v-model="scope" :disabled="!canEdit" @update:model-value="changeScope">
+                  <SelectTrigger
+                    :data-scope-team="scope === 'team' ? 'true' : undefined"
+                    class="flex cursor-pointer items-center gap-1 text-[11px] text-muted outline-none data-[scope-team]:text-surface data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+                  >
+                    {{ scopeLabel }}
+                    <icon-lucide-chevron-down class="size-2.5 shrink-0 text-muted" />
+                  </SelectTrigger>
+                  <SelectPortal>
+                    <SelectContent
+                      position="popper"
+                      :side-offset="4"
+                      class="z-[120] w-[140px] rounded-lg border border-border bg-panel-field p-1 shadow-[0_8px_30px_rgb(0_0_0/0.4)]"
                     >
-                      <icon-lucide-refresh-cw class="size-3" />
-                    </button>
-                    <button
-                      type="button"
-                      class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
-                      :aria-label="dialogs['share.password.copy']"
-                      @click="copyPassword"
+                      <SelectViewport class="flex flex-col gap-0.5">
+                        <SelectItem
+                          v-for="opt in scopeMenuOptions"
+                          :key="opt.value"
+                          :value="opt.value"
+                          class="flex h-[26px] cursor-pointer items-center gap-2 rounded px-2 text-[11px] text-surface outline-none data-[highlighted]:bg-hover"
+                        >
+                          <icon-lucide-globe
+                            v-if="opt.icon === 'globe'"
+                            class="size-3 shrink-0 text-muted"
+                          />
+                          <icon-lucide-users
+                            v-else-if="opt.icon === 'users'"
+                            class="size-3 shrink-0 text-muted"
+                          />
+                          <icon-lucide-lock v-else class="size-3 shrink-0 text-muted" />
+                          <SelectItemText>{{ opt.label }}</SelectItemText>
+                        </SelectItem>
+                      </SelectViewport>
+                    </SelectContent>
+                  </SelectPortal>
+                </SelectRoot>
+
+                <SelectRoot
+                  v-model="permission"
+                  :disabled="!canEdit"
+                  @update:model-value="changePermission"
+                >
+                  <SelectTrigger
+                    class="flex h-[22px] cursor-pointer items-center gap-1 rounded px-1 text-[11px] text-surface outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+                  >
+                    {{ permissionLabel }}
+                    <icon-lucide-chevron-down class="size-2.5 shrink-0 text-muted" />
+                  </SelectTrigger>
+                  <SelectPortal>
+                    <SelectContent
+                      position="popper"
+                      :side-offset="4"
+                      class="z-[120] w-[104px] rounded-lg border border-border bg-panel-field p-1 shadow-[0_8px_30px_rgb(0_0_0/0.4)]"
                     >
-                      <icon-lucide-copy class="size-3" />
-                    </button>
-                  </template>
-                </label>
+                      <SelectViewport class="flex flex-col gap-0.5">
+                        <SelectItem
+                          v-for="opt in permissionOptions"
+                          :key="opt.value"
+                          :value="opt.value"
+                          class="flex h-[26px] cursor-pointer items-center rounded px-2 text-[11px] text-surface outline-none data-[highlighted]:bg-hover"
+                        >
+                          <SelectItemText>{{ opt.label }}</SelectItemText>
+                        </SelectItem>
+                      </SelectViewport>
+                    </SelectContent>
+                  </SelectPortal>
+                </SelectRoot>
+              </div>
 
-                <div v-else class="flex items-center gap-1.5 text-[11px] text-muted">
-                  <icon-lucide-link-2 class="size-3.5" />
-                  <span class="flex-1 truncate">{{ linkURL }}</span>
-                </div>
-              </template>
-
-              <!-- add member -->
+              <!-- ③ copy-btn（§1.1）：蓝底复制链接 -->
               <button
                 v-if="canEdit"
                 type="button"
-                class="flex h-8 w-full cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 text-[11px] text-surface hover:bg-hover"
-                data-test-id="share-add-member"
-                @click="addMemberOpen = true"
+                class="flex h-8 w-full cursor-pointer items-center justify-center gap-1.5 rounded bg-accent text-xs font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+                :disabled="!linkURL"
+                data-test-id="share-copy-link"
+                @click="copyLink"
               >
-                <icon-lucide-user-plus class="size-3.5 text-muted" />
-                {{ dialogs['share.addMember'] }}
+                <icon-lucide-link class="size-3.5" />
+                {{ dialogs['share.copyLink'] }}
               </button>
-            </div>
-
-            <!-- member list（owner 默认全权限，不渲染，B1） -->
-            <div class="max-h-40 overflow-y-auto border-t border-border px-3 py-2">
-              <div
-                v-for="member in members"
-                :key="member.userId"
-                class="flex h-7 items-center gap-2 rounded px-1 text-[11px]"
-                data-test-id="share-member-row"
-              >
-                <span
-                  class="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] leading-[11px] text-white"
-                  :style="{ backgroundColor: member.avatar.bg }"
-                >
-                  {{ member.avatar.char }}
-                </span>
-                <span class="min-w-0 flex-1 truncate text-surface">{{ member.name }}</span>
-                <AppSelect
-                  v-if="canEdit"
-                  :model-value="member.permission"
-                  :options="memberPermOptions"
-                  @update:model-value="(value: string) => changeMemberPermission(member, value)"
-                />
-                <span v-else class="text-muted">{{ dialogs[`share.member.${member.permission}`] }}</span>
+              <div v-else-if="linkURL" class="flex items-center gap-1.5 text-[11px] text-muted">
+                <icon-lucide-link class="size-3.5" />
+                <span class="min-w-0 flex-1 truncate">{{ linkURL }}</span>
               </div>
 
-              <div
-                v-if="members.length === 0"
-                class="py-3 text-center text-[11px] text-muted"
+              <!-- ④ pw-row（§1.1）：启用密码 + 密码值/刷新/复制 -->
+              <div class="flex items-center justify-between">
+                <label class="flex cursor-pointer items-center gap-2">
+                  <input
+                    v-if="canEdit"
+                    type="checkbox"
+                    class="peer sr-only"
+                    :checked="passwordEnabled"
+                    @change="togglePassword"
+                  />
+                  <span
+                    :data-pw-on="passwordEnabled ? 'true' : undefined"
+                    class="flex size-4 items-center justify-center rounded border border-border bg-transparent data-[pw-on]:border-accent data-[pw-on]:bg-accent"
+                  >
+                    <icon-lucide-check v-if="passwordEnabled" class="size-3 text-white" />
+                  </span>
+                  <span class="text-xs text-surface">{{ dialogs['share.password.enable'] }}</span>
+                </label>
+                <span v-if="canEdit && passwordEnabled" class="flex items-center gap-1">
+                  <code
+                    class="flex h-6 items-center rounded bg-panel-field px-2 font-mono text-[11px] text-surface"
+                  >
+                    {{ password || '••••••' }}
+                  </code>
+                  <button
+                    type="button"
+                    class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+                    :aria-label="dialogs['share.password.refresh']"
+                    @click="refreshPasswordAction"
+                  >
+                    <icon-lucide-refresh-cw class="size-[13px]" />
+                  </button>
+                  <button
+                    type="button"
+                    class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+                    :aria-label="dialogs['share.password.copy']"
+                    @click="copyPassword"
+                  >
+                    <icon-lucide-copy class="size-[13px]" />
+                  </button>
+                </span>
+              </div>
+
+              <!-- ⑤ btn-add-member（§1.1）：添加成员 -->
+              <button
+                v-if="canEdit"
+                type="button"
+                class="flex h-7 w-full cursor-pointer items-center justify-center gap-1.5 rounded border border-border text-[11px] text-muted hover:bg-hover hover:text-surface"
+                data-test-id="share-add-member"
+                @click="openAddMember"
               >
-                {{ dialogs['share.noMembers'] }}
+                <icon-lucide-user-plus class="size-3" />
+                {{ dialogs['share.addMember'] }}
+              </button>
+
+              <!-- ⑥ 分隔线（§1.1） -->
+              <div class="h-px w-full bg-border" />
+
+              <!-- ⑦ members（§1.1，owner 不渲染，B1） -->
+              <div class="flex max-h-40 flex-col gap-2.5 overflow-y-auto">
+                <div
+                  v-for="member in members"
+                  :key="member.userId"
+                  class="flex h-7 items-center gap-2 px-1"
+                  data-test-id="share-member-row"
+                >
+                  <span
+                    class="flex size-6 shrink-0 items-center justify-center rounded-xl text-[10px] leading-none text-white"
+                    :style="{ backgroundColor: member.avatar.bg }"
+                  >
+                    {{ member.avatar.char }}
+                  </span>
+                  <span class="min-w-0 flex-1 truncate text-xs text-surface">{{ member.name }}</span>
+                  <SelectRoot
+                    v-if="canEdit"
+                    :model-value="member.permission"
+                    @update:model-value="(value: string) => changeMemberPermission(member, value)"
+                  >
+                    <SelectTrigger
+                      class="flex h-[22px] cursor-pointer items-center gap-1 rounded px-1 text-[11px] text-surface outline-none hover:bg-hover"
+                    >
+                      {{ memberPermLabel(member.permission) }}
+                      <icon-lucide-chevron-down class="size-2.5 shrink-0 text-muted" />
+                    </SelectTrigger>
+                    <SelectPortal>
+                      <SelectContent
+                        position="popper"
+                        :side-offset="4"
+                        class="z-[120] w-[104px] rounded-lg border border-border bg-panel-field p-1 shadow-[0_8px_30px_rgb(0_0_0/0.4)]"
+                      >
+                        <SelectViewport class="flex flex-col gap-0.5">
+                          <SelectItem
+                            v-for="opt in memberPermOptions"
+                            :key="String(opt.value)"
+                            :value="opt.value"
+                            class="flex h-[26px] cursor-pointer items-center rounded px-2 text-[11px] text-surface outline-none data-[highlighted]:bg-hover"
+                          >
+                            <SelectItemText>{{ opt.label }}</SelectItemText>
+                          </SelectItem>
+                        </SelectViewport>
+                      </SelectContent>
+                    </SelectPortal>
+                  </SelectRoot>
+                  <span v-else class="text-[11px] text-muted">
+                    {{ memberPermLabel(member.permission) }}
+                  </span>
+                </div>
+
+                <div v-if="members.length === 0" class="py-3 text-center text-[11px] text-muted">
+                  {{ dialogs['share.noMembers'] }}
+                </div>
+              </div>
+            </div>
+
+            <!-- 添加协作者覆盖式（§1.6） -->
+            <div
+              v-if="addMemberOpen"
+              class="absolute inset-0 z-20 flex flex-col gap-2.5 rounded-xl border border-[#4A4A4A] bg-canvas p-3.5 shadow-[0_10px_30px_rgb(0_0_0/0.67)]"
+            >
+              <div class="flex items-center justify-between">
+                <span class="flex items-center gap-2 text-[13px] text-surface">
+                  <icon-lucide-user-plus class="size-3.5 text-muted" />
+                  {{ dialogs['share.collabTitle'] }}
+                </span>
+                <button
+                  type="button"
+                  class="flex size-[22px] cursor-pointer items-center justify-center rounded hover:bg-hover"
+                  :aria-label="dialogs.close"
+                  @click="addMemberOpen = false"
+                >
+                  <icon-lucide-x class="size-3.5 text-muted" />
+                </button>
+              </div>
+              <div class="h-px w-full bg-border" />
+              <div class="relative">
+                <icon-lucide-search
+                  class="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted"
+                />
+                <input
+                  v-model="memberSearch"
+                  type="text"
+                  class="h-7 w-full rounded bg-panel-field pr-2 pl-7 text-[11px] text-surface outline-none placeholder:text-muted focus:border focus:border-panel-focus"
+                  :placeholder="dialogs['share.member.search']"
+                />
+              </div>
+              <span class="text-[10px] font-medium text-muted">
+                {{ dialogs['share.member.teamTitle'] }}
+              </span>
+              <div class="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+                <div
+                  v-for="member in searchableMembers"
+                  :key="member.id"
+                  class="flex h-7 items-center gap-2"
+                >
+                  <span
+                    class="flex size-[22px] shrink-0 items-center justify-center rounded-[11px] text-[10px] leading-none text-white"
+                    :style="{ backgroundColor: member.avatar.bg }"
+                  >
+                    {{ member.avatar.char }}
+                  </span>
+                  <span class="min-w-0 flex-1 truncate text-[11px] text-surface">
+                    {{ member.name }}
+                  </span>
+                  <button
+                    v-if="!isMemberAdded(member.id)"
+                    type="button"
+                    class="flex h-5 cursor-pointer items-center gap-1 rounded bg-accent px-2.5 text-[10px] font-medium text-white hover:bg-accent/90"
+                    :data-test-id="`share-add-option-${member.id}`"
+                    @click="addMember(member.id)"
+                  >
+                    <icon-lucide-plus class="size-2.5" />
+                    {{ dialogs['share.member.add'] }}
+                  </button>
+                  <span v-else class="text-[10px] text-muted">
+                    {{ dialogs['share.member.added'] }}
+                  </span>
+                </div>
+                <div v-if="searchableMembers.length === 0" class="py-3 text-center text-[11px] text-muted">
+                  {{ dialogs.noResults }}
+                </div>
               </div>
             </div>
           </template>
@@ -443,61 +635,7 @@ onMounted(() => {
       </PopoverContent>
     </PopoverPortal>
 
-    <!-- 添加成员（覆盖式 0:2109→0:2166） -->
-    <AppDialogRoot v-model:open="addMemberOpen" size="sm">
-      <AppDialogHeader :heading="dialogs['share.addMember']" :close-label="dialogs.close" />
-      <AppDialogBody>
-        <div class="relative">
-          <icon-lucide-search
-            class="pointer-events-none absolute top-2 left-2 size-3.5 text-muted"
-          />
-          <input
-            v-model="memberSearch"
-            type="text"
-            class="h-8 w-full rounded-md border border-border bg-panel pr-2 pl-7 text-xs text-surface outline-none placeholder:text-muted focus:border-accent"
-            :placeholder="dialogs['share.member.search']"
-          />
-        </div>
-        <div class="mt-2 flex max-h-52 flex-col gap-0.5 overflow-y-auto">
-          <button
-            v-for="member in searchableMembers"
-            :key="member.id"
-            type="button"
-            class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-1 text-left hover:bg-hover"
-            :data-test-id="`share-add-option-${member.id}`"
-            @click="addMember(member.id)"
-          >
-            <span
-              class="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] leading-[11px] text-white"
-              :style="{ backgroundColor: member.avatar.bg }"
-            >
-              {{ member.avatar.char }}
-            </span>
-            <span class="min-w-0 flex-1 truncate text-surface">{{ member.name }}</span>
-            <span
-              class="text-[10px]"
-              :class="isMemberAdded(member.id) ? 'text-muted' : 'text-accent'"
-            >
-              {{ isMemberAdded(member.id) ? dialogs['share.member.added'] : dialogs['share.member.add'] }}
-            </span>
-          </button>
-          <div v-if="searchableMembers.length === 0" class="py-3 text-center text-[11px] text-muted">
-            {{ dialogs.noResults }}
-          </div>
-        </div>
-      </AppDialogBody>
-      <AppDialogFooter>
-        <button
-          type="button"
-          class="h-8 cursor-pointer rounded px-3 text-xs font-medium text-surface hover:bg-hover"
-          @click="addMemberOpen = false"
-        >
-          {{ dialogs.done }}
-        </button>
-      </AppDialogFooter>
-    </AppDialogRoot>
-
-    <!-- 移除协作者确认（0:1645） -->
+    <!-- 移除协作者确认（§6.3） -->
     <AppDialogRoot v-model:open="removeDialogOpen" size="sm">
       <AppDialogHeader :heading="dialogs['share.removeTitle']" :close-label="dialogs.close" />
       <AppDialogBody>
