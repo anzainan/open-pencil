@@ -16,7 +16,7 @@ import { WEB_FONT_PROVIDER_IDS } from '@open-pencil/core/text'
 import type { FontPickerUI } from '@open-pencil/vue'
 
 const { panels } = useI18n()
-const { label: labelProp } = defineProps<{ label?: string }>()
+const { label: labelProp, disabled = false } = defineProps<{ label?: string; disabled?: boolean }>()
 const label = computed(() => labelProp ?? panels.value.fontFamily)
 const modelValue = defineModel<string>({ required: true })
 const emit = defineEmits<{ select: [family: string] }>()
@@ -72,7 +72,9 @@ function loadPreviewFont(family: string, source: string) {
         type="button"
         data-test-id="font-picker-trigger"
         :aria-label="label"
+        :disabled="disabled"
         :class="selectCls.trigger"
+        class="disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span class="truncate">{{ modelValue }}</span>
         <icon-lucide-chevron-down class="size-3 shrink-0 text-muted" />

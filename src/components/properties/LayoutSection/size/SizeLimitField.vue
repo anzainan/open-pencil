@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import {
   SelectContent,
   SelectItem,
@@ -10,6 +11,7 @@ import {
 } from 'reka-ui'
 import { useLayoutControlsContext } from '@open-pencil/vue'
 
+import { useEditorStore } from '@/app/editor/active-store'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
 import { useSelectUI } from '@/components/ui/select'
 import Tip from '@/components/ui/Tip.vue'
@@ -19,6 +21,8 @@ import type { SizeLimitFieldProps } from '@/components/properties/LayoutSection/
 const { item } = defineProps<SizeLimitFieldProps>()
 
 const ctx = useLayoutControlsContext()
+const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 const selectUI = useSelectUI({ item: 'rounded py-1.5 px-2 text-xs' })
 
 function handleSelect(value: string) {
@@ -36,15 +40,20 @@ function handleSelect(value: string) {
       :min="0"
       :node-id="ctx.node.id"
       :binding-path="item.prop"
+      :disabled="readOnly"
       @update:model-value="ctx.updateSizeLimit(item.prop, $event)"
       @commit="(value: number, previous: number) => ctx.commitSizeLimit(item.prop, value, previous)"
     >
       <template #after-variable>
-        <SelectRoot :model-value="'VALUE'" @update:model-value="handleSelect($event as string)">
+        <SelectRoot
+          :model-value="'VALUE'"
+          :disabled="readOnly"
+          @update:model-value="handleSelect($event as string)"
+        >
           <SelectTrigger
             data-slot="limit-trigger"
             :aria-label="item.label"
-            class="flex shrink-0 cursor-pointer items-center self-stretch border-none bg-transparent px-1 text-muted outline-none data-[state=open]:text-foreground"
+            class="flex shrink-0 cursor-pointer items-center self-stretch border-none bg-transparent px-1 text-muted outline-none data-[state=open]:text-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
             @pointerdown.stop
           >
             <icon-lucide-chevron-down class="size-3" />

@@ -13,6 +13,7 @@ import AppGroupedSelect from '@/components/ui/AppGroupedSelect.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
 
 const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 const { selectedNode } = useSelectionState()
 const { panels } = useI18n()
 
@@ -49,6 +50,7 @@ const selectUI = {
       :aria-label="panels.framePreset"
       :groups="groups"
       :display-value="displayValue"
+      :disabled="readOnly"
       :ui="selectUI"
     />
   </PanelSection>

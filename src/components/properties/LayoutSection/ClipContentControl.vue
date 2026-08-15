@@ -1,7 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n, useLayoutControlsContext } from '@open-pencil/vue'
 
+import { useEditorStore } from '@/app/editor/active-store'
+
 const ctx = useLayoutControlsContext()
+const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 
 const { panels } = useI18n()
 </script>
@@ -11,7 +16,8 @@ const { panels } = useI18n()
     <input
       type="checkbox"
       data-test-id="clip-content-checkbox"
-      class="accent-accent"
+      :disabled="readOnly"
+      class="accent-accent disabled:cursor-not-allowed disabled:opacity-50"
       :checked="ctx.node.clipsContent"
       @change="
         ctx.editor.updateNodeWithUndo(

@@ -54,7 +54,8 @@ function syncDirty(): void {
 function toDraft(member: BridgeMemberInfo): TeamMemberDraft {
   return {
     ...member,
-    passwordDraft: '',
+    // 明文默认回显（服务端明文副本；存量仅哈希/无副本 → ''，不置 touched）。
+    passwordDraft: member.password ?? '',
     passwordTouched: false,
     roleDraft: member.role,
     roleTouched: false,
@@ -110,10 +111,10 @@ export async function commitPendingMembers(): Promise<number> {
   return pending.length
 }
 
-/** 放弃暂存更改（UnsavedDialog 放弃更改）：还原为持久化值。 */
+/** 放弃暂存更改（UnsavedDialog 放弃更改）：还原为服务端回填值。 */
 export function discardPendingMembers(): void {
   for (const member of members.value) {
-    member.passwordDraft = ''
+    member.passwordDraft = member.password ?? ''
     member.passwordTouched = false
     member.roleDraft = member.role
     member.roleTouched = false

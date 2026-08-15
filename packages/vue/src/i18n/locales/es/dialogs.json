@@ -423,6 +423,6 @@
   "profile.avatarUpdated": "Avatar actualizado",
   "profile.avatarFailed": "Error al subir el avatar",
   "profile.avatarInvalid": "Solo se admiten imágenes PNG/JPG/WebP",
-  "profile.avatarTooLarge": "La imagen no puede superar los 2 MB",
+  "profile.avatarTooLarge": "La imagen no puede superar los 5 MB",
   "share.member.loadFailed": "No se pudieron cargar los miembros del equipo"
 }

@@ -22,18 +22,19 @@ interface AppSelectProps<TValue extends string | number> {
   label?: string
   options: { value: TValue; label: string }[]
   placeholder?: string
+  disabled?: boolean
   ui?: ComponentUI<AppSelectTheme>
 }
 
 defineOptions({ inheritAttrs: false })
 
-const { options, label, placeholder, ui } = defineProps<AppSelectProps<T>>()
+const { options, label, placeholder, disabled = false, ui } = defineProps<AppSelectProps<T>>()
 const modelValue = defineModel<T>({ required: true })
 const styles = tv(theme)()
 </script>
 
 <template>
-  <SelectRoot v-model="modelValue">
+  <SelectRoot v-model="modelValue" :disabled="disabled">
     <SelectTrigger
       v-bind="$attrs"
       :class="styles.trigger({ class: ui?.trigger })"

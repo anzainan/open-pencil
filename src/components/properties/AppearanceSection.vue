@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { AppearanceControlsRoot, MIXED, useI18n } from '@open-pencil/vue'
 
+import { useEditorStore } from '@/app/editor/active-store'
 import NumberField from '@/components/inputs/NumberField.vue'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
 import { useBlendModeOptions } from '@/components/properties/blend-mode/use'
@@ -13,6 +15,8 @@ import PanelSection from '@/components/ui/panel/PanelSection.vue'
 import type { BlendMode } from '@open-pencil/scene-graph'
 
 const { panels } = useI18n()
+const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 type BlendModeSelectValue = BlendMode | 'MIXED'
 
 const baseBlendModeOptions = useBlendModeOptions(true)
@@ -46,6 +50,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
         <IconButton
           :label="panels.toggleVisibility"
           :active="visibilityState === 'hidden'"
+          :disabled="readOnly"
           @click="actions.toggleVisibility"
         >
           <icon-lucide-eye v-if="visibilityState === 'visible'" class="size-3.5" />
@@ -61,6 +66,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
             class="w-full"
             :label="panels.blendMode"
             :options="blendModeOptions(blendModeValue)"
+            :disabled="readOnly"
             @update:model-value="
               (value: BlendModeSelectValue) => value !== 'MIXED' && actions.setBlendMode(value)
             "
@@ -77,6 +83,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
             :max="100"
             :node-id="node.id"
             binding-path="opacity"
+            :disabled="readOnly"
             @update:model-value="actions.updateProp('opacity', $event / 100)"
             @commit="(v: number, p: number) => actions.commitProp('opacity', v / 100, p / 100)"
           >
@@ -92,6 +99,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
             :model-value="opacityPercent"
             :min="0"
             :max="100"
+            :disabled="readOnly"
             @update:model-value="actions.updateProp('opacity', $event / 100)"
             @commit="(v: number, p: number) => actions.commitProp('opacity', v / 100, p / 100)"
           >
@@ -111,6 +119,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
             :min="0"
             :node-id="node.id"
             binding-path="cornerRadius"
+            :disabled="readOnly"
             @update:model-value="actions.updateProp('cornerRadius', $event)"
             @commit="(v: number, p: number) => actions.commitProp('cornerRadius', v, p)"
           >
@@ -124,6 +133,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
             :aria-label="panels.radius"
             :model-value="cornerRadiusValue"
             :min="0"
+            :disabled="readOnly"
             @update:model-value="actions.updateProp('cornerRadius', $event)"
             @commit="(v: number, p: number) => actions.commitProp('cornerRadius', v, p)"
           >
@@ -137,6 +147,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
             :label="panels.independentCornerRadii"
             size="md"
             :active="independentCorners === true"
+            :disabled="readOnly"
             @click="actions.toggleIndependentCorners"
           >
             <icon-lucide-square-round-corner class="size-3" />
@@ -156,6 +167,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
           :min="0"
           :node-id="node.id"
           binding-path="topLeftRadius"
+          :disabled="readOnly"
           @update:model-value="actions.updateCornerProp('topLeftRadius', $event)"
           @commit="(v: number, p: number) => actions.commitCornerProp('topLeftRadius', v, p)"
         />
@@ -165,6 +177,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
           :min="0"
           :node-id="node.id"
           binding-path="topRightRadius"
+          :disabled="readOnly"
           @update:model-value="actions.updateCornerProp('topRightRadius', $event)"
           @commit="(v: number, p: number) => actions.commitCornerProp('topRightRadius', v, p)"
         />
@@ -174,6 +187,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
           :min="0"
           :node-id="node.id"
           binding-path="bottomLeftRadius"
+          :disabled="readOnly"
           @update:model-value="actions.updateCornerProp('bottomLeftRadius', $event)"
           @commit="(v: number, p: number) => actions.commitCornerProp('bottomLeftRadius', v, p)"
         />
@@ -183,6 +197,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
           :min="0"
           :node-id="node.id"
           binding-path="bottomRightRadius"
+          :disabled="readOnly"
           @update:model-value="actions.updateCornerProp('bottomRightRadius', $event)"
           @commit="(v: number, p: number) => actions.commitCornerProp('bottomRightRadius', v, p)"
         />
@@ -191,6 +206,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
             :label="panels.independentCornerRadii"
             size="md"
             active
+            :disabled="readOnly"
             @click="actions.toggleIndependentCorners"
           >
             <icon-lucide-square-round-corner class="size-3" />
@@ -207,6 +223,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
             :max="100"
             :aria-label="panels.cornerSmoothing"
             data-property="corner-smoothing"
+            :disabled="readOnly"
             @update:model-value="actions.updateCornerProp('cornerSmoothing', $event / 100)"
             @commit="
               (v: number, p: number) =>

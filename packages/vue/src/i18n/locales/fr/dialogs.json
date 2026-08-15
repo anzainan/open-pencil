@@ -423,6 +423,6 @@
   "profile.avatarUpdated": "Avatar mis à jour",
   "profile.avatarFailed": "Échec de l’envoi de l’avatar",
   "profile.avatarInvalid": "Seules les images PNG/JPG/WebP sont acceptées",
-  "profile.avatarTooLarge": "L’image doit faire 2 Mo ou moins",
+  "profile.avatarTooLarge": "L’image doit faire 5 Mo ou moins",
   "share.member.loadFailed": "Échec du chargement des membres de l’équipe"
 }

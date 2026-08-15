@@ -1,6 +1,6 @@
 import { authHeader } from './client'
 
-/** 团队成员（GET /api/v1/members 对外视图，无密码字段）。 */
+/** 团队成员（GET /api/v1/members 对外视图；admin/owner 调用方附明文密码）。 */
 export interface BridgeMemberInfo {
   id: string
   name: string
@@ -8,16 +8,20 @@ export interface BridgeMemberInfo {
   avatar: { char: string; bg: string; image?: string }
   email: string
   createdAt: string
+  /** 明文密码（仅 admin/owner 调用方可见，且 owner 固定行不含）。 */
+  password?: string
   fixed?: boolean
 }
 
-/** 外链台账视图（服务端 GET /api/v1/share 返回，绝不含密码哈希）。 */
+/** 外链台账视图（服务端 GET /api/v1/share 返回，绝不含密码哈希；明文仅协作者下发）。 */
 export interface BridgeShareSettings {
   exists: boolean
   path: string
   scope: 'internet' | 'team' | 'self'
   permission: 'view' | 'edit'
   passwordEnabled: boolean
+  /** 密码明文（协作者可看；非协作者 / 无明文副本 → null）。 */
+  password?: string | null
   token: string | null
   url: string | null
   members: { userId: string; permission: 'view' | 'edit' | 'none' }[]

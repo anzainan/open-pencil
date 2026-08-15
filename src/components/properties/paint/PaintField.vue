@@ -10,6 +10,7 @@ export type PaintFieldUI = ComponentUI<typeof theme>
 export interface PaintFieldProps {
   opacity: number
   opacityLabel: string
+  disabled?: boolean
   class?: ClassValue
   ui?: PaintFieldUI
 }
@@ -28,7 +29,7 @@ import { tv } from 'tailwind-variants'
 import NumberField from '@/components/inputs/NumberField.vue'
 import paintFieldTheme from '@/theme/paint-field'
 
-const { opacity, opacityLabel, class: className, ui } = defineProps<PaintFieldProps>()
+const { opacity, opacityLabel, disabled = false, class: className, ui } = defineProps<PaintFieldProps>()
 const emit = defineEmits<{ 'update:opacity': [opacity: number] }>()
 defineSlots<PaintFieldSlots>()
 const styles = computed(() => tv(paintFieldTheme)())
@@ -54,6 +55,7 @@ const styles = computed(() => tv(paintFieldTheme)())
       :model-value="Math.round(opacity * 100)"
       :min="0"
       :max="100"
+      :disabled="disabled"
       :ui="{
         root: 'h-full rounded-none border-0 bg-transparent shadow-none',
         leading: 'hidden',

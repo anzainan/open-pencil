@@ -5,7 +5,11 @@ import { MIXED, type MixedValue } from '@open-pencil/vue'
 
 import AppInput from '@/components/ui/AppInput.vue'
 
-const { value, label } = defineProps<{ value: MixedValue<string>; label: string }>()
+const { value, label, disabled = false } = defineProps<{
+  value: MixedValue<string>
+  label: string
+  disabled?: boolean
+}>()
 const emit = defineEmits<{ commit: [value: string] }>()
 const draft = ref('')
 
@@ -26,6 +30,7 @@ watch(
     :state="value === MIXED ? 'mixed' : 'idle'"
     :placeholder="value === MIXED ? '—' : undefined"
     :aria-label="label"
+    :disabled="disabled"
     @change="emit('commit', draft)"
   />
 </template>

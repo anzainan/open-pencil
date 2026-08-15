@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useAttrs } from 'vue'
 
+import { colorToCSS } from '@open-pencil/core/color'
 import { ColorInputRoot, inputValue } from '@open-pencil/vue'
 
 import ColorPicker from '@/components/ColorPicker/ColorPicker.vue'
@@ -15,11 +16,13 @@ const attrs = useAttrs()
 const {
   editable = false,
   color,
-  okhcl = null
+  okhcl = null,
+  disabled = false
 } = defineProps<{
   color: Color
   editable?: boolean
   okhcl?: OkHCLControls | null
+  disabled?: boolean
 }>()
 const emit = defineEmits<{ update: [color: Color] }>()
 </script>
@@ -33,11 +36,26 @@ const emit = defineEmits<{ update: [color: Color] }>()
   >
     <template #default="{ editable: isEditable, hex, actions, okhcl: okhclControls }">
       <div v-bind="attrs" class="flex items-center gap-1.5">
-        <ColorPicker :color="color" :okhcl="okhclControls" @update="actions.updateColor($event)" />
+        <ColorPicker
+          :color="color"
+          :okhcl="okhclControls"
+          @update="actions.updateColor($event)"
+        >
+          <template v-if="disabled" #trigger>
+            <button
+              type="button"
+              :disabled="disabled"
+              :aria-label="hex"
+              class="size-5 shrink-0 cursor-not-allowed rounded border border-border p-0 opacity-50"
+              :style="{ background: colorToCSS(color) }"
+            />
+          </template>
+        </ColorPicker>
         <input
           v-if="isEditable"
           data-test-id="color-hex-input"
-          class="min-w-0 flex-1 border-none bg-transparent font-mono text-xs text-surface outline-none"
+          :disabled="disabled"
+          class="min-w-0 flex-1 border-none bg-transparent font-mono text-xs text-surface outline-none disabled:cursor-not-allowed disabled:opacity-50"
           :value="hex"
           maxlength="6"
           @change="actions.updateFromHex(inputValue($event))"

@@ -82,6 +82,31 @@ watch(
 )
 const { onlineUsers } = useDocumentPresence(presencePath)
 provideCollabPanel(onlineUsers)
+
+// 分享面板入口：view-only 协作者（readOnly=true）也要能看分享密码/链接 → 需协作者权限
+// （perm.canView）而非仅 !readOnly。bridge 文档打开时解析一次；失败按不可进入降级。
+const shareAccessible = ref(false)
+watch(
+  [() => activeTab.value, () => store.state.documentName],
+  () => {
+    const binding = activeTab.value?.store.getStorageBinding()
+    if (binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId) {
+      void bridgeClient
+        .getPermissions(binding.documentId)
+        .then((perm) => {
+          shareAccessible.value = perm.canView
+          return undefined
+        })
+        .catch(() => {
+          shareAccessible.value = false
+          return undefined
+        })
+    } else {
+      shareAccessible.value = false
+    }
+  },
+  { immediate: true }
+)
 // H 子路径：图标走 BASE_URL 前缀（/Mobai/favicon-32.png）。
 const faviconSrc = import.meta.env.BASE_URL + 'favicon-32.png'
 
@@ -127,6 +152,12 @@ watch(
     if (!store.state.readOnly || sceneBaseline === null) return
     if (version === sceneBaseline || version === lastInterceptedVersion) return
     lastInterceptedVersion = version
+    // 导出设置类提交（label 含 'export setting'）是只读下合法操作，跳过回滚，保证导出配置稳定。
+    const topLabel = store.undo.undoLabel
+    if (topLabel && /export setting/i.test(topLabel)) {
+      sceneBaseline = store.state.sceneVersion
+      return
+    }
     openPermissionRequest()
     // 回滚只读态内存改动（undo 栈在打开时已清空，此处只会回退只读期间自己的改动）。
     if (store.undo.canUndo) store.undo.undo()
@@ -259,7 +290,7 @@ onUnmounted(() => {
           class="flex shrink-0 items-center justify-between border-b border-border px-1.5 py-1.5"
         >
           <CollabAvatarStack v-if="!store.state.readOnly" />
-          <SharePopover v-if="!store.state.readOnly" />
+          <SharePopover v-if="!store.state.readOnly || shareAccessible" />
         </div>
         <PropertiesPanel />
       </SplitterPanel>

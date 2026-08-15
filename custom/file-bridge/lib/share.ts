@@ -2,6 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { encryptPassword, type PasswordCipher } from './crypto'
 import { OPENPENCIL_REL_DIR } from './paths'
 
 /** 外链访问范围：与 PermissionScope 语义一致（share.json 仅存外链台账）。 */
@@ -20,6 +21,8 @@ export interface ShareLink {
   /** 启用密码才填（scrypt 盐+哈希，不存明文）。 */
   passwordSalt: string | null
   passwordHash: string | null
+  /** 密码明文副本（AES-256-GCM，`PASSWORD_ENC_KEY`；无 key 或仅存量哈希 → null）。 */
+  passwordCipher: PasswordCipher | null
   /** 成员级权限镜像（Phase B 起成员权限走 permissions.json，此处保留兼容字段）。 */
   members: { userId: string; permission: 'view' | 'edit' | 'none' }[]
   createdBy: string
@@ -157,12 +160,16 @@ export class ShareStore {
 
     let passwordSalt = existing?.passwordSalt ?? null
     let passwordHash = existing?.passwordHash ?? null
+    let passwordCipher = existing?.passwordCipher ?? null
     if (data.password === 'clear') {
       passwordSalt = null
       passwordHash = null
+      passwordCipher = null
     } else if (data.password && data.password.length > 0) {
       passwordSalt = randomBytes(16).toString('hex')
       passwordHash = hashPassword(data.password, passwordSalt)
+      // 同事务写/覆盖明文副本（无 PASSWORD_ENC_KEY 时优雅降级为 null）。
+      passwordCipher = encryptPassword(data.password)
     } else if (data.passwordSalt && data.passwordHash) {
       passwordSalt = data.passwordSalt
       passwordHash = data.passwordHash
@@ -175,6 +182,7 @@ export class ShareStore {
       permission: data.permission,
       passwordSalt,
       passwordHash,
+      passwordCipher,
       members: data.members ?? existing?.members ?? [],
       createdBy,
       createdAt: existing?.createdAt ?? now

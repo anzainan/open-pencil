@@ -10,6 +10,7 @@ import { useEditorStore } from '@/app/editor/active-store'
 const emit = defineEmits<{ openDialog: [] }>()
 
 const editor = useEditorStore()
+const readOnly = computed(() => editor.state.readOnly)
 const collectionCount = useSceneComputed(() => {
   void editor.state.sceneVersion
   return editor.getCollectionCount()
@@ -25,7 +26,7 @@ const { panels } = useI18n()
 <template>
   <PanelSection :label="panels.variables" :empty="!hasVariables">
     <template #actions>
-      <IconButton :label="panels.openVariables" @click="emit('openDialog')">
+      <IconButton :label="panels.openVariables" :disabled="readOnly" @click="emit('openDialog')">
         <icon-lucide-settings-2 class="size-3.5" />
       </IconButton>
     </template>

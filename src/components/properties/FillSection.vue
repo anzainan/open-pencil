@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
+import { useEditorStore } from '@/app/editor/active-store'
 import {
   BindableValueRoot,
   useColorBindingProvider,
@@ -41,6 +44,8 @@ const okhcl = useOkHCL()
 const colorProvider = useColorBindingProvider()
 const { panels, dialogs } = useI18n()
 const blendModeOptions = useBlendModeOptions()
+const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 
 function displayFill(fill: Fill, resolvedColor: Color | undefined): Fill {
   return fill.type === 'SOLID' && resolvedColor ? { ...fill, color: resolvedColor } : fill
@@ -73,15 +78,20 @@ function updateSolidColor(
     v-slot="{ items, isMixed, activeNode, selectedNodeIds, flush, actions }"
     prop-key="fills"
     :label="panels.fill"
+    :disabled="readOnly"
   >
     <PanelSection :label="panels.fill" :empty="!isMixed && items.length === 0">
       <template #actions>
-        <IconButton :label="panels.addFill" @click="actions.add({ ...fillCtx.defaultFill })">
+        <IconButton
+          :label="panels.addFill"
+          :disabled="readOnly"
+          @click="actions.add({ ...fillCtx.defaultFill })"
+        >
           <icon-lucide-plus class="size-3.5" />
         </IconButton>
       </template>
 
-      <SharedStyleField kind="fill" :label="panels.fillStyle" />
+      <SharedStyleField kind="fill" :label="panels.fillStyle" :disabled="readOnly" />
 
       <p v-if="isMixed" class="text-[11px] text-muted">{{ panels.mixedFillsHelp }}</p>
 
@@ -104,12 +114,14 @@ function updateSolidColor(
               class="w-full flex-none"
               :opacity="fill.opacity"
               :opacity-label="panels.opacity"
+              :disabled="readOnly"
               @update:opacity="actions.patch(index, { opacity: $event })"
             >
               <template #preview>
                 <FillPicker
                   :fill="displayFill(fill, binding.resolvedValue)"
                   :okhcl="createFillOkhclAdapter(okhcl, activeNode, index)"
+                  :disabled="readOnly"
                   @update="
                     updatePickerFill(binding.actions, flush, $event, (next) =>
                       actions.update(index, next)
@@ -127,6 +139,7 @@ function updateSolidColor(
                   :resolved-color="binding.resolvedValue"
                   :variable-name="binding.variable?.name"
                   :label="panels.fill"
+                  :disabled="readOnly"
                   @update="
                     updateSolidColor(binding.actions, flush, fill, $event, (next) =>
                       actions.update(index, next)
@@ -149,6 +162,7 @@ function updateSolidColor(
                   "
                   :create-name-placeholder="panels.variableName"
                   :create-submit-label="panels.create"
+                  :disabled="readOnly"
                 />
               </template>
             </PaintField>
@@ -160,6 +174,7 @@ function updateSolidColor(
                 :model-value="fill.blendMode ?? 'NORMAL'"
                 :options="blendModeOptions"
                 :label="panels.blendMode"
+                :disabled="readOnly"
                 data-property="fill-blend-mode"
                 @update:model-value="
                   commitDiscretePropertyListChange(flush, () =>

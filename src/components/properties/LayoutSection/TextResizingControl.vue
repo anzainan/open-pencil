@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n, useLayoutControlsContext } from '@open-pencil/vue'
 
+import { useEditorStore } from '@/app/editor/active-store'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 import Tip from '@/components/ui/Tip.vue'
@@ -11,6 +12,8 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 type TextResizeMode = 'AUTO_WIDTH' | 'AUTO_HEIGHT' | 'FIXED'
 
 const ctx = useLayoutControlsContext()
+const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 const { panels } = useI18n()
 
 function modeFor(node: SceneNode | null): TextResizeMode {
@@ -45,6 +48,7 @@ function setMode(value: TextResizeMode) {
       :model-value="mode"
       :options="options"
       :label="panels.resizing"
+      :disabled="readOnly"
       @change="setMode($event as TextResizeMode)"
     >
       <template #option="{ option }">

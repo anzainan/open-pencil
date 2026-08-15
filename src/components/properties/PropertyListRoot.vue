@@ -8,9 +8,10 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 import type { PropertyListKey, PropertyListRootSlotProps } from '@open-pencil/vue'
 import type { VNode } from 'vue'
 
-const { propKey, label } = defineProps<{
+const { propKey, label, disabled = false } = defineProps<{
   propKey: K
   label?: string
+  disabled?: boolean
 }>()
 defineSlots<{
   default?(
@@ -34,6 +35,7 @@ const context = useEditorPropertyList(propKey)
     :label="label"
     :items="context.items.value"
     :mixed="context.isMixed.value"
+    :disabled="disabled"
     @add="context.actions.add"
     @remove="context.actions.remove"
     @update="context.actions.update"

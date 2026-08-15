@@ -23,10 +23,11 @@ type PinItem = {
   active: boolean
 }
 
-const { horizontal, vertical, actions } = defineProps<{
+const { horizontal, vertical, actions, disabled = false } = defineProps<{
   horizontal: ConstraintValue
   vertical: ConstraintValue
   actions: ConstraintsControlActions
+  disabled?: boolean
 }>()
 
 const { panels } = useI18n()
@@ -107,6 +108,7 @@ function activate(pin: PinItem, event: MouseEvent) {
         :data-edge="pin.edge"
         :aria-label="pin.label"
         :aria-pressed="pin.active"
+        :disabled="disabled"
         :class="pinStyles(pin).pin()"
         @click="activate(pin, $event)"
       >

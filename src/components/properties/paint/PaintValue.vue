@@ -8,11 +8,12 @@ import { BindingPill } from '@/components/ui/binding'
 
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
-const { color, resolvedColor, variableName, label } = defineProps<{
+const { color, resolvedColor, variableName, label, disabled = false } = defineProps<{
   color: Color
   resolvedColor?: Color
   variableName?: string
   label: string
+  disabled?: boolean
 }>()
 const emit = defineEmits<{ update: [color: Color] }>()
 
@@ -41,7 +42,8 @@ const tooltip = computed(() => (variableName ? `${variableName} · #${model.hex.
     v-else
     :aria-label="label"
     data-property="color-hex"
-    class="min-w-0 flex-1 border-none bg-transparent font-mono text-xs text-surface outline-none"
+    :disabled="disabled"
+    class="min-w-0 flex-1 border-none bg-transparent font-mono text-xs text-surface outline-none disabled:cursor-not-allowed disabled:opacity-50"
     :value="hexValue"
     :maxlength="hexMaxLength"
     @change="model.updateHex(inputValue($event))"

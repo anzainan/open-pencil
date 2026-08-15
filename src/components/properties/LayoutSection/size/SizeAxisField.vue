@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import {
   SelectContent,
   SelectItem,
@@ -11,6 +12,7 @@ import {
 } from 'reka-ui'
 import { useI18n, useLayoutControlsContext } from '@open-pencil/vue'
 
+import { useEditorStore } from '@/app/editor/active-store'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
 import { useSelectUI } from '@/components/ui/select'
 import Tip from '@/components/ui/Tip.vue'
@@ -24,6 +26,8 @@ type SizeSelectValue = LayoutSizing | `add-${SizeLimitProp}` | `remove-${SizeLim
 const { axis, icon, label } = defineProps<SizeAxisFieldProps>()
 
 const ctx = useLayoutControlsContext()
+const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 const { panels } = useI18n()
 const selectUI = useSelectUI({ item: 'rounded py-1.5 pr-2 pl-6 text-xs' })
 
@@ -82,18 +86,20 @@ function handleSelect(value: SizeSelectValue) {
       :min="0"
       :node-id="ctx.node.id"
       :binding-path="axis"
+      :disabled="readOnly"
       @update:model-value="ctx.updateAxisSize(axis, $event)"
       @commit="(value: number, previous: number) => ctx.commitAxisSize(axis, value, previous)"
     >
       <template #after-variable>
         <SelectRoot
           :model-value="sizing()"
+          :disabled="readOnly"
           @update:model-value="handleSelect($event as SizeSelectValue)"
         >
           <SelectTrigger
             data-slot="sizing-trigger"
             :aria-label="label"
-            class="flex shrink-0 cursor-pointer items-center gap-0.5 self-stretch border-none bg-transparent px-1.5 text-[10px] text-muted outline-none data-[state=open]:text-foreground"
+            class="flex shrink-0 cursor-pointer items-center gap-0.5 self-stretch border-none bg-transparent px-1.5 text-[10px] text-muted outline-none data-[state=open]:text-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
             @pointerdown.stop
           >
             <span v-if="sizingLabel()">{{ sizingLabel() }}</span>

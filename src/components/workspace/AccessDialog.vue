@@ -9,6 +9,7 @@ import { bridgeClient } from '@/app/bridge/client'
 import { listMembers, saveFilePermissions, type BridgeMemberInfo } from '@/app/bridge/share'
 import { toast } from '@/app/shell/ui'
 import AppSelect from '@/components/ui/AppSelect.vue'
+import AvatarImage from '@/components/ui/AvatarImage.vue'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -234,19 +235,14 @@ watch(open, (isOpen) => {
               <template v-if="row.fixed">
                 <!-- owner 行：无 checkbox（占位）、绿头像 #10B981、静态「所有者」、无权限下拉 -->
                 <span class="flex size-3.5 shrink-0" />
-                <img
-                  v-if="row.avatar.image"
-                  :src="`/api/v1/avatars/${(row.avatar.image ?? '').split('/').pop()}`"
-                  class="size-5 shrink-0 rounded-full object-cover"
+                <AvatarImage
+                  :image="row.avatar.image"
                   :alt="row.name"
+                  bg="#10B981"
+                  :char="row.avatar.char"
+                  img-class="size-5 shrink-0 rounded-full object-cover"
+                  char-class="size-5 rounded-full text-[9px] leading-[11px]"
                 />
-                <span
-                  v-else
-                  class="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] leading-[11px] text-white"
-                  :style="{ backgroundColor: '#10B981' }"
-                >
-                  {{ row.avatar.char }}
-                </span>
                 <span class="min-w-0 flex-1 truncate text-[11px] leading-[14px] text-surface">
                   {{ row.name }}
                 </span>
@@ -264,19 +260,14 @@ watch(open, (isOpen) => {
                 >
                   <icon-lucide-check v-if="row.selected" class="size-2.5 text-white" />
                 </button>
-                <img
-                  v-if="row.avatar.image"
-                  :src="`/api/v1/avatars/${(row.avatar.image ?? '').split('/').pop()}`"
-                  class="size-5 shrink-0 rounded-full object-cover"
+                <AvatarImage
+                  :image="row.avatar.image"
                   :alt="row.name"
+                  :bg="row.avatar.bg"
+                  :char="row.avatar.char"
+                  img-class="size-5 shrink-0 rounded-full object-cover"
+                  char-class="size-5 rounded-full text-[9px] leading-[11px]"
                 />
-                <span
-                  v-else
-                  class="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] leading-[11px] text-white"
-                  :style="{ backgroundColor: row.avatar.bg }"
-                >
-                  {{ row.avatar.char }}
-                </span>
                 <span class="min-w-0 flex-1 truncate text-[11px] leading-[14px] text-surface">
                   {{ row.name }}
                 </span>

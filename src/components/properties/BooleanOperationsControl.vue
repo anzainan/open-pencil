@@ -19,6 +19,7 @@ import type { EditorCommandId } from '@open-pencil/vue'
 import Tip from '@/components/ui/Tip.vue'
 import { menuItem, useMenuUI } from '@/components/ui/menu'
 
+const { disabled = false } = defineProps<{ disabled?: boolean }>()
 const { getCommand, runCommand } = useEditorCommands()
 const { commands } = useI18n()
 
@@ -40,7 +41,8 @@ const itemCls = menuItem({ justify: 'between' })
       <DropdownMenuTrigger as-child>
         <button
           data-test-id="boolean-operations-trigger"
-          class="flex h-7 items-center gap-1 rounded-md px-1.5 text-muted hover:bg-hover hover:text-surface data-[state=open]:bg-active data-[state=open]:text-surface"
+          :disabled="disabled"
+          class="flex h-7 items-center gap-1 rounded-md px-1.5 text-muted hover:bg-hover hover:text-surface data-[state=open]:bg-active data-[state=open]:text-surface disabled:cursor-not-allowed disabled:opacity-50"
         >
           <IconCombine class="size-4" />
           <IconChevronDown class="size-3" />

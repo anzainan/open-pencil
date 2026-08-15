@@ -13,6 +13,7 @@ import {
 import { EventBus, FileWatcher, sseResponse } from './lib/events'
 import { createMcpProxy, type McpProxyHandle } from './mcp-proxy'
 import { handleMcpRequest, type McpDeps } from './mcp'
+import { decryptPassword } from './lib/crypto'
 import { AuthStore, isAdminRole, type User, type UserRole } from './lib/auth'
 import { NotificationStore } from './lib/notifications'
 import { PresenceStore } from './lib/presence'
@@ -782,9 +783,10 @@ export function startServer(options: BridgeServerOptions) {
     return json({ user: authStore.toPublicUser(user) })
   }
 
-  function listMembers(): Response {
+  /** GET /members：admin/owner → 附成员明文密码（withPassword）；member → 无密码字段。 */
+  function listMembers(withPassword: boolean): Response {
     if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
-    return json({ members: authStore.listUsers() })
+    return json({ members: authStore.listUsers({ withPassword }) })
   }
 
   async function createMember(request: Request): Promise<Response> {
@@ -850,7 +852,7 @@ export function startServer(options: BridgeServerOptions) {
   // ---- 头像（Phase G：真实图片上传，存 designRoot/.openpixel/avatars/，隐藏系统目录）----
 
   const AVATAR_REL_DIR = 'avatars'
-  const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+  const MAX_AVATAR_BYTES = 5 * 1024 * 1024
 
   /** 校验解码字节的 magic bytes 与扩展名是否匹配（拒绝伪装成图片的任意文件）。 */
   function matchesImageSignature(ext: string, bytes: Uint8Array): boolean {
@@ -900,7 +902,7 @@ export function startServer(options: BridgeServerOptions) {
       return json({ ok: false, error: 'invalid base64 image data' }, 400)
     }
     if (bytes.byteLength === 0 || bytes.byteLength > MAX_AVATAR_BYTES) {
-      return json({ ok: false, error: 'image must be 1 byte to 2MB' }, 400)
+      return json({ ok: false, error: 'image must be 1 byte to 5MB' }, 400)
     }
     if (!matchesImageSignature(ext, bytes)) {
       return json({ ok: false, error: 'image signature does not match extension' }, 400)
@@ -1089,7 +1091,8 @@ function resolveShareBaseURL(): string {
     return `${SHARE_BASE_URL}/Mobai/${token}`
   }
 
-  /** 外链对外视图：绝不暴露密码哈希；非 internet 范围不出 token/url（外链不可访问）。 */
+  /** 外链对外视图：绝不暴露密码哈希；非 internet 范围不出 token/url（外链不可访问）。
+   *  `password` 为明文副本（AES-256-GCM 解密；无 key / 存量仅哈希 → null），调用方按权限注入。 */
   function shareView(link: {
     path: string
     scope: ShareScope
@@ -1099,12 +1102,13 @@ function resolveShareBaseURL(): string {
     members: { userId: string; permission: 'view' | 'edit' | 'none' }[]
     createdBy: string
     createdAt: string
-  }): Record<string, unknown> {
+  }, password: string | null): Record<string, unknown> {
     return {
       path: link.path,
       scope: link.scope,
       permission: link.permission,
       passwordEnabled: link.passwordHash !== null,
+      password,
       token: link.scope === 'internet' ? link.token : null,
       url: link.scope === 'internet' ? shareURL(link.token) : null,
       members: link.members,
@@ -1120,7 +1124,9 @@ function resolveShareBaseURL(): string {
       : json({ ok: false, error: 'Unauthorized' }, 401)
   }
 
-  /** GET /api/v1/share?path= → 该文件分享设置（login；无 → 默认空）。 */
+  /** GET /api/v1/share?path= → 该文件分享设置（login；无 → 默认空）。
+   *  password 明文仅对「该文件协作者」（resolvePermission.canView）下发；非协作者 member 返回
+   *  password:null（不 403，防探测）。游客无 session → 401（上方天然拦截）。 */
   function getShare(request: Request): Response {
     const user = sessionUser(request)
     if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
@@ -1137,12 +1143,15 @@ function resolveShareBaseURL(): string {
         scope: 'self',
         permission: 'view',
         passwordEnabled: false,
+        password: null,
         token: null,
         url: null,
         members: []
       })
     }
-    return json({ exists: true, ...shareView(link) })
+    const canView = permissions.resolvePermission(path, user).canView
+    const password = canView ? decryptPassword(link.passwordCipher) : null
+    return json({ exists: true, ...shareView(link, password) })
   }
 
   /**
@@ -1179,7 +1188,8 @@ function resolveShareBaseURL(): string {
     }
 
     const link = shares.upsertLink(path, { scope, permission, password }, user.id)
-    return json({ ok: true, link: shareView(link) })
+    // admin 写档后回显明文（同事务刚落盘的副本）。
+    return json({ ok: true, link: shareView(link, decryptPassword(link.passwordCipher)) })
   }
 
   /** DELETE /api/v1/share?path= → 关闭分享（删外链）。 */
@@ -1582,7 +1592,8 @@ function resolveShareBaseURL(): string {
       if (method === 'GET') {
         const user = sessionUser(request)
         if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-        return listMembers()
+        // 成员明文密码仅 owner/admin 可见；member 调用方维持无密码响应。
+        return listMembers(isAdminRole(user.role))
       }
       if (method === 'POST') {
         // 成员权限：仅管理员和所有者可操作。
@@ -1678,8 +1689,9 @@ function resolveShareBaseURL(): string {
 
     if (path === '/api/v1/share/password') {
       if (method !== 'GET') return methodNotAllowed()
-      const user = sessionUser(request)
-      if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+      // 顺手收紧：随机密码生成仅 admin/owner（member 借接口可爆破探测）。
+      const user = adminUser(request)
+      if (!user) return adminDenied(request)
       return generateSharePassword()
     }
 

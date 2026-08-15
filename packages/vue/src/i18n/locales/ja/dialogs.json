@@ -423,6 +423,6 @@
   "profile.avatarUpdated": "アバターを更新しました",
   "profile.avatarFailed": "アバターのアップロードに失敗しました",
   "profile.avatarInvalid": "対応形式は PNG/JPG/WebP のみです",
-  "profile.avatarTooLarge": "画像サイズは 2MB 以下にしてください",
+  "profile.avatarTooLarge": "画像サイズは 5MB 以下にしてください",
   "share.member.loadFailed": "チームメンバーを読み込めませんでした"
 }

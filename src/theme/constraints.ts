@@ -2,7 +2,7 @@ const constraintsTheme = {
   slots: {
     root: 'grid grid-cols-[72px_minmax(0,1fr)] items-center gap-1.5',
     diagram: 'relative h-16 w-[72px] rounded border border-border bg-panel-field',
-    pin: 'absolute flex cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent text-muted outline-none hover:bg-hover hover:text-surface focus-visible:ring-1 focus-visible:ring-panel-focus',
+    pin: 'absolute flex cursor-pointer items-center justify-center rounded-sm border border-transparent bg-transparent text-muted outline-none hover:bg-hover hover:text-surface focus-visible:ring-1 focus-visible:ring-panel-focus disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
     pinMark: 'block rounded-full bg-current',
     scaleBadge:
       'pointer-events-none absolute inset-2 flex items-center justify-center text-[9px] font-medium tracking-wide text-accent uppercase',

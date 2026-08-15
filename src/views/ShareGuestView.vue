@@ -161,6 +161,12 @@ watch(
     if (!current || !current.state.readOnly || sceneBaseline === null) return
     if (version === null || version === sceneBaseline || version === lastInterceptedVersion) return
     lastInterceptedVersion = version
+    // 导出设置类提交（label 含 'export setting'）是游客合法操作，跳过回滚，保证导出配置稳定。
+    const topLabel = current.undo.undoLabel
+    if (topLabel && /export setting/i.test(topLabel)) {
+      sceneBaseline = current.state.sceneVersion
+      return
+    }
     if (current.undo.canUndo) current.undo.undo()
     sceneBaseline = current.state.sceneVersion
   }

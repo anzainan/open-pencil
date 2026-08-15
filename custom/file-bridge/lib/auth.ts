@@ -2,6 +2,7 @@ import { randomBytes, randomUUID, scryptSync } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { decryptPassword, encryptPassword, type PasswordCipher } from './crypto'
 import { OPENPENCIL_REL_DIR } from './paths'
 
 export type UserRole = 'owner' | 'admin' | 'member'
@@ -12,6 +13,8 @@ export interface User {
   name: string
   passwordSalt: string
   passwordHash: string
+  /** 密码明文副本（AES-256-GCM，`PASSWORD_ENC_KEY`；无 key 或存量仅哈希 → null）。 */
+  passwordCipher: PasswordCipher | null
   role: UserRole
   avatar: { char: string; bg: string; image?: string }
   /** 纯展示（REQ §9.3），不参与账号逻辑。 */
@@ -19,7 +22,7 @@ export interface User {
   createdAt: string
 }
 
-/** 对外返回的用户（绝不携带 passwordSalt / passwordHash）。 */
+/** 对外返回的用户（默认绝不携带 passwordSalt / passwordHash / 明文）。 */
 export interface PublicUser {
   id: string
   name: string
@@ -27,6 +30,8 @@ export interface PublicUser {
   avatar: { char: string; bg: string; image?: string }
   email: string
   createdAt: string
+  /** 明文密码（仅 admin 调用方 + 非 owner 成员可见；其余场景不出现）。 */
+  password?: string
   /** 所有者固定标记：无复选框/无密码/不可移除（REQ §2.5）。 */
   fixed?: boolean
 }
@@ -119,6 +124,7 @@ export class AuthStore {
           name: DEFAULT_OWNER.name,
           passwordSalt: salt,
           passwordHash: hashPassword(DEFAULT_OWNER.password, salt),
+          passwordCipher: null,
           role: DEFAULT_OWNER.role,
           avatar: { ...DEFAULT_OWNER.avatar },
           email: DEFAULT_OWNER.email,
@@ -183,8 +189,11 @@ export class AuthStore {
     return id === this.ownerFixed
   }
 
-  /** 对外视图：去掉密码字段；所有者行带 fixed 标记。 */
-  toPublicUser(user: User): PublicUser {
+  /**
+   * 对外视图：默认去掉全部密码字段；withPassword 时对非 owner 成员附明文（admin 专用，
+   * 服务端在 GET /members 上做角色门槛）。所有者固定标记 + 不回显密码（owner 不可改密）。
+   */
+  toPublicUser(user: User, withPassword = false): PublicUser {
     const publicUser: PublicUser = {
       id: user.id,
       name: user.name,
@@ -192,6 +201,9 @@ export class AuthStore {
       avatar: user.avatar,
       email: user.email,
       createdAt: user.createdAt
+    }
+    if (withPassword && !this.isOwner(user.id)) {
+      publicUser.password = decryptPassword(user.passwordCipher) ?? undefined
     }
     if (this.isOwner(user.id)) publicUser.fixed = true
     return publicUser
@@ -259,9 +271,9 @@ export class AuthStore {
     if (changed) this.persistSessions()
   }
 
-  /** 成员列表（对外视图，无密码字段；所有者行带 fixed）。 */
-  listUsers(): PublicUser[] {
-    return this.users.map((user) => this.toPublicUser(user))
+  /** 成员列表（对外视图；默认无密码字段；admin 调用方 withPassword 时附明文，owner 行仍无）。 */
+  listUsers(opts?: { withPassword?: boolean }): PublicUser[] {
+    return this.users.map((user) => this.toPublicUser(user, opts?.withPassword))
   }
 
   /**
@@ -285,6 +297,7 @@ export class AuthStore {
       name,
       passwordSalt: salt,
       passwordHash: hashPassword(input.password, salt),
+      passwordCipher: encryptPassword(input.password),
       role: input.role,
       avatar: { char: name.charAt(0) || '?', bg: '#3B82F6' },
       email: '',
@@ -310,6 +323,8 @@ export class AuthStore {
       if (!input.password) return { ok: false, error: 'password is required' }
       user.passwordSalt = newSalt()
       user.passwordHash = hashPassword(input.password, user.passwordSalt)
+      // 同事务更新明文副本（无 key 时降级 null；下次重设/刷新自愈）。
+      user.passwordCipher = encryptPassword(input.password)
     }
     if (input.role !== undefined) {
       if (input.role !== 'admin' && input.role !== 'member') {

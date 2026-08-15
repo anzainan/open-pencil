@@ -30,6 +30,7 @@ import {
 import { bridgeClient } from '@/app/bridge/client'
 import { useEditorStore } from '@/app/editor/active-store'
 import { toast } from '@/app/shell/ui'
+import AvatarImage from '@/components/ui/AvatarImage.vue'
 import { usePopoverUI } from '@/components/ui/popover'
 import {
   AppDialogBody,
@@ -62,6 +63,8 @@ const saving = ref(false)
 
 const documentPath = computed(() => store.getStorageBinding()?.documentId ?? '')
 const canEdit = computed(() => isAdmin.value)
+/** 当前用户对该文件是否为协作者（perm.canView）：决定分享密码明文可看/可复制。 */
+const canView = ref(false)
 
 const scope = ref<Scope>('self')
 const permission = ref<Perm>('view')
@@ -158,11 +161,15 @@ async function load(): Promise<void> {
       listMembers().catch(() => [])
     ])
     allMembers.value = team
+    // 协作者门槛：canView 决定密码明文可看/可复制（admin/owner 恒 true）。
+    canView.value = perm?.canView ?? canEdit.value
     if (share) {
       scope.value = share.scope
       permission.value = share.permission
       passwordEnabled.value = share.passwordEnabled
       linkURL.value = share.url ?? ''
+      // 明文回填（服务端明文副本；存量仅哈希/无 key → null → 空 + placeholder）。
+      password.value = share.password ?? ''
     }
     const permMembers = (perm?.members ?? []) as { userId: string; permission: MemberPerm }[]
     // owner（fixed）默认全权限：不写回权限台账（服务端 owner 恒全权限），仅在列表置顶显示。
@@ -214,9 +221,8 @@ async function saveScopeAndPermission(): Promise<void> {
 function applyLink(link: BridgeShareSettings): void {
   linkURL.value = link.url ?? ''
   passwordEnabled.value = link.passwordEnabled
-  if (!link.passwordEnabled) {
-    password.value = ''
-  }
+  // saveShare 响应回填明文（服务端明文副本；disabled/无副本 → null → 空）。
+  password.value = link.password ?? ''
 }
 
 // 访问范围保存串行队列：快速连切不静默丢弃，最后一次以最新 scope 落地。
@@ -281,12 +287,29 @@ async function disablePassword(): Promise<void> {
   applyLink(link)
 }
 
+function onPasswordInput(event: Event): void {
+  password.value = (event.target as HTMLInputElement).value
+}
+
+async function commitPasswordInput(): Promise<void> {
+  const link = await saveShare(documentPath.value, {
+    scope: scope.value,
+    permission: permission.value,
+    password: password.value
+  })
+  applyLink(link)
+}
+
 function togglePassword(): void {
   void withSaving(passwordEnabled.value ? disablePassword : enablePassword)
 }
 
 function refreshPasswordAction(): void {
   void withSaving(refreshPassword)
+}
+
+function commitPasswordInputAction(): void {
+  void withSaving(commitPasswordInput)
 }
 
 function copyPassword(): void {
@@ -491,32 +514,39 @@ onMounted(() => {
                 <span class="min-w-0 flex-1 truncate">{{ linkURL }}</span>
               </div>
 
-              <!-- ④ pw-row（§1.1）：启用密码 + 密码值/刷新/复制 -->
-              <div class="flex items-center justify-between">
-                <label class="flex cursor-pointer items-center gap-2">
-                  <input
-                    v-if="canEdit"
-                    type="checkbox"
-                    class="peer sr-only"
-                    :checked="passwordEnabled"
-                    @change="togglePassword"
-                  />
-                  <span
-                    :data-pw-on="passwordEnabled ? 'true' : undefined"
-                    class="flex size-4 items-center justify-center rounded border border-border bg-transparent data-[pw-on]:border-accent data-[pw-on]:bg-accent"
-                  >
-                    <icon-lucide-check v-if="passwordEnabled" class="size-3 text-white" />
-                  </span>
-                  <span class="text-xs text-surface">{{ dialogs['share.password.enable'] }}</span>
-                </label>
-                <span v-if="canEdit && passwordEnabled" class="flex items-center gap-1">
-                  <template v-if="password">
-                    <code
-                      class="flex h-6 items-center rounded bg-panel-field px-2 font-mono text-[11px] text-surface"
+                <!-- ④ pw-row（§1.1）：启用密码 + 密码值/刷新/复制（明文协作者可看可复制，编辑仅 admin） -->
+                <div class="flex items-center justify-between">
+                  <label class="flex cursor-pointer items-center gap-2">
+                    <input
+                      v-if="canEdit"
+                      type="checkbox"
+                      class="peer sr-only"
+                      :checked="passwordEnabled"
+                      @change="togglePassword"
+                    />
+                    <span
+                      :data-pw-on="passwordEnabled ? 'true' : undefined"
+                      class="flex size-4 items-center justify-center rounded border border-border bg-transparent data-[pw-on]:border-accent data-[pw-on]:bg-accent"
                     >
-                      {{ password }}
-                    </code>
+                      <icon-lucide-check v-if="passwordEnabled" class="size-3 text-white" />
+                    </span>
+                    <span class="text-xs text-surface">{{ dialogs['share.password.enable'] }}</span>
+                  </label>
+                  <span v-if="canView && passwordEnabled" class="flex items-center gap-1">
+                    <input
+                      :value="password"
+                      type="text"
+                      :readonly="!canEdit"
+                      :aria-label="dialogs['share.password.enable']"
+                      data-test-id="share-password-input"
+                      class="h-6 w-[104px] rounded bg-panel-field px-2 font-mono text-[11px] text-surface outline-none placeholder:text-muted/50 focus:bg-panel-field-hover"
+                      :placeholder="dialogs['share.password.placeholder']"
+                      @input="canEdit && onPasswordInput"
+                      @blur="canEdit && commitPasswordInputAction"
+                      @keydown.enter.prevent="canEdit && commitPasswordInputAction"
+                    />
                     <button
+                      v-if="canEdit"
                       type="button"
                       class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
                       :aria-label="dialogs['share.password.refresh']"
@@ -533,20 +563,8 @@ onMounted(() => {
                     >
                       <icon-lucide-copy class="size-[13px]" />
                     </button>
-                  </template>
-                  <button
-                    v-else
-                    type="button"
-                    class="flex h-6 cursor-pointer items-center gap-1 rounded px-1.5 text-[11px] text-muted hover:bg-hover hover:text-surface"
-                    :aria-label="dialogs['share.password.reset']"
-                    data-test-id="share-password-reset"
-                    @click="refreshPasswordAction"
-                  >
-                    <icon-lucide-refresh-cw class="size-[13px]" />
-                    {{ dialogs['share.password.reset'] }}
-                  </button>
-                </span>
-              </div>
+                  </span>
+                </div>
 
               <!-- ⑤ btn-add-member（§1.1）：添加成员 -->
               <button
@@ -586,19 +604,14 @@ onMounted(() => {
                   class="flex h-7 items-center gap-2 px-1"
                   data-test-id="share-member-row"
                 >
-                  <img
-                    v-if="member.avatar.image"
-                    :src="`/api/v1/avatars/${(member.avatar.image ?? '').split('/').pop()}`"
-                    class="size-6 shrink-0 rounded-xl object-cover"
+                  <AvatarImage
+                    :image="member.avatar.image"
                     :alt="member.name"
+                    :bg="member.avatar.bg"
+                    :char="member.avatar.char"
+                    img-class="size-6 shrink-0 rounded-xl object-cover"
+                    char-class="size-6 rounded-xl text-[10px] leading-none"
                   />
-                  <span
-                    v-else
-                    class="flex size-6 shrink-0 items-center justify-center rounded-xl text-[10px] leading-none text-white"
-                    :style="{ backgroundColor: member.avatar.bg }"
-                  >
-                    {{ member.avatar.char }}
-                  </span>
                   <span class="min-w-0 flex-1 truncate text-xs text-surface">{{ member.name }}</span>
                   <SelectRoot
                     v-if="canEdit"
@@ -694,19 +707,14 @@ onMounted(() => {
                   :key="member.id"
                   class="flex h-7 items-center gap-2"
                 >
-                  <img
-                    v-if="member.avatar.image"
-                    :src="`/api/v1/avatars/${(member.avatar.image ?? '').split('/').pop()}`"
-                    class="size-[22px] shrink-0 rounded-[11px] object-cover"
+                  <AvatarImage
+                    :image="member.avatar.image"
                     :alt="member.name"
+                    :bg="member.avatar.bg"
+                    :char="member.avatar.char"
+                    img-class="size-[22px] shrink-0 rounded-[11px] object-cover"
+                    char-class="size-[22px] rounded-[11px] text-[10px] leading-none"
                   />
-                  <span
-                    v-else
-                    class="flex size-[22px] shrink-0 items-center justify-center rounded-[11px] text-[10px] leading-none text-white"
-                    :style="{ backgroundColor: member.avatar.bg }"
-                  >
-                    {{ member.avatar.char }}
-                  </span>
                   <span class="min-w-0 flex-1 truncate text-[11px] text-surface">
                     {{ member.name }}
                   </span>

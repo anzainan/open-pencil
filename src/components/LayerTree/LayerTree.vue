@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useAttrs, watch } from 'vue'
+import { computed, useAttrs, watch } from 'vue'
 import { tv } from 'tailwind-variants'
 import {
   TreeItem,
@@ -50,6 +50,7 @@ const attrs = useAttrs()
 const styles = tv(layerTreeTheme)()
 provideLayerTreeUI(() => ui)
 const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 const rename = useInlineRename((id, name) => store.renameNode(id, name))
 const renameControls = {
   commit: rename.commit,
@@ -61,12 +62,18 @@ watch(
   () => store.state.renameNodeId,
   (id) => {
     if (!id) return
+    if (store.state.readOnly) return
     const node = store.graph.getNode(id)
     store.state.renameNodeId = null
     if (node) rename.start(node.id, node.name)
   },
   { immediate: true }
 )
+
+function onRenameStart(id: string, name: string) {
+  if (store.state.readOnly) return
+  rename.start(id, name)
+}
 
 function onLayerRightClick(e: MouseEvent) {
   const row = (e.target as HTMLElement).closest<HTMLElement>('[data-node-id]')
@@ -211,7 +218,7 @@ function onFocusOut(event: FocusEvent, actions: LayerTreeRootActions) {
                       :expanded="isExpanded"
                       :actions="actions"
                       :chrome="chrome(scope)"
-                      @rename-start="rename.start"
+                      @rename-start="onRenameStart"
                     />
                   </LayerTreeItem>
                 </TreeItem>

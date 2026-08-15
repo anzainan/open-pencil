@@ -24,11 +24,13 @@ function tabClass(active: boolean) {
 const {
   fill,
   okhcl = null,
-  swatchBackground
+  swatchBackground,
+  disabled = false
 } = defineProps<{
   fill: Fill
   okhcl?: OkHCLControls | null
   swatchBackground?: string
+  disabled?: boolean
 }>()
 const emit = defineEmits<{
   update: [fill: Fill]
@@ -51,8 +53,9 @@ function cancelFromEscape(event: KeyboardEvent) {
         <button
           type="button"
           :aria-label="panels.fill"
+          :disabled="disabled"
           data-test-id="fill-picker-swatch"
-          class="size-4 shrink-0 cursor-pointer rounded-sm border-0 bg-transparent p-0"
+          class="size-4 shrink-0 cursor-pointer rounded-sm border-0 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <FillSwatch :fill="fill" class="size-full" v-slot="swatch">
             <span

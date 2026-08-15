@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useClipboard } from '@vueuse/core'
-import { useRouter } from 'vue-router'
 import { useI18n } from '@open-pencil/vue'
 
 import {
@@ -10,7 +9,6 @@ import {
   createActiveStorageAdapter,
   readStoragePreferences,
   storageCredentialStatuses,
-  storagePreferencesComplete,
   storageProviderRegistry,
   writeStoragePreference
 } from '@/app/integrations/storage'
@@ -19,7 +17,6 @@ import {
   collectCloudCORSOrigins
 } from '@/app/integrations/storage/s3/cors'
 import { appCredentialServices } from '@/app/settings/credentials/app'
-import { settingsDialogOpen } from '@/app/settings/dialog'
 import { credentialRef } from '@/app/settings/credentials/reference'
 import type { CredentialStatus } from '@/app/settings/credentials/types'
 import { toast } from '@/app/shell/ui'
@@ -27,7 +24,6 @@ import { resumeStorageSync } from '@/app/storage/sync'
 import AppInput from '@/components/ui/AppInput.vue'
 
 const { dialogs } = useI18n()
-const router = useRouter()
 const { copy, copied } = useClipboard()
 const provider = computed(() => storageProviderRegistry.get(activeStorageProviderID.value))
 const isBridgeWorkspace = computed(() => provider.value.id === BRIDGE_STORAGE_PROVIDER.id)
@@ -37,13 +33,6 @@ const preferenceDrafts = ref<Record<string, string>>({
 const credentialDrafts = ref<Record<string, string>>({})
 const credentialStatuses = ref<Record<string, CredentialStatus>>({})
 const busy = ref(false)
-const configured = computed(
-  () =>
-    storagePreferencesComplete(provider.value.id) &&
-    provider.value.credentialFields.every(
-      (field) => !field.required || credentialStatuses.value[field.id] === 'configured'
-    )
-)
 
 function preferenceLabel(field: string): string {
   if (field === 'endpoint') return dialogs.value.storageEndpoint
@@ -82,11 +71,6 @@ async function clearCredential(field: string): Promise<void> {
   await appCredentialServices.manager.clear(credentialRef(provider.value.id, field))
   credentialDrafts.value[field] = ''
   await refreshStatuses()
-}
-
-async function openWorkspace(): Promise<void> {
-  settingsDialogOpen.value = false
-  await router.push('/storage')
 }
 
 function switchToWorkspace(): void {
@@ -138,11 +122,8 @@ onMounted(() => void refreshStatuses())
       >
         <icon-lucide-hard-drive class="mt-0.5 size-4 shrink-0 text-success" />
         <div>
-          <p class="text-[11px] font-medium text-surface">已由本地工作区接管（file-bridge）</p>
-          <p class="mt-1 text-[10px] leading-relaxed text-muted">
-            存储已连接工作区目录，无需配置。保存的画布直接写入工作区根目录；字体放在工作区
-            fonts/ 文件夹即可自动加载。
-          </p>
+          <p class="text-[11px] font-medium text-surface">数据已在云端储存</p>
+          <p class="mt-1 text-[10px] leading-relaxed text-muted">文件自动保存</p>
         </div>
       </div>
     </template>
@@ -248,15 +229,5 @@ onMounted(() => void refreshStatuses())
         {{ copied ? dialogs.copied : dialogs.copyStorageCors }}
       </button>
     </template>
-
-    <button
-      type="button"
-      class="rounded border border-border px-3 py-1.5 text-[11px] font-medium text-surface hover:bg-hover disabled:text-muted disabled:opacity-50"
-      :disabled="!configured"
-      data-test-id="settings-storage-open-workspace"
-      @click="openWorkspace"
-    >
-      {{ dialogs.openStorageWorkspace }}
-    </button>
   </section>
 </template>

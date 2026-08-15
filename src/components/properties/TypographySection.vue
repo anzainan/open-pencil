@@ -3,6 +3,7 @@ import { computed } from 'vue'
 
 import { TypographyControlsRoot, useI18n } from '@open-pencil/vue'
 
+import { useEditorStore } from '@/app/editor/active-store'
 import FontPicker from '@/components/font-picker/FontPicker.vue'
 import FontSettingsPopover from '@/components/FontSettings/FontSettingsPopover.vue'
 import NumberField from '@/components/inputs/NumberField.vue'
@@ -20,6 +21,8 @@ import { loadFont } from '@/app/editor/fonts'
 import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 
 const { panels, menu } = useI18n()
+const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 const fontLoader = { load: loadFont }
 const alignmentOptions = computed(() => [
   { value: 'LEFT', label: panels.value.alignLeft },
@@ -56,13 +59,14 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
 <template>
   <TypographyControlsRoot v-slot="ctx" :font-loader="fontLoader">
     <PanelSection v-if="ctx.node.value" :label="panels.typography">
-      <SharedStyleField kind="text" :label="panels.textStyle" />
+      <SharedStyleField kind="text" :label="panels.textStyle" :disabled="readOnly" />
 
       <div class="mb-1.5 flex min-w-0 items-center gap-1.5">
         <FontPicker
           class="min-w-0 flex-1"
           :model-value="ctx.node.value.fontFamily"
           :label="panels.fontFamily"
+          :disabled="readOnly"
           @select="ctx.actions.setFamily"
         />
         <FontSettingsPopover />
@@ -94,6 +98,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :label="panels.fontWeight"
             :model-value="ctx.node.value.fontWeight"
             :options="ctx.weights"
+            :disabled="readOnly"
             @update:model-value="ctx.actions.setWeight(+$event)"
           />
         </PanelFieldGroup>
@@ -105,6 +110,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :max="1000"
             :node-id="ctx.node.value.id"
             binding-path="fontSize"
+            :disabled="readOnly"
             @update:model-value="ctx.actions.updateProp('fontSize', $event)"
             @commit="(v: number, p: number) => ctx.actions.commitProp('fontSize', v, p)"
           />
@@ -121,6 +127,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :min="0"
             :node-id="ctx.node.value.id"
             binding-path="lineHeight"
+            :disabled="readOnly"
             @update:model-value="ctx.actions.updateProp('lineHeight', $event)"
             @commit="(v: number, p: number) => ctx.actions.commitProp('lineHeight', v, p)"
           >
@@ -136,6 +143,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :aria-label="panels.letterSpacing"
             :node-id="ctx.node.value.id"
             binding-path="letterSpacing"
+            :disabled="readOnly"
             @update:model-value="ctx.actions.updateProp('letterSpacing', $event)"
             @commit="(v: number, p: number) => ctx.actions.commitProp('letterSpacing', v, p)"
           >
@@ -150,6 +158,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         <AppSelect
           :label="panels.direction"
           :model-value="ctx.node.value.textDirection"
+          :disabled="readOnly"
           :options="[
             { value: 'AUTO', label: panels.auto },
             { value: 'LTR', label: 'LTR' },
@@ -164,6 +173,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
           :model-value="ctx.node.value.textAlignHorizontal"
           :options="alignmentOptions"
           :label="panels.textAlignment"
+          :disabled="readOnly"
           @change="ctx.actions.align($event as 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED')"
         >
           <template #option="{ option }">
@@ -180,6 +190,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
           :model-value="ctx.node.value.textAlignVertical"
           :options="verticalAlignmentOptions"
           :label="panels.verticalTextAlignment"
+          :disabled="readOnly"
           @change="ctx.actions.setVerticalAlign($event as 'TOP' | 'CENTER' | 'BOTTOM')"
         >
           <template #option="{ option }">
@@ -210,6 +221,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :label="`${menu.bold} (${appMenuShortcutLabel('text.bold')})`"
             size="md"
             :active="ctx.activeFormatting.value.includes('bold')"
+            :disabled="readOnly"
             @click="ctx.actions.toggleBold"
           >
             <icon-lucide-bold class="size-3.5" />
@@ -218,6 +230,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :label="`${menu.italic} (${appMenuShortcutLabel('text.italic')})`"
             size="md"
             :active="ctx.activeFormatting.value.includes('italic')"
+            :disabled="readOnly"
             @click="ctx.actions.toggleItalic"
           >
             <icon-lucide-italic class="size-3.5" />
@@ -226,6 +239,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :label="`${menu.underline} (${appMenuShortcutLabel('text.underline')})`"
             size="md"
             :active="ctx.activeFormatting.value.includes('underline')"
+            :disabled="readOnly"
             @click="ctx.actions.toggleDecoration('UNDERLINE')"
           >
             <icon-lucide-underline class="size-3.5" />
@@ -234,6 +248,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :label="menu.strikethrough"
             size="md"
             :active="ctx.activeFormatting.value.includes('strikethrough')"
+            :disabled="readOnly"
             @click="ctx.actions.toggleDecoration('STRIKETHROUGH')"
           >
             <icon-lucide-strikethrough class="size-3.5" />
@@ -247,6 +262,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :label="panels.textCase"
             :model-value="ctx.node.value.textCase"
             :options="textCaseOptions"
+            :disabled="readOnly"
             @update:model-value="
               ctx.actions.setTextCase($event as 'ORIGINAL' | 'UPPER' | 'LOWER' | 'TITLE')
             "
@@ -257,6 +273,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :label="panels.truncation"
             :model-value="ctx.node.value.textTruncation"
             :options="truncationOptions"
+            :disabled="readOnly"
             @update:model-value="ctx.actions.setTruncation($event as 'DISABLED' | 'ENDING')"
           />
         </PanelFieldGroup>
@@ -272,6 +289,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
           :aria-label="panels.maxLines"
           :min="1"
           :step="1"
+          :disabled="readOnly"
           data-property="max-lines"
           @update:model-value="ctx.actions.updateProp('maxLines', Math.max(1, Math.round($event)))"
           @commit="
@@ -290,6 +308,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
           <AppSwitch
             :model-value="featureEnabled(ctx.node.value.fontFeatures, feature.tag)"
             :label="feature.label"
+            :disabled="readOnly"
             :data-property="`font-feature-${feature.tag.toLowerCase()}`"
             @update:model-value="ctx.actions.setFontFeature(feature.tag, $event)"
           />

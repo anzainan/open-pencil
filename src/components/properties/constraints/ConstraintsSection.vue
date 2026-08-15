@@ -3,6 +3,7 @@ import { computed } from 'vue'
 
 import { ConstraintsControlRoot, MIXED, useI18n } from '@open-pencil/vue'
 
+import { useEditorStore } from '@/app/editor/active-store'
 import ConstraintsPinControl from '@/components/properties/constraints/ConstraintsPinControl.vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
@@ -13,6 +14,8 @@ import { tv } from 'tailwind-variants'
 import type { ConstraintType } from '@open-pencil/scene-graph'
 
 const { panels } = useI18n()
+const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 const styles = tv(constraintsTheme)()
 type ConstraintSelectValue = ConstraintType | 'MIXED'
 
@@ -43,13 +46,19 @@ function optionsWithMixed(
   <ConstraintsControlRoot v-slot="{ active, horizontal, vertical, actions }">
     <PanelSection v-if="active" :label="panels.constraints" data-property="constraints">
       <div :class="styles.root()">
-        <ConstraintsPinControl :horizontal="horizontal" :vertical="vertical" :actions="actions" />
+        <ConstraintsPinControl
+          :horizontal="horizontal"
+          :vertical="vertical"
+          :actions="actions"
+          :disabled="readOnly"
+        />
         <div :class="styles.selects()">
           <PanelFieldGroup :label="panels.horizontalConstraint">
             <AppSelect
               :model-value="horizontal === MIXED ? 'MIXED' : horizontal"
               :label="panels.horizontalConstraint"
               :options="optionsWithMixed(horizontalOptions, horizontal === MIXED)"
+              :disabled="readOnly"
               @update:model-value="
                 (value: ConstraintSelectValue) => value !== 'MIXED' && actions.setHorizontal(value)
               "
@@ -60,6 +69,7 @@ function optionsWithMixed(
               :model-value="vertical === MIXED ? 'MIXED' : vertical"
               :label="panels.verticalConstraint"
               :options="optionsWithMixed(verticalOptions, vertical === MIXED)"
+              :disabled="readOnly"
               @update:model-value="
                 (value: ConstraintSelectValue) => value !== 'MIXED' && actions.setVertical(value)
               "

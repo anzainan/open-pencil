@@ -423,6 +423,6 @@
   "profile.avatarUpdated": "头像已更新",
   "profile.avatarFailed": "头像上传失败",
   "profile.avatarInvalid": "仅支持 PNG/JPG/WebP 图片",
-  "profile.avatarTooLarge": "图片大小不能超过 2MB",
+  "profile.avatarTooLarge": "图片大小不能超过 5MB",
   "share.member.loadFailed": "团队成员加载失败"
 }

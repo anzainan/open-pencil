@@ -8,6 +8,7 @@ export interface AppSwitchProps {
   label: string
   size?: keyof SwitchTheme['variants']['size']
   state?: keyof SwitchTheme['variants']['state']
+  disabled?: boolean
   ui?: AppSwitchUI
 }
 </script>
@@ -19,7 +20,7 @@ import { tv } from 'tailwind-variants'
 
 import theme from '@/theme/switch'
 
-const { label, size = 'sm', state = 'idle', ui } = defineProps<AppSwitchProps>()
+const { label, size = 'sm', state = 'idle', disabled = false, ui } = defineProps<AppSwitchProps>()
 const modelValue = defineModel<boolean>({ required: true })
 const styles = computed(() => tv(theme)({ size, state }))
 </script>
@@ -27,6 +28,7 @@ const styles = computed(() => tv(theme)({ size, state }))
 <template>
   <SwitchRoot
     v-model="modelValue"
+    :disabled="disabled"
     :aria-label="label"
     :data-mixed="state === 'mixed' || undefined"
     :class="styles.root({ class: ui?.root })"

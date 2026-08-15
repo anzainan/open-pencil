@@ -17,6 +17,7 @@ import type { JSXFormat } from '@open-pencil/core/design-jsx'
 const store = useEditorStore()
 const { copy, copied } = useClipboard({ copiedDuring: 2000 })
 const { dialogs } = useI18n()
+const readOnly = computed(() => store.state.readOnly)
 const jsxFormat = ref<JSXFormat>('openpencil')
 const showImporter = ref(false)
 const importHTML = ref('')
@@ -109,6 +110,7 @@ function copyReference() {
       </div>
       <div class="flex items-center gap-1">
         <AppTextButton
+          v-if="!readOnly"
           data-test-id="code-panel-import-toggle"
           :ui="{ base: 'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] hover:bg-hover' }"
           @click="toggleImporter"
@@ -141,7 +143,7 @@ function copyReference() {
     </div>
 
     <div
-      v-if="showImporter || !jsxCode"
+      v-if="!readOnly && (showImporter || !jsxCode)"
       data-test-id="code-panel-importer"
       class="shrink-0 border-b border-border p-3"
     >
@@ -163,14 +165,16 @@ function copyReference() {
       <textarea
         v-model="importHTML"
         data-test-id="code-panel-import-html"
-        class="mb-2 h-28 w-full resize-none rounded border border-border bg-panel px-2 py-1.5 font-mono text-xs text-surface outline-none placeholder:text-muted/50 focus:border-accent"
+        :disabled="readOnly"
+        class="mb-2 h-28 w-full resize-none rounded border border-border bg-panel px-2 py-1.5 font-mono text-xs text-surface outline-none placeholder:text-muted/50 focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
         placeholder='<div class="card">Hello</div>'
         spellcheck="false"
       />
       <textarea
         v-model="importCSS"
         data-test-id="code-panel-import-css"
-        class="mb-2 h-20 w-full resize-none rounded border border-border bg-panel px-2 py-1.5 font-mono text-xs text-surface outline-none placeholder:text-muted/50 focus:border-accent"
+        :disabled="readOnly"
+        class="mb-2 h-20 w-full resize-none rounded border border-border bg-panel px-2 py-1.5 font-mono text-xs text-surface outline-none placeholder:text-muted/50 focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
         placeholder=".card { width: 240px; padding: 16px; border-radius: 12px; background: white; }"
         spellcheck="false"
       />

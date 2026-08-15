@@ -423,6 +423,6 @@
   "profile.avatarUpdated": "Аватар обновлён",
   "profile.avatarFailed": "Не удалось загрузить аватар",
   "profile.avatarInvalid": "Поддерживаются только изображения PNG/JPG/WebP",
-  "profile.avatarTooLarge": "Изображение должно быть не больше 2 МБ",
+  "profile.avatarTooLarge": "Изображение должно быть не больше 5 МБ",
   "share.member.loadFailed": "Не удалось загрузить участников команды"
 }

@@ -339,7 +339,7 @@ export const dialogMessageDefaults = {
   'profile.avatarUpdated': 'Avatar updated',
   'profile.avatarFailed': 'Avatar upload failed',
   'profile.avatarInvalid': 'Only PNG/JPG/WebP images are supported',
-  'profile.avatarTooLarge': 'Image must be 2MB or smaller',
+  'profile.avatarTooLarge': 'Image must be 5MB or smaller',
   'profile.roleAndWorkspace': params('{role} · Local workspace'),
   'profile.emailPlaceholder': 'anzain@example.com',
   'team.colName': 'Name',

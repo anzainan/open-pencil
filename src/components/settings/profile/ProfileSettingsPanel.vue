@@ -6,6 +6,7 @@ import { useI18n } from '@open-pencil/vue'
 import { currentUser, useCurrentUser } from '@/app/auth/session'
 import { openLogoutDialog } from '@/app/auth/logout-dialog'
 import { uploadAvatar } from '@/app/bridge/share'
+import { useAvatarURL } from '@/app/settings/useAvatarURL'
 import { toast } from '@/app/shell/ui'
 
 defineOptions({ name: 'ProfileSettingsPanel' })
@@ -27,31 +28,128 @@ const roleWorkspaceLabel = computed(() =>
 
 const avatarBg = computed(() => currentUser.value?.avatar.bg ?? '#3B82F6')
 const avatarChar = computed(() => currentUser.value?.avatar.char ?? '?')
-const avatarImageURL = computed(() => {
-  const image = currentUser.value?.avatar.image
-  return image ? `/api/v1/avatars/${image.split('/').pop()}` : ''
-})
+const avatarURL = useAvatarURL(computed(() => currentUser.value?.avatar.image ?? null))
 const accountName = computed(() => currentUser.value?.name ?? '')
 const email = computed(() => currentUser.value?.email ?? dialogs.value['profile.emailPlaceholder'])
 
 const avatarInput = ref<HTMLInputElement | null>(null)
 const avatarUploading = ref(false)
 
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024
+const AVATAR_TARGET_BYTES = 100 * 1024
+const AVATAR_MAX_EDGE = 256
+
 function pickAvatar(): void {
   if (avatarUploading.value) return
   avatarInput.value?.click()
 }
 
-function readFileAsBase64(file: File): Promise<string> {
+function readFileAsBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
       const result = typeof reader.result === 'string' ? reader.result : ''
       resolve(result.replace(/^data:[^;]+;base64,/, ''))
     }
-    reader.onerror = () => reject(new Error('FileReader failed'))
-    reader.readAsDataURL(file)
+    reader.onerror = () => {
+      reject(new Error('FileReader failed'))
+    }
+    reader.readAsDataURL(blob)
   })
+}
+
+function blobTypeToExt(type: string): string {
+  if (type === 'image/webp') return 'webp'
+  if (type === 'image/png') return 'png'
+  return 'jpg'
+}
+
+async function canvasToBlob(
+  type: string,
+  quality: number,
+  width: number,
+  height: number,
+  source: CanvasImageSource
+): Promise<Blob | null> {
+  if (typeof OffscreenCanvas === 'function') {
+    const canvas = new OffscreenCanvas(width, height)
+    const context = canvas.getContext('2d')
+    if (!context) return null
+    context.clearRect(0, 0, width, height)
+    context.drawImage(source, 0, 0, width, height)
+    return canvas.convertToBlob({ type, quality })
+  }
+  // oxlint-disable-next-line open-pencil/no-browser-side-effects-in-vue
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) return null
+  context.clearRect(0, 0, width, height)
+  context.drawImage(source, 0, 0, width, height)
+  return new Promise((resolve) => {
+    canvas.toBlob(resolve, type, quality)
+  })
+}
+
+async function decodeImageSource(
+  file: File
+): Promise<{ width: number; height: number; source: CanvasImageSource }> {
+  if (typeof createImageBitmap === 'function') {
+    const bitmap = await createImageBitmap(file)
+    return { width: bitmap.width, height: bitmap.height, source: bitmap }
+  }
+  const url = URL.createObjectURL(file)
+  try {
+    const image = new Image()
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => {
+        resolve()
+      }
+      image.onerror = () => {
+        reject(new Error('image decode failed'))
+      }
+      image.src = url
+    })
+    return { width: image.naturalWidth, height: image.naturalHeight, source: image }
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+/**
+ * 头像压缩：canvas 重绘，最长边 cap ≤256px，质量循环（q 0.9→0.3，优先 webp/png 保透明），
+ * blob.size ≤100KB 即停；仍超则边长 ×0.8 重试。返回 base64 + 实际 ext（与服务端 magic bytes 校验一致）。
+ */
+async function compressAvatar(file: File): Promise<{ data: string; ext: string }> {
+  const decoded = await decodeImageSource(file)
+  const hasAlpha = file.type !== 'image/jpeg'
+  const types = hasAlpha ? ['image/webp', 'image/png'] : ['image/jpeg']
+  const scale = Math.min(1, AVATAR_MAX_EDGE / Math.max(decoded.width, decoded.height))
+  let width = Math.max(1, Math.round(decoded.width * scale))
+  let height = Math.max(1, Math.round(decoded.height * scale))
+
+  let lastBlob: Blob | null = null
+  let lastExt = 'jpg'
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    for (const type of types) {
+      for (let quality = 0.9; quality >= 0.3; quality -= 0.1) {
+        const blob = await canvasToBlob(type, Math.round(quality * 100) / 100, width, height, decoded.source)
+        if (!blob) continue
+        lastBlob = blob
+        lastExt = blobTypeToExt(blob.type)
+        if (blob.size <= AVATAR_TARGET_BYTES) {
+          return { data: await readFileAsBase64(blob), ext: lastExt }
+        }
+      }
+    }
+    if (width <= 16 && height <= 16) break
+    width = Math.max(1, Math.round(width * 0.8))
+    height = Math.max(1, Math.round(height * 0.8))
+  }
+  if (lastBlob) return { data: await readFileAsBase64(lastBlob), ext: lastExt }
+  throw new Error('avatar compression failed')
 }
 
 async function onAvatarSelected(event: Event): Promise<void> {
@@ -64,14 +162,15 @@ async function onAvatarSelected(event: Event): Promise<void> {
     toast.error(dialogs.value['profile.avatarInvalid'])
     return
   }
-  if (file.size > 2 * 1024 * 1024) {
+  if (file.size > AVATAR_MAX_BYTES) {
     toast.error(dialogs.value['profile.avatarTooLarge'])
     return
   }
   avatarUploading.value = true
   try {
-    const data = await readFileAsBase64(file)
-    const avatar = await uploadAvatar(data, ext)
+    // 大小校验之后、上传之前压缩到 ≤100KB（透明 PNG 保 alpha，无黑底）。
+    const compressed = await compressAvatar(file)
+    const avatar = await uploadAvatar(compressed.data, compressed.ext)
     if (currentUser.value) currentUser.value = { ...currentUser.value, avatar }
     toast.info(dialogs.value['profile.avatarUpdated'])
   } catch (error) {
@@ -94,8 +193,8 @@ async function onAvatarSelected(event: Event): Promise<void> {
     <!-- ProfileCard（设计稿 §3.1） -->
     <div class="flex items-center gap-4 rounded-lg border border-border bg-panel p-3" data-test-id="profile-card">
       <img
-        v-if="avatarImageURL"
-        :src="avatarImageURL"
+        v-if="avatarURL"
+        :src="avatarURL"
         class="size-16 shrink-0 rounded-full object-cover"
         :alt="accountName"
         data-test-id="profile-avatar"

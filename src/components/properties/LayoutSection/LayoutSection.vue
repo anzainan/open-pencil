@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { LayoutControlsRoot, useI18n } from '@open-pencil/vue'
 
+import { useEditorStore } from '@/app/editor/active-store'
 import AutoLayoutControls from '@/components/properties/LayoutSection/AutoLayoutControls.vue'
 import ClipContentControl from '@/components/properties/LayoutSection/ClipContentControl.vue'
 import FlexControls from '@/components/properties/LayoutSection/FlexControls.vue'
@@ -12,6 +14,8 @@ import TextResizingControl from '@/components/properties/LayoutSection/TextResiz
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
 
 const { panels } = useI18n()
+const store = useEditorStore()
+const readOnly = computed(() => store.state.readOnly)
 
 const CONTAINER_TYPES = ['FRAME', 'COMPONENT', 'COMPONENT_SET', 'INSTANCE']
 </script>
@@ -25,6 +29,7 @@ const CONTAINER_TYPES = ['FRAME', 'COMPONENT', 'COMPONENT_SET', 'INSTANCE']
             :label="ctx.node.layoutMode === 'NONE' ? panels.addAutoLayout : panels.removeAutoLayout"
             size="md"
             :active="ctx.node.layoutMode !== 'NONE'"
+            :disabled="readOnly"
             class="data-[state=on]:bg-accent/15"
             @click="
               ctx.editor.setLayoutMode(

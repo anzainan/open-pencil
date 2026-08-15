@@ -14,6 +14,7 @@ const {
   visibilityLabel,
   removeLabel,
   showVisibility = true,
+  disabled = false,
   class: className
 } = defineProps<{
   propKey: K
@@ -21,6 +22,7 @@ const {
   visibilityLabel: string
   removeLabel: string
   showVisibility?: boolean
+  disabled?: boolean
   class?: ClassValue
 }>()
 
@@ -44,6 +46,7 @@ defineSlots<{
     :class="className"
     :data-property="propKey"
     :data-index="index"
+    :disabled="disabled"
     as-child
   >
     <PanelItemRow>
@@ -58,7 +61,8 @@ defineSlots<{
             :prop-key="propKey"
             :index="index"
             :aria-label="visibilityLabel"
-            class="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted hover:bg-hover hover:text-surface"
+            :disabled="disabled"
+            class="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted hover:bg-hover hover:text-surface disabled:cursor-not-allowed disabled:opacity-40"
             @toggle="emit('toggleVisibility', $event)"
           >
             <icon-lucide-eye v-if="!item.hidden" class="size-3.5" />
@@ -70,9 +74,10 @@ defineSlots<{
             :prop-key="propKey"
             :index="index"
             :aria-label="removeLabel"
+            :disabled="disabled"
             :class="[
               removeClass,
-              'flex size-6 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted hover:bg-hover hover:text-surface'
+              'flex size-6 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted hover:bg-hover hover:text-surface disabled:cursor-not-allowed disabled:opacity-40'
             ]"
             @remove="emit('remove', $event)"
           >

@@ -9,6 +9,7 @@ import { isAdmin, useCurrentUser } from '@/app/auth/session'
 import { createMember } from '@/app/bridge/share'
 import { toast } from '@/app/shell/ui'
 import AppSelect from '@/components/ui/AppSelect.vue'
+import AvatarImage from '@/components/ui/AvatarImage.vue'
 import {
   loadTeamMembers,
   randomPassword,
@@ -75,6 +76,12 @@ function onRandomPassword(id: string): void {
   setMemberPassword(id, randomPassword())
 }
 
+function onCopyPassword(member: { id: string; passwordDraft: string }): void {
+  if (!member.passwordDraft) return
+  copyText(member.passwordDraft)
+  toast.info(dialogs.value['team.addCopied'])
+}
+
 function onRoleChange(id: string, value: string): void {
   setMemberRole(id, value as 'admin' | 'member')
 }
@@ -97,6 +104,7 @@ async function addAndCopy(): Promise<void> {
   adding.value = true
   try {
     const { user } = await createMember({ name, password, role: addRole.value })
+    // 明文由服务端明文副本承载（GET /members admin 下发），刷新后行内默认显示。
     const roleLabel = addRole.value === 'admin' ? dialogs.value['role.admin'] : dialogs.value['role.member']
     copyText(`${user.name} / ${password} / ${roleLabel}`)
     toast.info(dialogs.value['team.addCopied'])
@@ -195,19 +203,14 @@ async function confirmRemove(): Promise<void> {
         <template v-if="member.fixed">
           <!-- owner 行（§4.1）：无 checkbox、头像 #10B981、静态「所有者」标签、无密码列/角色下拉 -->
           <span class="flex size-4 shrink-0 items-center justify-center" />
-          <img
-            v-if="member.avatar.image"
-            :src="`/api/v1/avatars/${(member.avatar.image ?? '').split('/').pop()}`"
-            class="size-6 shrink-0 rounded-full object-cover"
+          <AvatarImage
+            :image="member.avatar.image"
             :alt="member.name"
+            bg="#10B981"
+            :char="member.avatar.char"
+            img-class="size-6 shrink-0 rounded-full object-cover"
+            char-class="size-6 rounded-full text-[10px]"
           />
-          <span
-            v-else
-            class="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] text-white"
-            :style="{ backgroundColor: '#10B981' }"
-          >
-            {{ member.avatar.char }}
-          </span>
           <span class="min-w-0 truncate text-xs text-surface">{{ member.name }}</span>
           <span class="ml-auto shrink-0 text-[11px] text-muted">
             {{ dialogs['share.owner'] }}
@@ -227,19 +230,14 @@ async function confirmRemove(): Promise<void> {
           </button>
           <span v-else class="flex size-4 shrink-0 items-center justify-center" />
 
-          <img
-            v-if="member.avatar.image"
-            :src="`/api/v1/avatars/${(member.avatar.image ?? '').split('/').pop()}`"
-            class="size-6 shrink-0 rounded-full object-cover"
+          <AvatarImage
+            :image="member.avatar.image"
             :alt="member.name"
+            :bg="member.avatar.bg"
+            :char="member.avatar.char"
+            img-class="size-6 shrink-0 rounded-full object-cover"
+            char-class="size-6 rounded-full text-[10px]"
           />
-          <span
-            v-else
-            class="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] text-white"
-            :style="{ backgroundColor: member.avatar.bg }"
-          >
-            {{ member.avatar.char }}
-          </span>
           <span class="min-w-0 truncate text-xs text-surface">{{ member.name }}</span>
 
           <template v-if="canOperate">
@@ -252,6 +250,15 @@ async function confirmRemove(): Promise<void> {
                 data-test-id="team-member-password"
                 @input="onPasswordInput(member.id, $event)"
               />
+              <button
+                type="button"
+                class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+                :aria-label="dialogs['share.password.copy']"
+                data-test-id="team-member-password-copy"
+                @click="onCopyPassword(member)"
+              >
+                <icon-lucide-copy class="size-[11px]" />
+              </button>
               <button
                 type="button"
                 class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"

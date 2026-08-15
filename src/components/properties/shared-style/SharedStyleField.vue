@@ -12,9 +12,10 @@ import type { SharedStyleKind } from '@open-pencil/scene-graph'
 interface SharedStyleFieldProps {
   kind: SharedStyleKind
   label: string
+  disabled?: boolean
 }
 
-const { kind, label } = defineProps<SharedStyleFieldProps>()
+const { kind, label, disabled = false } = defineProps<SharedStyleFieldProps>()
 const { panels } = useI18n()
 const binding = useSharedStyleBinding(kind)
 const { active, styleId, styles } = binding
@@ -51,6 +52,7 @@ function update(value: string) {
         :model-value="styleId === MIXED ? 'MIXED' : (styleId ?? 'NONE')"
         :options="options"
         :label="label"
+        :disabled="disabled"
         :data-property="`${kind}-style`"
         @update:model-value="update"
       />
