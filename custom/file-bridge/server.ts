@@ -15,6 +15,7 @@ import { createMcpProxy, type McpProxyHandle } from './mcp-proxy'
 import { handleMcpRequest, type McpDeps } from './mcp'
 import { AuthStore, isAdminRole, type User, type UserRole } from './lib/auth'
 import { NotificationStore } from './lib/notifications'
+import { PresenceStore } from './lib/presence'
 import { PermissionStore } from './lib/permissions'
 import {
   generateRandomPassword,
@@ -283,6 +284,58 @@ function adminUser(request: Request): User | null {
   return user
 }
 
+/** C-live 在线台账周期清理：按 path 聚合被移除用户，逐个 path 广播最新快照（含离开后清空）。 */
+function sweepExpiredPresence(presence: PresenceStore, bus: EventBus): void {
+  const removedByPath = new Map<string, { path: string; userId: string }[]>()
+  for (const item of presence.sweep()) {
+    const list = removedByPath.get(item.path) ?? []
+    list.push(item)
+    removedByPath.set(item.path, list)
+  }
+  for (const path of removedByPath.keys()) {
+    bus.broadcast('online.changed', { path, users: presence.snapshot(path) })
+  }
+}
+
+/** 启动在线台账周期清理定时器（15s 无心跳 → 下线并广播离开）。 */
+function startPresenceSweep(presence: PresenceStore, bus: EventBus): ReturnType<typeof setInterval> {
+  const PRESENCE_SWEEP_MS = 15_000
+  return setInterval(() => {
+    sweepExpiredPresence(presence, bus)
+  }, PRESENCE_SWEEP_MS)
+}
+
+/**
+ * POST /api/v1/online（login）→ {path} 心跳上报。返回该 path 最新在线快照
+ * （上报即广播，其它 SSE 客户端实时感知新协作者）。
+ */
+async function reportOnline(request: Request, presence: PresenceStore): Promise<Response> {
+  const user = sessionUser(request)
+  if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+  let payload: { path?: unknown }
+  try {
+    payload = JSON.parse(await request.text())
+  } catch {
+    return json({ ok: false, error: 'invalid JSON body' }, 400)
+  }
+  const path = typeof payload.path === 'string' ? payload.path.trim() : ''
+  if (!isSafeRelativePath(path)) return json({ ok: false, error: 'invalid path' }, 400)
+  const users = presence.upsert(path, {
+    userId: user.id,
+    name: user.name,
+    avatar: { ...user.avatar }
+  })
+  return json({ ok: true, users })
+}
+
+/** GET /api/v1/online?path=（login）→ 该 path 当前在线快照（前端挂载时拉取自愈）。 */
+function getOnline(request: Request, presence: PresenceStore): Response {
+  const url = new URL(request.url)
+  const path = url.searchParams.get('path') ?? ''
+  if (!isSafeRelativePath(path)) return json({ ok: false, error: 'invalid path' }, 400)
+  return json({ users: presence.snapshot(path) })
+}
+
 export function startServer(options: BridgeServerOptions) {
   const distDir = resolveDistDir(options.distDir ?? process.env.DIST_DIR)
   const designRoot = options.designRoot ?? process.env.DESIGN_ROOT ?? '/data/design'
@@ -294,6 +347,8 @@ export function startServer(options: BridgeServerOptions) {
 
   const state = new StateStore(stateDir)
   const bus = new EventBus(SSE_PING_MS)
+  // 文档在线台账（C-live 方案二）：心跳 upsert + 15s 超时 sweep，变更经 bus 广播 online.changed。
+  const presence = new PresenceStore(bus)
   // 账号/会话台账（Phase A）：users.json seed 默认管理员，sessions.json 跨容器持久化。
   authStore = new AuthStore(designRoot)
   // 权限台账 + 通知台账（Phase B）：permissions.json 权限引擎，notifications.json 权限申请落库。
@@ -317,6 +372,9 @@ export function startServer(options: BridgeServerOptions) {
   const reconcileTimer = setInterval(() => {
     watcher.reconcile(scanManifestFiles(designRoot, manifest.files))
   }, RECONCILE_MS)
+
+  // C-live：在线台账周期清理（15s 无心跳 → 下线；有移除则广播离开）。
+  const presenceSweepTimer = startPresenceSweep(presence, bus)
 
   const mcpDeps: McpDeps = { designRoot, state, token }
 
@@ -1018,12 +1076,17 @@ export function startServer(options: BridgeServerOptions) {
     return json({ ok: true })
   }
 
+/** 外链域名：SHARE_BASE_URL 环境变量优先（H 子路径起），默认公网域名。 */
+function resolveShareBaseURL(): string {
+  return process.env.SHARE_BASE_URL?.trim() || 'https://anzainan.iepose.cn'
+}
+
   // ---- 分享/外链（Phase C：真实台账 + 游客外链 + P0 安全收紧）----
 
-  const SHARE_BASE_URL = 'https://anzainan.iepose.cn'
+  const SHARE_BASE_URL = resolveShareBaseURL()
 
-  function shareUrl(token: string): string {
-    return `${SHARE_BASE_URL}/share/${token}`
+  function shareURL(token: string): string {
+    return `${SHARE_BASE_URL}/Mobai/${token}`
   }
 
   /** 外链对外视图：绝不暴露密码哈希；非 internet 范围不出 token/url（外链不可访问）。 */
@@ -1043,7 +1106,7 @@ export function startServer(options: BridgeServerOptions) {
       permission: link.permission,
       passwordEnabled: link.passwordHash !== null,
       token: link.scope === 'internet' ? link.token : null,
-      url: link.scope === 'internet' ? shareUrl(link.token) : null,
+      url: link.scope === 'internet' ? shareURL(link.token) : null,
       members: link.members,
       createdBy: link.createdBy,
       createdAt: link.createdAt
@@ -1356,6 +1419,20 @@ export function startServer(options: BridgeServerOptions) {
       return methodNotAllowed()
     }
 
+    if (path === '/api/v1/online') {
+      if (method === 'GET') {
+        const denied = checkAuth(request, token)
+        if (denied) return denied
+        return getOnline(request, presence)
+      }
+      if (method === 'POST') {
+        const denied = checkAuth(request, token)
+        if (denied) return denied
+        return reportOnline(request, presence)
+      }
+      return methodNotAllowed()
+    }
+
     if (path === '/api/v1/dirs') {
       if (method === 'GET') return listDirs()
       if (method === 'POST') {
@@ -1646,6 +1723,7 @@ export function startServer(options: BridgeServerOptions) {
 
   const shutdown = () => {
     clearInterval(reconcileTimer)
+    clearInterval(presenceSweepTimer)
     watcher.stop()
     bus.close()
     mcpProxy.close()

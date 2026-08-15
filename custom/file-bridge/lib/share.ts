@@ -11,7 +11,7 @@ export type ShareScope = 'internet' | 'team' | 'self'
 export type SharePermission = 'view' | 'edit'
 
 export interface ShareLink {
-  /** 外链 URL token（randomBytes(16).hex，放路径：/share/:token）。 */
+  /** 外链 URL token（8~12 位 base62 短码；存量 32hex 旧 token 兼容保留，放路径 /Mobai/:token）。 */
   token: string
   /** 文件相对路径（设计根内）。 */
   path: string
@@ -31,9 +31,22 @@ interface ShareLedger {
   links: ShareLink[]
 }
 
-/** 随机外链 token：16 字节 hex（URL 安全，无泄露熵）。 */
+/** 外链短码字符集（base62：大小写字母 + 数字，URL 安全）。 */
+const TOKEN_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+
+/**
+ * 随机外链 token：8~12 位 base62 短码（ARCH-mobai-subpath.md Q6）。
+ * 熵约 2^47~2^71，拒绝纯 6 位数字（1e6 空间可枚举撞链接）。
+ * 仅用 crypto.getRandomValues（AGENTS.md：禁 Math.random）。
+ */
 function newToken(): string {
-  return randomBytes(16).toString('hex')
+  const length = 8 + (crypto.getRandomValues(new Uint8Array(1))[0] % 5)
+  const bytes = crypto.getRandomValues(new Uint8Array(length))
+  let token = ''
+  for (let i = 0; i < length; i++) {
+    token += TOKEN_CHARS[bytes[i] % TOKEN_CHARS.length]
+  }
+  return token
 }
 
 function hashPassword(password: string, saltHex: string): string {
@@ -114,6 +127,14 @@ export class ShareStore {
     return this.links.get(normalizePath(path)) ?? null
   }
 
+  /** 生成不与存量 token 冲突的新短码（重试直到唯一；现有条目极少，线性查重足够）。 */
+  private generateUniqueToken(): string {
+    for (;;) {
+      const token = newToken()
+      if (![...this.links.values()].some((link) => link.token === token)) return token
+    }
+  }
+
   /**
    * 新增或更新某路径的外链。创建时生成 token；已存在时保留原 token（同一链接跨范围切换）。
    * password 传 'clear' 表示清空密码；不传（undefined）保持原密码不变。
@@ -148,7 +169,7 @@ export class ShareStore {
     }
 
     const link: ShareLink = {
-      token: existing?.token ?? newToken(),
+      token: existing?.token ?? this.generateUniqueToken(),
       path: normalized,
       scope: data.scope,
       permission: data.permission,

@@ -10,6 +10,7 @@ export type EventType =
   | 'file.created'
   | 'file.deleted'
   | 'active.changed'
+  | 'online.changed'
 
 export interface BroadcastEvent {
   type: EventType

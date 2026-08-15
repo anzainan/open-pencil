@@ -69,17 +69,27 @@ export interface BridgePermission {
 }
 
 export interface BridgeFileEvent {
-  type: 'file.changed' | 'file.created' | 'file.deleted' | 'active.changed'
+  type: 'file.changed' | 'file.created' | 'file.deleted' | 'active.changed' | 'online.changed'
   path: string
   brand?: string
+  /** 仅 online.changed：该 path 的全量在线快照（服务端台账视图，前端无需合并）。 */
+  users?: BridgePresenceUser[]
+}
+
+/** 在线协作者（POST/GET /api/v1/online 与 SSE online.changed 共用视图）。 */
+export interface BridgePresenceUser {
+  userId: string
+  name: string
+  avatar: { char: string; bg: string; image?: string }
 }
 
 type BridgeListener = (event: BridgeFileEvent) => void
 
-/** SSE 事件 payload 的领域子集：仅消费 path/brand 字段。 */
+/** SSE 事件 payload 的领域子集：仅消费 path/brand/users 字段。 */
 interface BridgeSsePayload {
   path?: string
   brand?: string
+  users?: BridgePresenceUser[]
 }
 
 function encodeRelPath(path: string): string {
@@ -440,6 +450,39 @@ export class BridgeClient {
     return data.recents ?? []
   }
 
+  /** 上报文档在线心跳（login，8s 节奏由 useDocumentPresence 的调用方控制）。失败仅警告。 */
+  async reportOnline(path: string): Promise<BridgePresenceUser[]> {
+    try {
+      const response = await fetch(`${this.apiBase}/online`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await this.authHeaders()) },
+        body: JSON.stringify({ path })
+      })
+      if (!response.ok) return []
+      const data = (await response.json()) as { users?: BridgePresenceUser[] }
+      return data.users ?? []
+    } catch (error) {
+      console.warn('[bridge] online heartbeat failed', error)
+      return []
+    }
+  }
+
+  /** 拉取某文档当前在线快照（login，挂载时自愈用）。 */
+  async getOnline(path: string): Promise<BridgePresenceUser[]> {
+    try {
+      const response = await fetch(
+        `${this.apiBase}/online?path=${encodeURIComponent(path)}`,
+        { headers: await this.authHeaders() }
+      )
+      if (!response.ok) return []
+      const data = (await response.json()) as { users?: BridgePresenceUser[] }
+      return data.users ?? []
+    } catch (error) {
+      console.warn('[bridge] online snapshot failed', error)
+      return []
+    }
+  }
+
   get isConnected(): boolean {
     return this.connected
   }
@@ -476,7 +519,8 @@ export class BridgeClient {
       this.dispatch({
         type,
         path,
-        brand: typeof data.brand === 'string' ? data.brand : undefined
+        brand: typeof data.brand === 'string' ? data.brand : undefined,
+        users: Array.isArray(data.users) ? data.users : undefined
       })
     }
 
@@ -484,6 +528,7 @@ export class BridgeClient {
     source.addEventListener('file.created', handle)
     source.addEventListener('file.deleted', handle)
     source.addEventListener('active.changed', handle)
+    source.addEventListener('online.changed', handle)
 
     source.onopen = () => {
       this.connected = true

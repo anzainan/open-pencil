@@ -9,7 +9,9 @@ import ShareGuestView from './views/ShareGuestView.vue'
 import TrashView from './views/TrashView.vue'
 
 const router = createRouter({
-  history: createWebHistory(),
+  // H 子路径（ARCH-mobai-subpath.md 方案 A）：router base 跟随构建 base（/Mobai/），
+  // 否则页面 URL 落在 /Mobai/... 时路由全失配。
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/login', component: LoginView, meta: { public: true } },
     { path: '/', component: HomeView },
@@ -23,7 +25,11 @@ const router = createRouter({
     // （8 位 [a-z0-9]，ROOM_ID_LENGTH）区分：先匹配外链，其余长度回落到协作房间。
     { path: '/share/:token(\\w{32})', component: ShareGuestView, meta: { public: true } },
     // Yjs 协作房间保留（8 位房间号），与 /share/:token 共存。
-    { path: '/share/:roomId', component: EditorView }
+    { path: '/share/:roomId', component: EditorView },
+    // H 外链短码顶层路由：/Mobai/{token}（NPM 剥前缀后落到 /{token}）。
+    // 放在静态段路由之后（/login /editor /folder /trash /storage /demo /share 优先命中）。
+    // token 为 8~12 位 base62 短码（\w{6,32} 兼容旧 32hex 遗留外链），参数名 shareToken。
+    { path: '/:shareToken(\\w{6,32})', component: ShareGuestView, meta: { public: true } }
   ]
 })
 

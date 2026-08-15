@@ -71,7 +71,10 @@ export const WEB_APP_ORIGIN = 'https://app.openpencil.dev'
 
 export function getShareURL(roomId: string): string {
   const base = IS_TAURI || !IS_BROWSER ? WEB_APP_ORIGIN : window.location.origin
-  return `${base}/share/${roomId}`
+  // H 子路径（ARCH-mobai-subpath.md 方案 A）：浏览器部署在 /Mobai/ 下，协作分享链接带
+  // BASE_URL 前缀；Tauri/非浏览器仍指向官方 WEB_APP_ORIGIN（保持 /share/ 原格式）。
+  const prefix = IS_TAURI || !IS_BROWSER ? '' : import.meta.env.BASE_URL
+  return `${base}${prefix}share/${roomId}`
 }
 
 export const PEER_COLORS: Color[] = [

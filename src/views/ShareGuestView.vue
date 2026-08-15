@@ -18,7 +18,12 @@ const route = useRoute()
 const router = useRouter()
 const { dialogs } = useI18n()
 
-const token = computed(() => String(route.params.token ?? ''))
+// H 子路径：/Mobai/{token} 顶层路由用 shareToken 参数名，旧 /share/:token 用 token；
+// 两种都要读（http://anzainan.../share/:token 兼容，见 ARCH-mobai-subpath.md）。
+const token = computed(() => {
+  const params = route.params
+  return String(params.shareToken ?? params.token ?? '')
+})
 
 type Stage = 'loading' | 'notFound' | 'error' | 'password' | 'ready'
 

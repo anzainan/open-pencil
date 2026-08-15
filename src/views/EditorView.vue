@@ -17,6 +17,8 @@ import { appMenuShortcut } from '@/app/shell/menu/shortcut'
 import { createDemoShapes } from '@/app/demo/document'
 import { useEditorStore } from '@/app/editor/active-store'
 import { openPermissionRequest } from '@/app/editor/readonly'
+import { BRIDGE_PROVIDER_ID } from '@/app/bridge/client'
+import { useDocumentPresence } from '@/app/presence/use'
 import { createTab, activeTab, getActiveStore, tabCount } from '@/app/tabs'
 
 import EditorCanvas from '@/components/EditorCanvas.vue'
@@ -64,7 +66,24 @@ useEditorMenu()
 const collab = useCollab(getActiveStore)
 provide(COLLAB_KEY, collab)
 // 编辑器头部多人头像堆叠（官方 CollabAvatarStack）需要 CollabPanel 的 provide 树。
-provideCollabPanel()
+// C-live：bridge 文档打开（storage binding.documentId 生效）才启用在在线感知；
+// 游客 / 空画布 / demo 无 binding → 不启用心跳（游客不启用，避免无鉴权上报）。
+const presencePath = ref<string | null>(null)
+watch(
+  [() => activeTab.value, () => store.state.documentName],
+  () => {
+    const binding = activeTab.value?.store.getStorageBinding()
+    presencePath.value =
+      binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId
+        ? binding.documentId
+        : null
+  },
+  { immediate: true }
+)
+const { onlineUsers } = useDocumentPresence(presencePath)
+provideCollabPanel(onlineUsers)
+// H 子路径：图标走 BASE_URL 前缀（/Mobai/favicon-32.png）。
+const faviconSrc = import.meta.env.BASE_URL + 'favicon-32.png'
 
 // ── 只读模式拦截（Phase B：无编辑权限只读打开）──
 // 1) 只读时若切到编辑工具（键盘快捷键等）→ 弹权限申请 + 复位回选择工具；
@@ -274,7 +293,7 @@ onUnmounted(() => {
           v-if="!isMobile"
           class="absolute top-7 left-7 z-10 flex items-center gap-2 rounded-lg border border-border bg-panel px-2 py-1 shadow-sm"
         >
-          <img src="/favicon-32.png" class="size-4" alt="OpenPencil" />
+          <img :src="faviconSrc" class="size-4" alt="OpenPencil" />
           <span data-test-id="editor-document-name" class="text-xs text-surface">{{
             store.state.documentName
           }}</span>
