@@ -323,6 +323,7 @@
   "share.password.enable": "Включить пароль",
   "share.password.refresh": "Обновить",
   "share.password.copy": "Скопировать пароль",
+  "share.password.reset": "Включён · обновить для сброса",
   "share.password.title": "Требуется пароль",
   "share.password.placeholder": "Введите пароль",
   "share.password.wrong": "Неверный пароль. Попробуйте ещё раз.",

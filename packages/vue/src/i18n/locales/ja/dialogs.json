@@ -323,6 +323,7 @@
   "share.password.enable": "パスワードを有効化",
   "share.password.refresh": "更新",
   "share.password.copy": "パスワードをコピー",
+  "share.password.reset": "有効 · リセットは更新",
   "share.password.title": "パスワードが必要です",
   "share.password.placeholder": "パスワードを入力",
   "share.password.wrong": "パスワードが違います。もう一度お試しください。",

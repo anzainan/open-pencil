@@ -65,8 +65,9 @@ export function createEditorStoreModules(
   const mobileClipboard = createMobileClipboardActions(editor, state)
   const profiler = createProfilerActions(editor)
 
-  // 只读模式（无编辑权限）：保存/导出入口一律拦截（toast 提示，不落盘）。
-  // 覆盖菜单/快捷键（Ctrl+S / Ctrl+Shift+S）与工具栏等全部触发路径。
+  // 只读模式（无编辑权限）：保存入口一律拦截（toast 提示，不落盘）。
+  // 导出（下载素材）对只读查看者开放：导出不写源文件、不破坏只读落盘保护，
+  // 游客分享页的「可导出下载素材」依赖此路径。覆盖菜单/快捷键与面板按钮等全部触发路径。
   function readonlyBlocked(): boolean {
     if (!state.readOnly) return false
     toast.info(dialogMessages.get()['perm.readOnly'])
@@ -103,15 +104,12 @@ export function createEditorStoreModules(
     },
     ...documentExport,
     exportTarget: async (target: ExportRequest['target'], formatId: string, options?: ExportOptions) => {
-      if (readonlyBlocked()) return
       await documentExport.exportTarget(target, formatId, options)
     },
     exportTargets: async (requests: Parameters<typeof documentExport.exportTargets>[0]) => {
-      if (readonlyBlocked()) return
       await documentExport.exportTargets(requests)
     },
     exportSelection: async (scale: number, formatId: 'png' | 'jpg' | 'webp' | 'svg' | 'pdf' | 'pptx' | 'fig') => {
-      if (readonlyBlocked()) return
       await documentExport.exportSelection(scale, formatId)
     },
     ...mobileClipboard,

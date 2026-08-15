@@ -258,10 +258,8 @@ onUnmounted(() => {
         <div
           class="flex shrink-0 items-center justify-between border-b border-border px-1.5 py-1.5"
         >
-          <div class="flex items-center gap-2">
-            <CollabAvatarStack v-if="!store.state.readOnly" />
-            <SharePopover v-if="!store.state.readOnly" />
-          </div>
+          <CollabAvatarStack v-if="!store.state.readOnly" />
+          <SharePopover v-if="!store.state.readOnly" />
         </div>
         <PropertiesPanel />
       </SplitterPanel>

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useEventListener } from '@vueuse/core'
 import { useRoute, useRouter } from 'vue-router'
 import { useHead } from '@unhead/vue'
+import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
 import { readFigFile } from '@open-pencil/core/io/formats/fig'
 import { computeAllLayouts } from '@open-pencil/core/layout'
@@ -11,12 +13,16 @@ import { getShareContent, verifyShare, type BridgeShareVerify } from '@/app/brid
 import { getActiveEditorStoreOrNull } from '@/app/editor/active-store'
 import { createTab } from '@/app/tabs'
 import EditorCanvas from '@/components/EditorCanvas.vue'
+import LayerTree from '@/components/LayerTree/LayerTree.vue'
+import PagesPanel from '@/components/PagesPanel.vue'
+import PropertiesPanel from '@/components/PropertiesPanel.vue'
+import Toolbar from '@/components/Toolbar/Toolbar.vue'
 
 defineOptions({ name: 'ShareGuestView' })
 
 const route = useRoute()
 const router = useRouter()
-const { dialogs } = useI18n()
+const { dialogs, panels } = useI18n()
 
 // H 子路径：/Mobai/{token} 顶层路由用 shareToken 参数名，旧 /share/:token 用 token；
 // 两种都要读（http://anzainan.../share/:token 兼容，见 ARCH-mobai-subpath.md）。
@@ -108,7 +114,7 @@ async function openPreview(verify: BridgeShareVerify): Promise<void> {
     target.replaceGraph(imported)
     target.undo.clear()
     target.state.documentName = fileName.replace(/\.(fig|pen)$/i, '')
-    // 游客强制只读：禁编辑/保存/导出，关 autosave，仅可查看缩放。
+    // 游客强制只读：禁编辑/落盘（autosave 关），仅可查看/导出下载素材。
     target.state.readOnly = true
     target.state.autosaveEnabled = false
     target.setTool('SELECT')
@@ -127,7 +133,8 @@ async function openPreview(verify: BridgeShareVerify): Promise<void> {
   }
 }
 
-// 只读兜底（游客无权限申请弹窗）：切到编辑工具复位回选择；图变更静默回滚内存改动。
+// ── 只读兜底（游客无权限申请弹窗）──
+// 切到编辑工具复位回选择；图变更静默回滚内存改动（undo 栈打开时已清空，仅回退游客自身改动）。
 let sceneBaseline: number | null = null
 let lastInterceptedVersion = -1
 
@@ -175,6 +182,35 @@ watch(
       lastInterceptedVersion = -1
     }
   }
+)
+
+// ── 编辑前拦截（Phase 3b）：SELECT 左键拖拽不产生 scene 变更 ──
+// move/resize 拖拽的预览只在 mousemove 越过阈值后开始（preview 不 bump sceneVersion，
+// commit 才 bump）。在容器 capture 阶段拦截拖拽中的 mousemove → dragStarted 永不置位 →
+// mouseup 走纯清理分支，节点原地不动、无回弹。空格平移 / HAND / 中键平移不受影响。
+const canvasHost = ref<HTMLElement | null>(null)
+const spaceHeld = ref(false)
+
+useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+  if (event.code === 'Space') spaceHeld.value = true
+})
+useEventListener(window, 'keyup', (event: KeyboardEvent) => {
+  if (event.code === 'Space') spaceHeld.value = false
+})
+
+useEventListener(
+  canvasHost,
+  'mousemove',
+  (event: MouseEvent) => {
+    const current = getActiveEditorStoreOrNull()
+    if (!current || !current.state.readOnly) return
+    if (current.state.activeTool !== 'SELECT') return
+    if (spaceHeld.value) return
+    if (!(event.buttons & 1)) return
+    event.preventDefault()
+    event.stopPropagation()
+  },
+  { capture: true }
 )
 
 onMounted(() => {
@@ -282,9 +318,82 @@ function goLogin(): void {
       </div>
     </div>
 
-    <!-- 只读预览（bare 画布） -->
-    <div v-else-if="stage === 'ready'" class="flex min-h-0 flex-1">
-      <EditorCanvas />
+    <!-- 只读预览：完整编辑器布局（左图层树 / 中画布 / 右参数+导出），文件菜单与设置行隐藏 -->
+    <div v-else-if="stage === 'ready'" ref="canvasHost" class="relative flex min-h-0 flex-1">
+      <!-- 只读提示条（复用 EditorView banner 文案） -->
+      <div
+        data-test-id="readonly-banner"
+        class="pointer-events-none absolute top-3 left-1/2 z-30 -translate-x-1/2 rounded-md bg-[#2A2A2A] px-3 py-1.5 text-[11px] font-medium text-white shadow-md ring-1 ring-white/10"
+      >
+        {{ dialogs['perm.readOnly'] }}
+      </div>
+
+      <SplitterGroup direction="horizontal" class="flex-1 overflow-hidden">
+        <SplitterPanel
+          id="guest-layers"
+          :default-size="18"
+          :min-size="10"
+          :max-size="30"
+          class="flex"
+        >
+          <aside
+            data-test-id="guest-layers-panel"
+            class="flex min-w-0 flex-1 flex-col overflow-hidden border-r border-border bg-panel"
+            style="contain: paint layout style"
+          >
+            <SplitterGroup
+              direction="vertical"
+              class="flex-1 overflow-hidden"
+            >
+              <SplitterPanel
+                :default-size="30"
+                :min-size="10"
+                :max-size="60"
+                class="flex flex-col overflow-hidden"
+              >
+                <PagesPanel />
+              </SplitterPanel>
+              <SplitterResizeHandle class="group relative z-10 -my-1 h-2 cursor-row-resize">
+                <div
+                  class="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border"
+                />
+              </SplitterResizeHandle>
+              <SplitterPanel :default-size="70" :min-size="20" class="flex flex-col overflow-hidden">
+                <header
+                  data-test-id="guest-layers-header"
+                  class="shrink-0 px-3 py-2 text-[11px] font-semibold text-surface"
+                >
+                  {{ panels.layers }}
+                </header>
+                <LayerTree data-test-id="guest-layers-tree" />
+              </SplitterPanel>
+            </SplitterGroup>
+          </aside>
+        </SplitterPanel>
+        <SplitterResizeHandle
+          class="group relative z-10 -mx-1 w-2 cursor-col-resize"
+        >
+          <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2" />
+        </SplitterResizeHandle>
+        <SplitterPanel id="guest-canvas" :default-size="64" :min-size="30" class="flex">
+          <div class="relative flex min-w-0 flex-1">
+            <EditorCanvas />
+            <Toolbar />
+          </div>
+        </SplitterPanel>
+        <SplitterResizeHandle class="group relative z-10 -mx-1 w-2 cursor-col-resize">
+          <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2" />
+        </SplitterResizeHandle>
+        <SplitterPanel
+          id="guest-properties"
+          :default-size="18"
+          :min-size="10"
+          :max-size="30"
+          class="flex flex-col"
+        >
+          <PropertiesPanel />
+        </SplitterPanel>
+      </SplitterGroup>
     </div>
   </div>
 </template>

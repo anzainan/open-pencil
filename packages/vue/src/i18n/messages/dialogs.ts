@@ -293,6 +293,7 @@ export const dialogMessageDefaults = {
   'share.password.enable': 'Enable password',
   'share.password.refresh': 'Refresh',
   'share.password.copy': 'Copy password',
+  'share.password.reset': 'On · refresh to reset',
   'share.password.title': 'Password required',
   'share.password.placeholder': 'Enter password',
   'share.password.wrong': 'Wrong password. Please try again.',

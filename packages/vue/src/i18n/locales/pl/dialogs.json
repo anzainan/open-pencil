@@ -323,6 +323,7 @@
   "share.password.enable": "Włącz hasło",
   "share.password.refresh": "Odśwież",
   "share.password.copy": "Kopiuj hasło",
+  "share.password.reset": "Włączone · odśwież, aby zresetować",
   "share.password.title": "Wymagane hasło",
   "share.password.placeholder": "Wpisz hasło",
   "share.password.wrong": "Nieprawidłowe hasło. Spróbuj ponownie.",

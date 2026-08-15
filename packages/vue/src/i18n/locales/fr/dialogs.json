@@ -323,6 +323,7 @@
   "share.password.enable": "Activer le mot de passe",
   "share.password.refresh": "Actualiser",
   "share.password.copy": "Copier le mot de passe",
+  "share.password.reset": "Activé · actualiser pour réinitialiser",
   "share.password.title": "Mot de passe requis",
   "share.password.placeholder": "Saisir le mot de passe",
   "share.password.wrong": "Mot de passe incorrect. Veuillez réessayer.",

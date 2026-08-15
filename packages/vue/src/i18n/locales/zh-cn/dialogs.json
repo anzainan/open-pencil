@@ -323,6 +323,7 @@
   "share.password.enable": "启用密码",
   "share.password.refresh": "刷新",
   "share.password.copy": "复制密码",
+  "share.password.reset": "已开启 · 刷新重置密码",
   "share.password.title": "需要密码",
   "share.password.placeholder": "请输入密码",
   "share.password.wrong": "密码错误，请重试",

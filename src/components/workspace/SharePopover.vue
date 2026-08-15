@@ -17,7 +17,7 @@ import {
 
 import { useI18n } from '@open-pencil/vue'
 
-import { isAdmin } from '@/app/auth/session'
+import { currentUser, isAdmin } from '@/app/auth/session'
 import {
   getRandomSharePassword,
   getShare,
@@ -74,8 +74,26 @@ const memberSearch = ref('')
 const addMemberOpen = ref(false)
 const addMemberLoading = ref(false)
 
-/** owner 行（fixed：true 的服务端所有者）：置顶渲染，无权限下拉/不可移除（§1.1 ⑦）。 */
-const ownerRow = computed(() => allMembers.value.find((member) => member.fixed) ?? null)
+/**
+ * owner 行（fixed：true 的服务端所有者）：置顶渲染，无权限下拉/不可移除（§1.1 ⑦）。
+ * 用 session 里的 currentUser 同步种子渲染，不依赖异步 allMembers：
+ * 首次打开/添加协作者时 owner 行即时可见（fixed 由服务端下发，currentUser 已携带）。
+ */
+const ownerRow = computed(() => {
+  const fixed = allMembers.value.find((member) => member.fixed)
+  if (fixed) return fixed
+  const user = currentUser.value
+  if (!user) return null
+  return {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    avatar: user.avatar,
+    email: user.email,
+    createdAt: user.createdAt,
+    fixed: true
+  } satisfies BridgeMemberInfo
+})
 
 const removeDialogOpen = ref(false)
 const removeTarget = ref<MemberRow | null>(null)
@@ -163,10 +181,10 @@ async function load(): Promise<void> {
   }
 }
 
-function withSaving(fn: () => Promise<void>): void {
-  if (saving.value || !documentPath.value) return
+function withSaving(fn: () => Promise<void>): Promise<void> {
+  if (saving.value || !documentPath.value) return Promise.resolve()
   saving.value = true
-  void fn()
+  return fn()
     .then(() => {
       toast.info(dialogs.value['share.saveSuccess'])
       return undefined
@@ -182,12 +200,15 @@ function withSaving(fn: () => Promise<void>): void {
 }
 
 async function saveScopeAndPermission(): Promise<void> {
+  const requested = scope.value
   const link = await saveShare(documentPath.value, {
-    scope: scope.value,
+    scope: requested,
     permission: permission.value
   })
-  await saveFilePermissions(documentPath.value, { scope: scope.value })
-  applyLink(link)
+  // 先应用链接态（saveShare 返回的 url），再独立保存文件级权限：
+  // permissions 偶发失败只 toast，不影响「复制链接」可用性（切到 internet 后必亮）。
+  if (scope.value === requested) applyLink(link)
+  await saveFilePermissions(documentPath.value, { scope: requested })
 }
 
 function applyLink(link: BridgeShareSettings): void {
@@ -198,14 +219,23 @@ function applyLink(link: BridgeShareSettings): void {
   }
 }
 
+// 访问范围保存串行队列：快速连切不静默丢弃，最后一次以最新 scope 落地。
+let scopeSaveTail: Promise<void> = Promise.resolve()
+
+function enqueueScopeSave(): void {
+  scopeSaveTail = scopeSaveTail
+    .catch(() => undefined)
+    .then(() => withSaving(saveScopeAndPermission))
+}
+
 function changeScope(): void {
-  if (!canEdit.value || saving.value) return
-  withSaving(saveScopeAndPermission)
+  if (!canEdit.value) return
+  enqueueScopeSave()
 }
 
 function changePermission(): void {
   if (!canEdit.value || saving.value) return
-  withSaving(async () => {
+  void withSaving(async () => {
     const link = await saveShare(documentPath.value, {
       scope: scope.value,
       permission: permission.value
@@ -252,11 +282,11 @@ async function disablePassword(): Promise<void> {
 }
 
 function togglePassword(): void {
-  withSaving(passwordEnabled.value ? disablePassword : enablePassword)
+  void withSaving(passwordEnabled.value ? disablePassword : enablePassword)
 }
 
 function refreshPasswordAction(): void {
-  withSaving(refreshPassword)
+  void withSaving(refreshPassword)
 }
 
 function copyPassword(): void {
@@ -280,7 +310,7 @@ function addMember(userId: string): void {
     ...members.value,
     { userId, permission: 'view', name: nameFor(userId), avatar: avatarFor(userId) }
   ]
-  withSaving(saveMembers)
+  void withSaving(saveMembers)
 }
 
 function changeMemberPermission(member: MemberRow, value: string): void {
@@ -292,7 +322,7 @@ function changeMemberPermission(member: MemberRow, value: string): void {
   members.value = members.value.map((row) =>
     row.userId === member.userId ? { ...row, permission: value } : row
   )
-  withSaving(saveMembers)
+  void withSaving(saveMembers)
 }
 
 function confirmRemove(member: MemberRow): void {
@@ -306,7 +336,7 @@ function doRemove(): void {
   removeDialogOpen.value = false
   removeTarget.value = null
   members.value = members.value.filter((member) => member.userId !== target.userId)
-  withSaving(saveMembers)
+  void withSaving(saveMembers)
 }
 
 async function openAddMember(): Promise<void> {
@@ -378,7 +408,7 @@ onMounted(() => {
                 <SelectRoot v-model="scope" :disabled="!canEdit" @update:model-value="changeScope">
                   <SelectTrigger
                     :data-scope-team="scope === 'team' ? 'true' : undefined"
-                    class="flex cursor-pointer items-center gap-1 text-[11px] text-muted outline-none data-[scope-team]:text-surface data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+                    class="flex cursor-pointer items-center gap-1 text-[11px] text-surface outline-none data-[scope-team]:text-surface data-[disabled]:text-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
                   >
                     {{ scopeLabel }}
                     <icon-lucide-chevron-down class="size-2.5 shrink-0 text-muted" />
@@ -418,7 +448,7 @@ onMounted(() => {
                   @update:model-value="changePermission"
                 >
                   <SelectTrigger
-                    class="flex h-[22px] cursor-pointer items-center gap-1 rounded px-1 text-[11px] text-surface outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+                    class="flex h-[22px] cursor-pointer items-center gap-1 rounded px-1 text-[11px] text-surface outline-none data-[disabled]:text-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
                   >
                     {{ permissionLabel }}
                     <icon-lucide-chevron-down class="size-2.5 shrink-0 text-muted" />
@@ -480,26 +510,40 @@ onMounted(() => {
                   <span class="text-xs text-surface">{{ dialogs['share.password.enable'] }}</span>
                 </label>
                 <span v-if="canEdit && passwordEnabled" class="flex items-center gap-1">
-                  <code
-                    class="flex h-6 items-center rounded bg-panel-field px-2 font-mono text-[11px] text-surface"
-                  >
-                    {{ password || '••••••' }}
-                  </code>
+                  <template v-if="password">
+                    <code
+                      class="flex h-6 items-center rounded bg-panel-field px-2 font-mono text-[11px] text-surface"
+                    >
+                      {{ password }}
+                    </code>
+                    <button
+                      type="button"
+                      class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+                      :aria-label="dialogs['share.password.refresh']"
+                      @click="refreshPasswordAction"
+                    >
+                      <icon-lucide-refresh-cw class="size-[13px]" />
+                    </button>
+                    <button
+                      type="button"
+                      class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+                      :aria-label="dialogs['share.password.copy']"
+                      data-test-id="share-password-copy"
+                      @click="copyPassword"
+                    >
+                      <icon-lucide-copy class="size-[13px]" />
+                    </button>
+                  </template>
                   <button
+                    v-else
                     type="button"
-                    class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
-                    :aria-label="dialogs['share.password.refresh']"
+                    class="flex h-6 cursor-pointer items-center gap-1 rounded px-1.5 text-[11px] text-muted hover:bg-hover hover:text-surface"
+                    :aria-label="dialogs['share.password.reset']"
+                    data-test-id="share-password-reset"
                     @click="refreshPasswordAction"
                   >
                     <icon-lucide-refresh-cw class="size-[13px]" />
-                  </button>
-                  <button
-                    type="button"
-                    class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
-                    :aria-label="dialogs['share.password.copy']"
-                    @click="copyPassword"
-                  >
-                    <icon-lucide-copy class="size-[13px]" />
+                    {{ dialogs['share.password.reset'] }}
                   </button>
                 </span>
               </div>
@@ -634,12 +678,16 @@ onMounted(() => {
               <span class="text-[10px] font-medium text-muted">
                 {{ dialogs['share.member.teamTitle'] }}
               </span>
-              <div class="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
-                <div
-                  v-if="addMemberLoading"
-                  class="py-3 text-center text-[11px] text-muted"
-                >
-                  …
+              <div class="flex h-40 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
+                <div v-if="addMemberLoading" class="flex flex-col gap-1.5">
+                  <div
+                    v-for="i in 4"
+                    :key="i"
+                    class="flex h-7 animate-pulse items-center gap-2"
+                  >
+                    <div class="size-[22px] shrink-0 rounded-[11px] bg-hover" />
+                    <div class="h-2.5 w-28 rounded bg-hover" />
+                  </div>
                 </div>
                 <div
                   v-for="member in searchableMembers"
