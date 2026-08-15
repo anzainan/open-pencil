@@ -14,9 +14,13 @@ function syncWasmFromNodeModules(root: string, source: string, destination: stri
   copyFileSync(sourcePath, destinationPath)
 }
 
-function serveCanvasKitWasm(root: string): Connect.NextHandleFunction {
+function serveCanvasKitWasm(root: string, base: string): Connect.NextHandleFunction {
   return (req, res, next) => {
-    const pathname = req.url?.split('?')[0] ?? ''
+    let pathname = req.url?.split('?')[0] ?? ''
+    const prefix = base === '/' ? '' : base.replace(/\/$/, '')
+    if (prefix && pathname.startsWith(prefix)) {
+      pathname = pathname.slice(prefix.length)
+    }
     if (pathname !== '/canvaskit.wasm' && pathname !== '/canvaskit-webgpu/canvaskit.wasm') {
       next()
       return
@@ -67,10 +71,10 @@ export function copyCanvasKitAssetsPlugin(): Plugin {
       )
     },
     configureServer(server) {
-      server.middlewares.use(serveCanvasKitWasm(server.config.root))
+      server.middlewares.use(serveCanvasKitWasm(server.config.root, server.config.base))
     },
     configurePreviewServer(server) {
-      server.middlewares.use(serveCanvasKitWasm(server.config.root))
+      server.middlewares.use(serveCanvasKitWasm(server.config.root, server.config.base))
     }
   }
 }
