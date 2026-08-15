@@ -29,6 +29,8 @@ import RenameSelectionDialog from '@/components/selection/RenameSelectionDialog.
 import TabBar from '@/components/TabBar.vue'
 import Tip from '@/components/ui/Tip.vue'
 import Toolbar from '@/components/Toolbar/Toolbar.vue'
+import CollabAvatarStack from '@/components/CollabPanel/CollabAvatarStack.vue'
+import { provideCollabPanel } from '@/components/CollabPanel/context'
 import SharePopover from '@/components/workspace/SharePopover.vue'
 
 import type { Tool } from '@open-pencil/core/editor'
@@ -61,6 +63,8 @@ useEditorMenu()
 
 const collab = useCollab(getActiveStore)
 provide(COLLAB_KEY, collab)
+// 编辑器头部多人头像堆叠（官方 CollabAvatarStack）需要 CollabPanel 的 provide 树。
+provideCollabPanel()
 
 // ── 只读模式拦截（Phase B：无编辑权限只读打开）──
 // 1) 只读时若切到编辑工具（键盘快捷键等）→ 弹权限申请 + 复位回选择工具；
@@ -235,7 +239,10 @@ onUnmounted(() => {
         <div
           class="flex shrink-0 items-center justify-between border-b border-border px-1.5 py-1.5"
         >
-          <SharePopover v-if="!store.state.readOnly" />
+          <div class="flex items-center gap-2">
+            <CollabAvatarStack v-if="!store.state.readOnly" />
+            <SharePopover v-if="!store.state.readOnly" />
+          </div>
         </div>
         <PropertiesPanel />
       </SplitterPanel>

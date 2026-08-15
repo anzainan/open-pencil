@@ -26,9 +26,11 @@ type Perm = 'view' | 'edit'
 interface CollabRow {
   id: string
   name: string
-  avatar: { char: string; bg: string }
+  avatar: { char: string; bg: string; image?: string }
   selected: boolean
   permission: Perm
+  /** owner（fixed）行：不参与勾选/保存，仅置顶展示（§4.1）。 */
+  fixed?: boolean
 }
 
 const mode = ref<AccessMode>('team')
@@ -46,20 +48,19 @@ const permissionOptions = computed(() => [
 
 function applyExisting(members: BridgeMemberInfo[], existing: { userId: string; permission: string }[]): void {
   const existingMap = new Map(existing.map((member) => [member.userId, member.permission]))
-  // owner（fixed）默认全权限：不出现在权限设置列表，不下拉、不可被移除（B1）。
-  rows.value = members
-    .filter((member) => !member.fixed)
-    .map((member) => {
-      const stored = existingMap.get(member.id)
-      const permission: Perm = stored === 'edit' ? 'edit' : 'view'
-      return {
-        id: member.id,
-        name: member.name,
-        avatar: member.avatar,
-        selected: stored === 'view' || stored === 'edit',
-        permission
-      }
-    })
+  // owner（fixed）默认全权限：置顶展示，不参与勾选/权限下拉（selected 恒 false）。
+  rows.value = members.map((member) => {
+    const stored = existingMap.get(member.id)
+    const permission: Perm = stored === 'edit' ? 'edit' : 'view'
+    return {
+      id: member.id,
+      name: member.name,
+      avatar: member.avatar,
+      selected: member.fixed ? false : stored === 'view' || stored === 'edit',
+      permission,
+      fixed: member.fixed
+    }
+  })
   if (existing.length === 0) {
     // 无既有权限 → 默认「团队成员（所有成员可访问）」。
     mode.value = 'team'
@@ -107,11 +108,15 @@ async function save(): Promise<void> {
   try {
     let members: { userId: string; permission: Perm }[]
     if (mode.value === 'team') {
-      // 团队成员（所有成员可访问）：全部非 owner 成员 view（owner 有 admin 特权恒可访问，不在 rows），
-      // 文件夹权限自动继承到内部文件（REQ §5）。
-      members = rows.value.map((row) => ({ userId: row.id, permission: 'view' as Perm }))
+      // 团队成员（所有成员可访问）：全部非 owner 成员 view（owner 有 admin 特权恒可访问，
+      // 不在 rows 勾选也不写回），文件夹权限自动继承到内部文件（REQ §5）。
+      members = rows.value
+        .filter((row) => !row.fixed)
+        .map((row) => ({ userId: row.id, permission: 'view' as Perm }))
     } else {
-      members = selectedRows.value.map((row) => ({ userId: row.id, permission: row.permission }))
+      members = selectedRows.value
+        .filter((row) => !row.fixed)
+        .map((row) => ({ userId: row.id, permission: row.permission }))
     }
     await saveFilePermissions(folderName, { scope: 'team', members })
     // 保存后回读验证文件夹权限条目可写可读。
@@ -226,37 +231,67 @@ watch(open, (isOpen) => {
               class="flex h-8 items-center gap-2 rounded px-1"
               :data-test-id="`access-collab-row-${row.id}`"
             >
-              <button
-                type="button"
-                :disabled="!canOperate"
-                class="flex size-3.5 cursor-pointer items-center justify-center rounded-[3px] border border-muted disabled:cursor-default"
-                :class="row.selected ? 'bg-accent border-accent' : 'bg-[#2A2A2A]'"
-                :aria-label="row.name"
-                data-test-id="access-collab-check"
-                @click="toggleRow(row.id)"
-              >
-                <icon-lucide-check v-if="row.selected" class="size-2.5 text-white" />
-              </button>
-              <span
-                class="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] leading-[11px] text-white"
-                :style="{ backgroundColor: row.avatar.bg }"
-              >
-                {{ row.avatar.char }}
-              </span>
-              <span class="min-w-0 flex-1 truncate text-[11px] leading-[14px] text-surface">
-                {{ row.name }}
-              </span>
-              <AppSelect
-                v-if="canOperate"
-                :model-value="row.permission"
-                :options="permissionOptions"
-                :ui="{ trigger: 'h-6 min-w-0 text-[10px]' }"
-                data-test-id="access-collab-perm"
-                @update:model-value="(value: string) => changePermission(row.id, value)"
-              />
-              <span v-else class="text-[10px] text-muted">
-                {{ dialogs[`access.${row.permission}`] }}
-              </span>
+              <template v-if="row.fixed">
+                <!-- owner 行：无 checkbox（占位）、绿头像 #10B981、静态「所有者」、无权限下拉 -->
+                <span class="flex size-3.5 shrink-0" />
+                <img
+                  v-if="row.avatar.image"
+                  :src="`/api/v1/avatars/${(row.avatar.image ?? '').split('/').pop()}`"
+                  class="size-5 shrink-0 rounded-full object-cover"
+                  :alt="row.name"
+                />
+                <span
+                  v-else
+                  class="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] leading-[11px] text-white"
+                  :style="{ backgroundColor: '#10B981' }"
+                >
+                  {{ row.avatar.char }}
+                </span>
+                <span class="min-w-0 flex-1 truncate text-[11px] leading-[14px] text-surface">
+                  {{ row.name }}
+                </span>
+                <span class="text-[10px] text-muted">{{ dialogs['share.owner'] }}</span>
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  :disabled="!canOperate"
+                  class="flex size-3.5 cursor-pointer items-center justify-center rounded-[3px] border border-muted disabled:cursor-default"
+                  :class="row.selected ? 'bg-accent border-accent' : 'bg-[#2A2A2A]'"
+                  :aria-label="row.name"
+                  data-test-id="access-collab-check"
+                  @click="toggleRow(row.id)"
+                >
+                  <icon-lucide-check v-if="row.selected" class="size-2.5 text-white" />
+                </button>
+                <img
+                  v-if="row.avatar.image"
+                  :src="`/api/v1/avatars/${(row.avatar.image ?? '').split('/').pop()}`"
+                  class="size-5 shrink-0 rounded-full object-cover"
+                  :alt="row.name"
+                />
+                <span
+                  v-else
+                  class="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] leading-[11px] text-white"
+                  :style="{ backgroundColor: row.avatar.bg }"
+                >
+                  {{ row.avatar.char }}
+                </span>
+                <span class="min-w-0 flex-1 truncate text-[11px] leading-[14px] text-surface">
+                  {{ row.name }}
+                </span>
+                <AppSelect
+                  v-if="canOperate"
+                  :model-value="row.permission"
+                  :options="permissionOptions"
+                  :ui="{ trigger: 'h-6 min-w-0 text-[10px]' }"
+                  data-test-id="access-collab-perm"
+                  @update:model-value="(value: string) => changePermission(row.id, value)"
+                />
+                <span v-else class="text-[10px] text-muted">
+                  {{ dialogs[`access.${row.permission}`] }}
+                </span>
+              </template>
             </div>
           </div>
 

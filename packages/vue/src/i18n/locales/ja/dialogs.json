@@ -416,5 +416,12 @@
   "access.readOnly": "アクセス権限を変更できるのは管理者のみです",
   "team.memberCount": "{count} 名のメンバー",
   "team.addRole": "ロール",
-  "team.random": "ランダム"
+  "team.random": "ランダム",
+  "share.collabClose": "閉じる",
+  "share.collabDone": "完了",
+  "profile.avatarUpdated": "アバターを更新しました",
+  "profile.avatarFailed": "アバターのアップロードに失敗しました",
+  "profile.avatarInvalid": "対応形式は PNG/JPG/WebP のみです",
+  "profile.avatarTooLarge": "画像サイズは 2MB 以下にしてください",
+  "share.member.loadFailed": "チームメンバーを読み込めませんでした"
 }

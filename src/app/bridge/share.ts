@@ -5,7 +5,7 @@ export interface BridgeMemberInfo {
   id: string
   name: string
   role: 'owner' | 'admin' | 'member'
-  avatar: { char: string; bg: string }
+  avatar: { char: string; bg: string; image?: string }
   email: string
   createdAt: string
   fixed?: boolean
@@ -48,8 +48,25 @@ export async function listMembers(): Promise<BridgeMemberInfo[]> {
   return data.members ?? []
 }
 
-/** 添加成员（admin）→ 返回含明文密码（「添加并复制」用）。 */
-export async function createMember(input: {
+/** 上传头像图片（login，本人）：base64 数据 + 扩展名 → 返回新 avatar（含 image 相对路径）。 */
+export async function uploadAvatar(
+  data: string,
+  ext: string
+): Promise<{ char: string; bg: string; image?: string }> {
+  const response = await fetch(`${API_BASE}/avatars`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
+    body: JSON.stringify({ data, ext })
+  })
+  if (!response.ok) throw new Error(`Bridge avatar upload failed (${response.status})`)
+  const parsed = (await response.json()) as {
+    avatar?: { char: string; bg: string; image?: string }
+  }
+  if (!parsed.avatar) throw new Error('Bridge avatar upload returned no avatar')
+  return parsed.avatar
+}
+
+/** 添加成员（admin）→ 返回含明文密码（「添加并复制」用）。 */export async function createMember(input: {
   name: string
   password: string
   role: 'admin' | 'member'

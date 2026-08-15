@@ -30,6 +30,7 @@ import {
   isSafeRelativePath,
   isSafeWorkspaceName,
   isSafeWorkspaceRelPath,
+  OPENPENCIL_REL_DIR,
   resolveDesignPath,
   resolveFontPath,
   TRASH_REL_DIR
@@ -58,6 +59,9 @@ const MIME_TYPES: Record<string, string> = {
   '.json': 'application/json; charset=utf-8',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
   '.ico': 'image/x-icon',
   '.svg': 'image/svg+xml',
   '.ttf': 'font/ttf',
@@ -785,6 +789,105 @@ export function startServer(options: BridgeServerOptions) {
     return json({ deleted: true })
   }
 
+  // ---- 头像（Phase G：真实图片上传，存 designRoot/.openpixel/avatars/，隐藏系统目录）----
+
+  const AVATAR_REL_DIR = 'avatars'
+  const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+
+  /** 校验解码字节的 magic bytes 与扩展名是否匹配（拒绝伪装成图片的任意文件）。 */
+  function matchesImageSignature(ext: string, bytes: Uint8Array): boolean {
+    if (bytes.length < 12) return false
+    if (ext === 'png') {
+      return bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+    }
+    if (ext === 'jpg' || ext === 'jpeg') {
+      return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+    }
+    if (ext === 'webp') {
+      return (
+        bytes[0] === 0x52 &&
+        bytes[1] === 0x49 &&
+        bytes[2] === 0x46 &&
+        bytes[3] === 0x46 &&
+        bytes[8] === 0x57 &&
+        bytes[9] === 0x45 &&
+        bytes[10] === 0x42 &&
+        bytes[11] === 0x50
+      )
+    }
+    return false
+  }
+
+  /** POST /api/v1/avatars（login，本人）：base64 图片上传 → 写 .openpixel/avatars/ → 更新 users.json。 */
+  async function uploadAvatar(request: Request): Promise<Response> {
+    const user = sessionUser(request)
+    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+    let payload: { data?: unknown; ext?: unknown }
+    try {
+      payload = JSON.parse(await request.text())
+    } catch {
+      return json({ ok: false, error: 'invalid JSON body' }, 400)
+    }
+    if (typeof payload.data !== 'string' || !payload.data) {
+      return json({ ok: false, error: 'image data is required' }, 400)
+    }
+    const ext = typeof payload.ext === 'string' ? payload.ext.toLowerCase().replace(/^\./, '') : ''
+    if (!['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
+      return json({ ok: false, error: 'ext must be png/jpg/jpeg/webp' }, 400)
+    }
+    let bytes: Uint8Array
+    try {
+      bytes = Uint8Array.from(atob(payload.data), (char) => char.charCodeAt(0))
+    } catch {
+      return json({ ok: false, error: 'invalid base64 image data' }, 400)
+    }
+    if (bytes.byteLength === 0 || bytes.byteLength > MAX_AVATAR_BYTES) {
+      return json({ ok: false, error: 'image must be 1 byte to 2MB' }, 400)
+    }
+    if (!matchesImageSignature(ext, bytes)) {
+      return json({ ok: false, error: 'image signature does not match extension' }, 400)
+    }
+    const fileName = `${user.id}.${ext === 'jpeg' ? 'jpg' : ext}`
+    const avatarDir = join(designRoot, OPENPENCIL_REL_DIR, AVATAR_REL_DIR)
+    try {
+      mkdirSync(avatarDir, { recursive: true })
+      await Bun.write(join(avatarDir, fileName), bytes)
+    } catch (error) {
+      return json({ ok: false, error: `write failed: ${String(error)}` }, 500)
+    }
+    const relPath = `${AVATAR_REL_DIR}/${fileName}`
+    const result = authStore?.setAvatarImage(user.id, relPath)
+    if (!result || !result.ok) {
+      return json({ ok: false, error: result?.error ?? 'avatar update failed' }, 500)
+    }
+    return json({ ok: true, user: result.user, avatar: result.user.avatar })
+  }
+
+  /** GET /api/v1/avatars/:file（login）：仅放行 .openpixel/avatars/ 内图片，防遍历其他 .openpixel 内容。 */
+  function serveAvatar(request: Request, fileName: string): Response {
+    const user = sessionUser(request)
+    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+    if (!/^[A-Za-z0-9_-]+\.(png|jpe?g|webp)$/i.test(fileName)) {
+      return json({ ok: false, error: 'invalid avatar file' }, 400)
+    }
+    const avatarDir = join(designRoot, OPENPENCIL_REL_DIR, AVATAR_REL_DIR)
+    const rootResolved = resolve(avatarDir)
+    const full = resolve(avatarDir, fileName)
+    if (full !== rootResolved && !full.startsWith(rootResolved + sep)) {
+      return json({ ok: false, error: 'unsafe path' }, 403)
+    }
+    if (!existsSync(full) || isDirectory(full)) {
+      return json({ ok: false, error: 'not found' }, 404)
+    }
+    return new Response(Bun.file(full), {
+      headers: {
+        'Content-Type': mimeFor(full),
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff'
+      }
+    })
+  }
+
   // ---- 权限模型（Phase B：真实拦截。文件权限 > 文件夹权限 > 默认，16:28 拍板）----
 
   /** 解析当前登录用户对某路径的权限（打开/编辑前真实校验；path 空 → 根默认）。 */
@@ -1431,6 +1534,22 @@ export function startServer(options: BridgeServerOptions) {
       if (method === 'PATCH') return updateMember(request, id)
       if (method === 'DELETE') return deleteMember(id)
       return methodNotAllowed()
+    }
+
+    // ---- 头像（Phase G）----
+
+    if (path === '/api/v1/avatars') {
+      if (method !== 'POST') return methodNotAllowed()
+      return uploadAvatar(request)
+    }
+
+    const avatarMatch = path.match(/^\/api\/v1\/avatars\/([^/]+)$/)
+    if (avatarMatch) {
+      const raw = avatarMatch[1]
+      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
+      if (method !== 'GET') return methodNotAllowed()
+      const fileName = decodeURIComponent(raw)
+      return serveAvatar(request, fileName)
     }
 
     if (path === '/api/v1/permissions') {

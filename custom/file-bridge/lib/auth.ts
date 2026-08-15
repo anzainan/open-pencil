@@ -13,7 +13,7 @@ export interface User {
   passwordSalt: string
   passwordHash: string
   role: UserRole
-  avatar: { char: string; bg: string }
+  avatar: { char: string; bg: string; image?: string }
   /** 纯展示（REQ §9.3），不参与账号逻辑。 */
   email: string
   createdAt: string
@@ -24,7 +24,7 @@ export interface PublicUser {
   id: string
   name: string
   role: UserRole
-  avatar: { char: string; bg: string }
+  avatar: { char: string; bg: string; image?: string }
   email: string
   createdAt: string
   /** 所有者固定标记：无复选框/无密码/不可移除（REQ §2.5）。 */
@@ -329,6 +329,21 @@ export class AuthStore {
     this.destroyUserSessions(id)
     this.persistUsers()
     return { ok: true }
+  }
+
+  /**
+   * 设置成员头像图片（relPath 形如 `avatars/<userId>.<ext>`，相对设计根）。
+   * 保留原有 char/bg 作为无图片时的字符头像回退。
+   */
+  setAvatarImage(
+    id: string,
+    relPath: string
+  ): { ok: true; user: PublicUser } | { ok: false; error: string } {
+    const user = this.getUserById(id)
+    if (!user) return { ok: false, error: 'not found' }
+    user.avatar = { ...user.avatar, image: relPath }
+    this.persistUsers()
+    return { ok: true, user: this.toPublicUser(user) }
   }
 }
 

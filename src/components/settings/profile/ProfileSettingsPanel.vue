@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 import { useI18n } from '@open-pencil/vue'
 
-import { useCurrentUser } from '@/app/auth/session'
+import { currentUser, useCurrentUser } from '@/app/auth/session'
 import { openLogoutDialog } from '@/app/auth/logout-dialog'
+import { uploadAvatar } from '@/app/bridge/share'
+import { toast } from '@/app/shell/ui'
 
 defineOptions({ name: 'ProfileSettingsPanel' })
 
@@ -25,8 +27,60 @@ const roleWorkspaceLabel = computed(() =>
 
 const avatarBg = computed(() => currentUser.value?.avatar.bg ?? '#3B82F6')
 const avatarChar = computed(() => currentUser.value?.avatar.char ?? '?')
+const avatarImageURL = computed(() => {
+  const image = currentUser.value?.avatar.image
+  return image ? `/api/v1/avatars/${image.split('/').pop()}` : ''
+})
 const accountName = computed(() => currentUser.value?.name ?? '')
 const email = computed(() => currentUser.value?.email ?? dialogs.value['profile.emailPlaceholder'])
+
+const avatarInput = ref<HTMLInputElement | null>(null)
+const avatarUploading = ref(false)
+
+function pickAvatar(): void {
+  if (avatarUploading.value) return
+  avatarInput.value?.click()
+}
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      resolve(result.replace(/^data:[^;]+;base64,/, ''))
+    }
+    reader.onerror = () => reject(new Error('FileReader failed'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function onAvatarSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  if (!['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
+    toast.error(dialogs.value['profile.avatarInvalid'])
+    return
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    toast.error(dialogs.value['profile.avatarTooLarge'])
+    return
+  }
+  avatarUploading.value = true
+  try {
+    const data = await readFileAsBase64(file)
+    const avatar = await uploadAvatar(data, ext)
+    if (currentUser.value) currentUser.value = { ...currentUser.value, avatar }
+    toast.info(dialogs.value['profile.avatarUpdated'])
+  } catch (error) {
+    console.warn('[profile] avatar upload failed', error)
+    toast.error(dialogs.value['profile.avatarFailed'])
+  } finally {
+    avatarUploading.value = false
+  }
+}
 </script>
 
 <template>
@@ -39,7 +93,15 @@ const email = computed(() => currentUser.value?.email ?? dialogs.value['profile.
 
     <!-- ProfileCard（设计稿 §3.1） -->
     <div class="flex items-center gap-4 rounded-lg border border-border bg-panel p-3" data-test-id="profile-card">
+      <img
+        v-if="avatarImageURL"
+        :src="avatarImageURL"
+        class="size-16 shrink-0 rounded-full object-cover"
+        :alt="accountName"
+        data-test-id="profile-avatar"
+      />
       <span
+        v-else
         class="flex size-16 shrink-0 items-center justify-center rounded-full text-2xl font-semibold text-white"
         :style="{ backgroundColor: avatarBg }"
         data-test-id="profile-avatar"
@@ -56,11 +118,21 @@ const email = computed(() => currentUser.value?.email ?? dialogs.value['profile.
       </div>
       <button
         type="button"
-        class="ml-auto h-7 shrink-0 cursor-pointer rounded border border-border px-2.5 text-[11px] text-surface hover:bg-hover"
+        class="ml-auto h-7 shrink-0 cursor-pointer rounded border border-border px-2.5 text-[11px] text-surface hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
         data-test-id="profile-change-avatar"
+        :disabled="avatarUploading"
+        @click="pickAvatar"
       >
         {{ dialogs['profile.changeAvatar'] }}
       </button>
+      <input
+        ref="avatarInput"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        class="hidden"
+        data-test-id="profile-avatar-input"
+        @change="onAvatarSelected"
+      />
     </div>
 
     <!-- Fields（设计稿 §3.1） -->

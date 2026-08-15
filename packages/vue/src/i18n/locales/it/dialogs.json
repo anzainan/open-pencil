@@ -416,5 +416,12 @@
   "access.readOnly": "Solo gli amministratori possono modificare i permessi",
   "team.memberCount": "{count} membri",
   "team.addRole": "Ruolo",
-  "team.random": "Casuale"
+  "team.random": "Casuale",
+  "share.collabClose": "Chiudi",
+  "share.collabDone": "Fatto",
+  "profile.avatarUpdated": "Avatar aggiornato",
+  "profile.avatarFailed": "Caricamento avatar non riuscito",
+  "profile.avatarInvalid": "Solo immagini PNG/JPG/WebP",
+  "profile.avatarTooLarge": "L'immagine deve essere al massimo 2 MB",
+  "share.member.loadFailed": "Impossibile caricare i membri del team"
 }

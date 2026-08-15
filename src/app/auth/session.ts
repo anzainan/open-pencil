@@ -6,7 +6,7 @@ export interface AuthUser {
   id: string
   name: string
   role: 'owner' | 'admin' | 'member'
-  avatar: { char: string; bg: string }
+  avatar: { char: string; bg: string; image?: string }
   email: string
   createdAt: string
   /** 所有者固定标记：无复选框/无密码/不可移除（REQ §2.5）。 */

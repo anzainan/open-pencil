@@ -6,6 +6,7 @@ import { useI18n } from '@open-pencil/vue'
 import { activeStorageProviderID, BRIDGE_STORAGE_PROVIDER } from '@/app/integrations/storage'
 import { openSettingsDialog } from '@/app/settings/dialog'
 import { bridgeClient, type BridgeFileEvent, type BridgeTrashEntry } from '@/app/bridge/client'
+import { stripFileExtension } from '@/app/bridge/storage-adapter'
 import { useWorkspaceFileOps } from '@/app/bridge/workspace-ops'
 import { activeTab, createUntitledTab } from '@/app/tabs'
 import AppPlaceholder from '@/components/ui/AppPlaceholder.vue'
@@ -114,9 +115,9 @@ onUnmounted(() => {
             <icon-lucide-file-image v-else class="size-4 text-muted/60" />
           </div>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-xs font-medium">{{ entry.name }}</p>
+            <p class="truncate text-xs font-medium">{{ stripFileExtension(entry.name) }}</p>
             <p class="mt-0.5 truncate text-[10px] text-muted">
-              {{ entry.path }}
+              {{ stripFileExtension(entry.path) }}
             </p>
           </div>
           <div class="flex shrink-0 items-center gap-2">

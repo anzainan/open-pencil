@@ -416,5 +416,12 @@
   "access.readOnly": "Изменить права могут только администраторы",
   "team.memberCount": "{count} участников",
   "team.addRole": "Роль",
-  "team.random": "Случайно"
+  "team.random": "Случайно",
+  "share.collabClose": "Закрыть",
+  "share.collabDone": "Готово",
+  "profile.avatarUpdated": "Аватар обновлён",
+  "profile.avatarFailed": "Не удалось загрузить аватар",
+  "profile.avatarInvalid": "Поддерживаются только изображения PNG/JPG/WebP",
+  "profile.avatarTooLarge": "Изображение должно быть не больше 2 МБ",
+  "share.member.loadFailed": "Не удалось загрузить участников команды"
 }

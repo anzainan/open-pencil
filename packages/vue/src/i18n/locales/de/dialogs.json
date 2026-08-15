@@ -416,5 +416,12 @@
   "access.readOnly": "Nur Administratoren können Zugriffsrechte ändern",
   "team.memberCount": "{count} Mitglieder",
   "team.addRole": "Rolle",
-  "team.random": "Zufällig"
+  "team.random": "Zufällig",
+  "share.collabClose": "Schließen",
+  "share.collabDone": "Fertig",
+  "profile.avatarUpdated": "Avatar aktualisiert",
+  "profile.avatarFailed": "Avatar-Upload fehlgeschlagen",
+  "profile.avatarInvalid": "Nur PNG/JPG/WebP-Bilder werden unterstützt",
+  "profile.avatarTooLarge": "Bild darf höchstens 2 MB groß sein",
+  "share.member.loadFailed": "Teammitglieder konnten nicht geladen werden"
 }

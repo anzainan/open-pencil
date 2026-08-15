@@ -32,8 +32,8 @@ const canOperate = computed(() => isAdmin.value)
 
 const teamName = computed(() => currentUser.value?.name ?? '—')
 
-/** 成员列表：owner（fixed）行不渲染（B1 裁决：权限设置 UI 不出现 owner）。 */
-const memberRows = computed(() => teamMembers.value.filter((member) => !member.fixed))
+/** 成员列表：owner（fixed）行置顶展示「所有者」（设计稿 §4.1），无 checkbox/密码/下拉。 */
+const memberRows = computed(() => teamMembers.value)
 
 const roleOptions = computed(() => [
   { value: 'admin', label: dialogs.value['role.admin'] },
@@ -177,7 +177,7 @@ async function confirmRemove(): Promise<void> {
       </button>
     </div>
 
-    <!-- MemberList（设计稿 §4.1；行高 32 / px 4 / gap 8，owner 行不渲染） -->
+    <!-- MemberList（设计稿 §4.1；行高 32 / px 4 / gap 8，owner 行置顶「所有者」无权限控制） -->
     <div class="flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1">
       <div
         v-if="teamMembersLoaded && memberRows.length === 0"
@@ -192,55 +192,88 @@ async function confirmRemove(): Promise<void> {
         class="flex h-8 items-center gap-2 rounded-md px-1 hover:bg-hover"
         :data-test-id="`team-member-row-${member.id}`"
       >
-        <button
-          v-if="canOperate"
-          type="button"
-          class="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] border border-muted bg-panel data-[selected]:border-accent data-[selected]:bg-accent"
-          :data-selected="member.selected || undefined"
-          :aria-label="dialogs['team.selectMember']"
-          data-test-id="team-member-check"
-          @click="toggleMemberSelected(member.id)"
-        >
-          <icon-lucide-check v-if="member.selected" class="size-2.5 text-white" />
-        </button>
-        <span v-else class="flex size-4 shrink-0 items-center justify-center" />
-
-        <span class="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] text-white" :style="{ backgroundColor: member.avatar.bg }">
-          {{ member.avatar.char }}
-        </span>
-        <span class="min-w-0 truncate text-xs text-surface">{{ member.name }}</span>
-
-        <template v-if="canOperate">
-          <span class="ml-auto flex shrink-0 items-center gap-1">
-            <input
-              :value="member.passwordDraft"
-              type="text"
-              class="h-[22px] w-[92px] rounded-[4px] bg-panel-field px-1.5 text-[10px] text-surface outline-none placeholder:text-muted focus:bg-panel-field-hover"
-              :placeholder="dialogs['team.passwordPlaceholder']"
-              data-test-id="team-member-password"
-              @input="onPasswordInput(member.id, $event)"
-            />
-            <button
-              type="button"
-              class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
-              :aria-label="dialogs['team.randomPassword']"
-              data-test-id="team-member-password-random"
-              @click="onRandomPassword(member.id)"
-            >
-              <icon-lucide-refresh-cw class="size-[11px]" />
-            </button>
-            <AppSelect
-              :model-value="member.roleDraft"
-              :options="roleOptions"
-              :ui="{ trigger: 'h-6 min-w-0 text-[11px]' }"
-              data-test-id="team-member-role"
-              @update:model-value="(value: string) => onRoleChange(member.id, value)"
-            />
+        <template v-if="member.fixed">
+          <!-- owner 行（§4.1）：无 checkbox、头像 #10B981、静态「所有者」标签、无密码列/角色下拉 -->
+          <span class="flex size-4 shrink-0 items-center justify-center" />
+          <img
+            v-if="member.avatar.image"
+            :src="`/api/v1/avatars/${(member.avatar.image ?? '').split('/').pop()}`"
+            class="size-6 shrink-0 rounded-full object-cover"
+            :alt="member.name"
+          />
+          <span
+            v-else
+            class="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] text-white"
+            :style="{ backgroundColor: '#10B981' }"
+          >
+            {{ member.avatar.char }}
+          </span>
+          <span class="min-w-0 truncate text-xs text-surface">{{ member.name }}</span>
+          <span class="ml-auto shrink-0 text-[11px] text-muted">
+            {{ dialogs['share.owner'] }}
           </span>
         </template>
-        <span v-else class="ml-auto shrink-0 text-[11px] text-muted">
-          {{ dialogs[`role.${member.role}`] }}
-        </span>
+        <template v-else>
+          <button
+            v-if="canOperate"
+            type="button"
+            class="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] border border-muted bg-panel data-[selected]:border-accent data-[selected]:bg-accent"
+            :data-selected="member.selected || undefined"
+            :aria-label="dialogs['team.selectMember']"
+            data-test-id="team-member-check"
+            @click="toggleMemberSelected(member.id)"
+          >
+            <icon-lucide-check v-if="member.selected" class="size-2.5 text-white" />
+          </button>
+          <span v-else class="flex size-4 shrink-0 items-center justify-center" />
+
+          <img
+            v-if="member.avatar.image"
+            :src="`/api/v1/avatars/${(member.avatar.image ?? '').split('/').pop()}`"
+            class="size-6 shrink-0 rounded-full object-cover"
+            :alt="member.name"
+          />
+          <span
+            v-else
+            class="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] text-white"
+            :style="{ backgroundColor: member.avatar.bg }"
+          >
+            {{ member.avatar.char }}
+          </span>
+          <span class="min-w-0 truncate text-xs text-surface">{{ member.name }}</span>
+
+          <template v-if="canOperate">
+            <span class="ml-auto flex shrink-0 items-center gap-1">
+              <input
+                :value="member.passwordDraft"
+                type="text"
+                class="h-[22px] w-[92px] rounded-[4px] bg-panel-field px-1.5 text-[10px] text-surface outline-none placeholder:text-muted focus:bg-panel-field-hover"
+                :placeholder="dialogs['team.passwordPlaceholder']"
+                data-test-id="team-member-password"
+                @input="onPasswordInput(member.id, $event)"
+              />
+              <button
+                type="button"
+                class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+                :aria-label="dialogs['team.randomPassword']"
+                data-test-id="team-member-password-random"
+                @click="onRandomPassword(member.id)"
+              >
+                <icon-lucide-refresh-cw class="size-[11px]" />
+              </button>
+              <AppSelect
+                :model-value="member.roleDraft"
+                :options="roleOptions"
+                :ui="{ trigger: 'h-6 min-w-0 text-[11px]' }"
+                data-test-id="team-member-role"
+                @update:model-value="(value: string) => onRoleChange(member.id, value)"
+              />
+            </span>
+          </template>
+          <span v-else class="ml-auto shrink-0 text-[11px] text-muted">
+            {{ dialogs[`role.${member.role}`] }}
+          </span>
+        </template>
       </div>
     </div>
   </section>

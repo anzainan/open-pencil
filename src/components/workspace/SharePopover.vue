@@ -47,7 +47,7 @@ type MemberPerm = 'view' | 'edit' | 'none'
 interface MemberRow {
   userId: string
   name: string
-  avatar: { char: string; bg: string }
+  avatar: { char: string; bg: string; image?: string }
   permission: MemberPerm
 }
 
@@ -72,6 +72,10 @@ const members = ref<MemberRow[]>([])
 const allMembers = ref<BridgeMemberInfo[]>([])
 const memberSearch = ref('')
 const addMemberOpen = ref(false)
+const addMemberLoading = ref(false)
+
+/** owner 行（fixed：true 的服务端所有者）：置顶渲染，无权限下拉/不可移除（§1.1 ⑦）。 */
+const ownerRow = computed(() => allMembers.value.find((member) => member.fixed) ?? null)
 
 const removeDialogOpen = ref(false)
 const removeTarget = ref<MemberRow | null>(null)
@@ -117,7 +121,7 @@ const searchableMembers = computed(() => {
 const isMemberAdded = (userId: string): boolean =>
   members.value.some((member) => member.userId === userId)
 
-function avatarFor(userId: string): { char: string; bg: string } {
+function avatarFor(userId: string): { char: string; bg: string; image?: string } {
   const found = allMembers.value.find((member) => member.id === userId)
   return found?.avatar ?? { char: '?', bg: '#3B82F6' }
 }
@@ -143,10 +147,9 @@ async function load(): Promise<void> {
       linkURL.value = share.url ?? ''
     }
     const permMembers = (perm?.members ?? []) as { userId: string; permission: MemberPerm }[]
-    // owner（fixed）默认全权限：不进权限设置成员列表，也不被保存/移除（B1）。
-    const ownerId = allMembers.value.find((member) => member.fixed)?.id
+    // owner（fixed）默认全权限：不写回权限台账（服务端 owner 恒全权限），仅在列表置顶显示。
     members.value = permMembers
-      .filter((member) => member.permission !== 'none' && member.userId !== ownerId)
+      .filter((member) => member.permission !== 'none')
       .map((member) => ({
         userId: member.userId,
         permission: member.permission,
@@ -306,9 +309,19 @@ function doRemove(): void {
   withSaving(saveMembers)
 }
 
-function openAddMember(): void {
+async function openAddMember(): Promise<void> {
   memberSearch.value = ''
   addMemberOpen.value = true
+  // 每次打开重新拉取成员（与团队空间同源 GET /members）：失败给 toast 而非静默空表。
+  addMemberLoading.value = true
+  try {
+    allMembers.value = await listMembers()
+  } catch (error) {
+    console.warn('[share] add member list failed', error)
+    toast.error(dialogs.value['share.member.loadFailed'])
+  } finally {
+    addMemberLoading.value = false
+  }
 }
 
 onMounted(() => {
@@ -325,7 +338,7 @@ onMounted(() => {
       <button
         type="button"
         data-test-id="share-button"
-        class="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded px-2 text-[11px] font-medium text-surface hover:bg-hover"
+        class="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded px-2 text-[11px] font-medium bg-accent text-white hover:bg-accent/90"
       >
         <icon-lucide-share-2 class="size-3.5" />
         {{ dialogs.share }}
@@ -506,15 +519,37 @@ onMounted(() => {
               <!-- ⑥ 分隔线（§1.1） -->
               <div class="h-px w-full bg-border" />
 
-              <!-- ⑦ members（§1.1，owner 不渲染，B1） -->
+              <!-- ⑦ members（§1.1）：owner 置顶渲染，无权限下拉 -->
               <div class="flex max-h-40 flex-col gap-2.5 overflow-y-auto">
+                <div
+                  v-if="ownerRow"
+                  class="flex h-7 items-center gap-2 px-1"
+                  data-test-id="share-owner-row"
+                >
+                  <span
+                    class="flex size-6 shrink-0 items-center justify-center rounded-xl text-[10px] leading-none text-white"
+                    :style="{ backgroundColor: '#10B981' }"
+                  >
+                    {{ ownerRow.avatar.char }}
+                  </span>
+                  <span class="min-w-0 flex-1 truncate text-xs text-surface">{{ ownerRow.name }}</span>
+                  <span class="text-[11px] text-muted">{{ dialogs['share.owner'] }}</span>
+                </div>
+
                 <div
                   v-for="member in members"
                   :key="member.userId"
                   class="flex h-7 items-center gap-2 px-1"
                   data-test-id="share-member-row"
                 >
+                  <img
+                    v-if="member.avatar.image"
+                    :src="`/api/v1/avatars/${(member.avatar.image ?? '').split('/').pop()}`"
+                    class="size-6 shrink-0 rounded-xl object-cover"
+                    :alt="member.name"
+                  />
                   <span
+                    v-else
                     class="flex size-6 shrink-0 items-center justify-center rounded-xl text-[10px] leading-none text-white"
                     :style="{ backgroundColor: member.avatar.bg }"
                   >
@@ -556,7 +591,10 @@ onMounted(() => {
                   </span>
                 </div>
 
-                <div v-if="members.length === 0" class="py-3 text-center text-[11px] text-muted">
+                <div
+                  v-if="members.length === 0 && !ownerRow"
+                  class="py-3 text-center text-[11px] text-muted"
+                >
                   {{ dialogs['share.noMembers'] }}
                 </div>
               </div>
@@ -598,11 +636,24 @@ onMounted(() => {
               </span>
               <div class="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
                 <div
+                  v-if="addMemberLoading"
+                  class="py-3 text-center text-[11px] text-muted"
+                >
+                  …
+                </div>
+                <div
                   v-for="member in searchableMembers"
                   :key="member.id"
                   class="flex h-7 items-center gap-2"
                 >
+                  <img
+                    v-if="member.avatar.image"
+                    :src="`/api/v1/avatars/${(member.avatar.image ?? '').split('/').pop()}`"
+                    class="size-[22px] shrink-0 rounded-[11px] object-cover"
+                    :alt="member.name"
+                  />
                   <span
+                    v-else
                     class="flex size-[22px] shrink-0 items-center justify-center rounded-[11px] text-[10px] leading-none text-white"
                     :style="{ backgroundColor: member.avatar.bg }"
                   >
@@ -625,9 +676,30 @@ onMounted(() => {
                     {{ dialogs['share.member.added'] }}
                   </span>
                 </div>
-                <div v-if="searchableMembers.length === 0" class="py-3 text-center text-[11px] text-muted">
+                <div
+                  v-if="searchableMembers.length === 0 && !addMemberLoading"
+                  class="py-3 text-center text-[11px] text-muted"
+                >
                   {{ dialogs.noResults }}
                 </div>
+              </div>
+              <div class="mt-auto flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  class="h-7 cursor-pointer rounded border border-border px-3 text-[11px] text-surface hover:bg-hover"
+                  data-test-id="share-collab-close"
+                  @click="addMemberOpen = false"
+                >
+                  {{ dialogs['share.collabClose'] }}
+                </button>
+                <button
+                  type="button"
+                  class="flex h-7 cursor-pointer items-center rounded bg-accent px-3 text-[11px] font-medium text-white hover:bg-accent/90"
+                  data-test-id="share-collab-done"
+                  @click="addMemberOpen = false"
+                >
+                  {{ dialogs['share.collabDone'] }}
+                </button>
               </div>
             </div>
           </template>

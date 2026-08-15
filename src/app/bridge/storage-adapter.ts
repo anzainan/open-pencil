@@ -6,8 +6,13 @@ import type {
   StorageProviderRuntime
 } from '@/app/integrations/storage/types'
 
+/** 文件名去扩展名（.fig/.pen）：首页/文件夹/回收站统一剥后缀。 */
+export function stripFileExtension(name: string): string {
+  return name.replace(/\.(fig|pen)$/i, '')
+}
+
 function displayName(file: BridgeFileInfo): string {
-  return file.name.replace(/\.(fig|pen)$/i, '')
+  return stripFileExtension(file.name)
 }
 
 /**
