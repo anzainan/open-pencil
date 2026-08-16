@@ -62,7 +62,8 @@ const removeConfirmText = computed(() => {
 })
 
 onMounted(() => {
-  if (!teamMembersLoaded.value) void loadTeamMembers().catch((error) => {
+  // 每次面板挂载都重拉成员列表（会话内头像/密码变更即时刷新；列表小，代价可忽略）。
+  void loadTeamMembers().catch((error) => {
     console.warn('[team] load failed', error)
   })
 })
@@ -77,7 +78,10 @@ function onRandomPassword(id: string): void {
 }
 
 function onCopyPassword(member: { id: string; passwordDraft: string }): void {
-  if (!member.passwordDraft) return
+  if (!member.passwordDraft) {
+    toast.error(dialogs.value['share.password.missing'])
+    return
+  }
   copyText(member.passwordDraft)
   toast.info(dialogs.value['team.addCopied'])
 }
@@ -252,9 +256,10 @@ async function confirmRemove(): Promise<void> {
               />
               <button
                 type="button"
-                class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+                class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface disabled:cursor-not-allowed disabled:opacity-40"
                 :aria-label="dialogs['share.password.copy']"
                 data-test-id="team-member-password-copy"
+                :disabled="!member.passwordDraft"
                 @click="onCopyPassword(member)"
               >
                 <icon-lucide-copy class="size-[11px]" />

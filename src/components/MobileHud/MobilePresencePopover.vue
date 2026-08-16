@@ -2,17 +2,20 @@
 import { tv } from 'tailwind-variants'
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
 
-import { initials } from '@/app/shell/ui'
 import { colorToCSS } from '@open-pencil/core/color'
 import { useMobileHudContext } from '@/components/MobileHud/context'
+import AvatarImage from '@/components/ui/AvatarImage.vue'
+import { initials } from '@/app/shell/ui'
 import collaborationTheme from '@/theme/collaboration'
 
 const hud = useMobileHudContext()
 const collaboration = tv(collaborationTheme)
 const styles = collaboration({ size: 'md' })
 
-function peerAvatarClass(following: boolean) {
-  return collaboration({ size: 'md', following }).avatar()
+/** 在线头像样式：与 collaboration theme size=md + following(ring) 对齐。 */
+function avatarImageClass(following: boolean): string {
+  const base = 'size-7 rounded-full'
+  return following ? `${base} ring-2 ring-white/40` : base
 }
 </script>
 
@@ -37,12 +40,14 @@ function peerAvatarClass(following: boolean) {
         </div>
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
-            <div
-              :class="styles.avatar()"
-              :style="{ background: colorToCSS(hud.collabState.localColor) }"
-            >
-              {{ initials(hud.collabState.localName || 'You') }}
-            </div>
+            <AvatarImage
+              :image="hud.localAvatar?.image"
+              :alt="hud.collabState.localName || 'You'"
+              :bg="colorToCSS(hud.collabState.localColor)"
+              :char="hud.localAvatar?.char ?? initials(hud.collabState.localName || 'You')"
+              :img-class="avatarImageClass(false)"
+              :char-class="avatarImageClass(false)"
+            />
             <span class="min-w-0 flex-1 truncate text-xs text-surface">
               {{ hud.collabState.localName || 'You' }}
             </span>
@@ -56,12 +61,14 @@ function peerAvatarClass(following: boolean) {
             :class="styles.peerRow()"
             @click="hud.toggleFollowPeer(peer.clientId)"
           >
-            <div
-              :class="[peerAvatarClass(hud.followingPeer === peer.clientId), styles.peerAvatar()]"
-              :style="{ background: colorToCSS(peer.color) }"
-            >
-              {{ initials(peer.name) }}
-            </div>
+            <AvatarImage
+              :image="peer.avatar?.image"
+              :alt="peer.name"
+              :bg="peer.avatar?.bg ?? colorToCSS(peer.color)"
+              :char="peer.avatar?.char ?? initials(peer.name)"
+              :img-class="avatarImageClass(hud.followingPeer === peer.clientId)"
+              :char-class="avatarImageClass(hud.followingPeer === peer.clientId)"
+            />
             <span class="min-w-0 flex-1 truncate text-xs text-surface">{{ peer.name }}</span>
             <span v-if="hud.followingPeer === peer.clientId" class="text-[10px] text-accent">
               following

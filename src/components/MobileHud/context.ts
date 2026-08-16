@@ -1,6 +1,6 @@
 import { useClipboard } from '@vueuse/core'
 import { computed, inject, provide, proxyRefs } from 'vue'
-import type { InjectionKey, ShallowUnwrapRef } from 'vue'
+import type { InjectionKey, Ref, ShallowUnwrapRef } from 'vue'
 import { useRouter } from 'vue-router'
 import IconFilePlus from '~icons/lucide/file-plus'
 import IconFolderOpen from '~icons/lucide/folder-open'
@@ -15,12 +15,22 @@ import { useEditorStore } from '@/app/editor/active-store'
 import { toolIcons } from '@/app/editor/icons'
 import { openFileDialog } from '@/app/shell/menu/use'
 import { toast } from '@/app/shell/ui'
+import { currentUser } from '@/app/auth/session'
+import type { BridgePresenceUser } from '@/app/bridge/client'
+import { hashUserId, type PresenceAvatar } from '@/components/CollabPanel/context'
 import type { ToolbarActionItem } from '@/components/Toolbar/types'
 import { getShareURL } from '@/constants'
 
 type MenuAction = ToolbarActionItem
 
-function createMobileHudContext() {
+/** 在线头像栈底色兜底（presence avatar.bg 缺失时）。 */
+const PRESENCE_FALLBACK_COLOR = '#10B981'
+
+function avatarFor(name: string, bg: string, image?: string): PresenceAvatar {
+  return { char: (name.trim().charAt(0) || '?').toUpperCase(), bg, image }
+}
+
+function createMobileHudContext(onlineUsers?: Ref<BridgePresenceUser[]>) {
   const router = useRouter()
   const collab = useCollabInjected()
   const store = useEditorStore()
@@ -29,9 +39,26 @@ function createMobileHudContext() {
   const { getCommand } = useEditorCommands()
 
   const collabState = computed(() => collab?.state.value ?? DEFAULT_COLLAB_STATE)
-  const collabPeers = computed(() => collab?.remotePeers.value ?? [])
+  // Yjs 房间 peers 兜底 + 按 clientId（userId hash）合并 presence 头像（无匹配回落字符+色块）。
+  const collabPeers = computed(() =>
+    (collab?.remotePeers.value ?? []).map((peer) => {
+      const presence = (onlineUsers?.value ?? []).find(
+        (user) => hashUserId(user.userId) === peer.clientId
+      )
+      const avatar = presence
+        ? avatarFor(presence.name, presence.avatar.bg || PRESENCE_FALLBACK_COLOR, presence.avatar.image)
+        : avatarFor(peer.name, PRESENCE_FALLBACK_COLOR)
+      return { ...peer, avatar }
+    })
+  )
   const followingPeer = computed(() => collab?.followingPeer.value ?? null)
   const onlineCount = computed(() => collabPeers.value.length + 1)
+  // 本地身份头像（当前登录账号 avatar；未登录回落匿名 initials）。
+  const localAvatar = computed(() => {
+    const user = currentUser.value
+    if (!user) return avatarFor(collabState.value.localName || 'You', PRESENCE_FALLBACK_COLOR)
+    return avatarFor(user.name, user.avatar.bg || PRESENCE_FALLBACK_COLOR, user.avatar.image)
+  })
   const activeToolIcon = computed(() => toolIcons[store.state.activeTool])
   const actionToast = computed(() => store.state.actionToast)
 
@@ -78,6 +105,7 @@ function createMobileHudContext() {
     dialogs,
     collabState,
     collabPeers,
+    localAvatar,
     followingPeer,
     onlineCount,
     activeToolIcon,
@@ -95,8 +123,8 @@ export type MobileHudContext = ShallowUnwrapRef<ReturnType<typeof createMobileHu
 
 const MOBILE_HUD_KEY: InjectionKey<MobileHudContext> = Symbol('MobileHudContext')
 
-export function provideMobileHud() {
-  const ctx = proxyRefs(createMobileHudContext())
+export function provideMobileHud(onlineUsers?: Ref<BridgePresenceUser[]>) {
+  const ctx = proxyRefs(createMobileHudContext(onlineUsers))
   provide(MOBILE_HUD_KEY, ctx)
   return ctx
 }

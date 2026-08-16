@@ -326,6 +326,8 @@
   "share.password.reset": "Attiva · aggiorna per resettare",
   "share.password.title": "Password richiesta",
   "share.password.placeholder": "Inserisci la password",
+  "share.password.recoverHint": "La password originale non può essere recuperata. Reimpostala una volta e rimarrà visibile in modo permanente.",
+  "share.password.missing": "Imposta prima una password",
   "share.password.wrong": "Password errata. Riprova.",
   "share.password.submit": "Apri",
   "share.addMember": "Aggiungi membro",

@@ -15,6 +15,9 @@ import { authHeader } from '@/app/bridge/client'
 export function useAvatarURL(relImage: MaybeRefOrGetter<string | null | undefined>) {
   const avatarURL = ref<string | null>(null)
   let currentObjectURL: string | null = null
+  // 请求序号守卫：同一组件快速换 image（如上传同名覆盖、成员列表刷新）时，
+  // 丢弃过期响应，防止旧 objectURL 覆盖新头像（C3 竞态）。
+  let requestSeq = 0
 
   function revoke(): void {
     if (currentObjectURL) {
@@ -26,6 +29,7 @@ export function useAvatarURL(relImage: MaybeRefOrGetter<string | null | undefine
   async function load(): Promise<void> {
     const image = toValue(relImage)
     const fileName = image?.split('/').pop()
+    const seq = ++requestSeq
     if (!fileName) {
       revoke()
       avatarURL.value = null
@@ -36,16 +40,19 @@ export function useAvatarURL(relImage: MaybeRefOrGetter<string | null | undefine
     if (auth) headers.Authorization = auth
     try {
       const response = await fetch(`/api/v1/avatars/${encodeURIComponent(fileName)}`, { headers })
+      if (seq !== requestSeq) return
       if (!response.ok) {
         revoke()
         avatarURL.value = null
         return
       }
       const blob = await response.blob()
+      if (seq !== requestSeq) return
       revoke()
       currentObjectURL = URL.createObjectURL(blob)
       avatarURL.value = currentObjectURL
     } catch (error) {
+      if (seq !== requestSeq) return
       console.warn('[avatar] load failed', error)
       revoke()
       avatarURL.value = null

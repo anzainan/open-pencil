@@ -326,6 +326,8 @@
   "share.password.reset": "Activada · actualizar para restablecer",
   "share.password.title": "Se requiere contraseña",
   "share.password.placeholder": "Introduce la contraseña",
+  "share.password.recoverHint": "La contraseña original no se puede recuperar. Restablécela una vez y permanecerá visible para siempre.",
+  "share.password.missing": "Establece una contraseña primero",
   "share.password.wrong": "Contraseña incorrecta. Inténtalo de nuevo.",
   "share.password.submit": "Abrir",
   "share.addMember": "Añadir miembro",

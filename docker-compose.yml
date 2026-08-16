@@ -23,6 +23,9 @@ services:
       DESIGN_ROOT: /data/design
       STATE_DIR: /data/state
       BRIDGE_TOKEN: ${BRIDGE_TOKEN:-changeme}
+      # 密码明文副本加密 key（ARCH-usersys-pw-disappear §7.2①）：必须在软路由 .env 写入强随机 key
+      # 并注入容器，否则加密副本永不落盘（根因 B）。定稿后不得轮换（轮换 = 存量密文全废）。
+      PASSWORD_ENC_KEY: ${PASSWORD_ENC_KEY:-}
       # 开启浏览器内存级实时协作：MCP server（@open-pencil/mcp）随容器启动，
       # file-bridge 把 /mcp /rpc /health /ws 反代到同源；AI/浏览器共用此 token。
       # 置空则保持旧行为（/mcp 仍是 file-bridge 自带桥接工具）。

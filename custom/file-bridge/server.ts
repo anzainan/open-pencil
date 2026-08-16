@@ -907,11 +907,23 @@ export function startServer(options: BridgeServerOptions) {
     if (!matchesImageSignature(ext, bytes)) {
       return json({ ok: false, error: 'image signature does not match extension' }, 400)
     }
-    const fileName = `${user.id}.${ext === 'jpeg' ? 'jpg' : ext}`
+    // 文件名带版本号（userId-mtime）：同名覆盖重传时 relPath 变化 → 前端 useAvatarURL watch 天然触发重拉
+    // （否则同 ext 覆盖路径不变，旧 objectURL 不失效，见 ARCH-usersys-pw-disappear §6.2b/C3）。
+    const fileName = `${user.id}-${Date.now()}.${ext === 'jpeg' ? 'jpg' : ext}`
+    const oldRel = user.avatar?.image
     const avatarDir = join(designRoot, OPENPENCIL_REL_DIR, AVATAR_REL_DIR)
     try {
       mkdirSync(avatarDir, { recursive: true })
       await Bun.write(join(avatarDir, fileName), bytes)
+      // 清理旧头像文件（防同一用户多次上传堆积；仅删本人头像目录内文件）。
+      if (oldRel && oldRel.startsWith(`${AVATAR_REL_DIR}/`) && oldRel !== `${AVATAR_REL_DIR}/${fileName}`) {
+        const oldFile = join(designRoot, OPENPENCIL_REL_DIR, oldRel)
+        const rootResolved = resolve(avatarDir)
+        const fullResolved = resolve(oldFile)
+        if (fullResolved.startsWith(rootResolved + sep) && existsSync(fullResolved) && !isDirectory(fullResolved)) {
+          rmSync(fullResolved, { force: true })
+        }
+      }
     } catch (error) {
       return json({ ok: false, error: `write failed: ${String(error)}` }, 500)
     }

@@ -30,8 +30,11 @@ export interface PublicUser {
   avatar: { char: string; bg: string; image?: string }
   email: string
   createdAt: string
-  /** 明文密码（仅 admin 调用方 + 非 owner 成员可见；其余场景不出现）。 */
-  password?: string
+  /**
+   * 明文密码（仅 admin 调用方 + 非 owner 成员可见；其余场景不出现）。
+   * 序列化恒输出：无明文副本 → null（区别于字段缺省 → 整键省略）。
+   */
+  password?: string | null
   /** 所有者固定标记：无复选框/无密码/不可移除（REQ §2.5）。 */
   fixed?: boolean
 }
@@ -203,7 +206,9 @@ export class AuthStore {
       createdAt: user.createdAt
     }
     if (withPassword && !this.isOwner(user.id)) {
-      publicUser.password = decryptPassword(user.passwordCipher) ?? undefined
+      // `?? null` 而非 undefined：JSON 序列化恒输出 password:null（无明文副本），
+      // 与分享侧字段约定对齐（缺键 = 未授权，null = 无副本），前端可区分并提示自愈。
+      publicUser.password = decryptPassword(user.passwordCipher) ?? null
     }
     if (this.isOwner(user.id)) publicUser.fixed = true
     return publicUser
@@ -219,7 +224,18 @@ export class AuthStore {
     const user = this.users.find((candidate) => candidate.name === normalized)
     if (!user) return null
     const expected = hashPassword(password, user.passwordSalt)
-    return this.safeEqual(expected, user.passwordHash) ? user : null
+    if (!this.safeEqual(expected, user.passwordHash)) return null
+    // 存量自愈（根因 C）：哈希验证成功后，若缺明文副本且有 key 可加密（PASSWORD_ENC_KEY 在位），
+    // 用拿到的已验证明文补写副本并落盘 —— 旧成员下次登录一次即永久可回显，不改密码不打断登录。
+    // 无 key / 已有副本 → 静默跳过（不降级不报错）；scrypt 哈希验证链路零改动。
+    if (user.passwordCipher == null) {
+      const cipher = encryptPassword(password)
+      if (cipher) {
+        user.passwordCipher = cipher
+        this.persistUsers()
+      }
+    }
+    return user
   }
 
   private safeEqual(a: string, b: string): boolean {

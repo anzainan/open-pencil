@@ -189,7 +189,12 @@ async function load(): Promise<void> {
 }
 
 function withSaving(fn: () => Promise<void>): Promise<void> {
-  if (saving.value || !documentPath.value) return Promise.resolve()
+  if (!documentPath.value) return Promise.resolve()
+  // 保存中到达的新任务不再静默丢弃（根因 D）：记下最新任务，当前任务结束后重放（Last-Write-Wins）。
+  if (saving.value) {
+    pendingSaveTask = fn
+    return Promise.resolve()
+  }
   saving.value = true
   return fn()
     .then(() => {
@@ -203,6 +208,9 @@ function withSaving(fn: () => Promise<void>): Promise<void> {
     })
     .finally(() => {
       saving.value = false
+      const next = pendingSaveTask
+      pendingSaveTask = null
+      if (next) void withSaving(next)
     })
 }
 
@@ -214,6 +222,8 @@ async function saveScopeAndPermission(): Promise<void> {
   })
   // 先应用链接态（saveShare 返回的 url），再独立保存文件级权限：
   // permissions 偶发失败只 toast，不影响「复制链接」可用性（切到 internet 后必亮）。
+  // 过期响应（保存期间 scope 又切走）不覆盖链接态；串行队列保证最后一次保存与最终 scope 一致，
+  // 即停在 internet 时 applyLink 必执行（最终态不丢）。
   if (scope.value === requested) applyLink(link)
   await saveFilePermissions(documentPath.value, { scope: requested })
 }
@@ -227,6 +237,8 @@ function applyLink(link: BridgeShareSettings): void {
 
 // 访问范围保存串行队列：快速连切不静默丢弃，最后一次以最新 scope 落地。
 let scopeSaveTail: Promise<void> = Promise.resolve()
+/** withSaving 早退时暂存的最新任务（当前任务结束后重放，防并发保存把请求静默丢掉）。 */
+let pendingSaveTask: (() => Promise<void>) | null = null
 
 function enqueueScopeSave(): void {
   scopeSaveTail = scopeSaveTail
@@ -250,9 +262,44 @@ function changePermission(): void {
   })
 }
 
-function copyLink(): void {
-  if (!linkURL.value) return
-  copyText(linkURL.value)
+/**
+ * F3 复制内容（2026-08-16 14:00 拍板定稿）：
+ * - 密码已开启且回显明文：`{当前用户名}邀请你加入{文件名}，访问链接：{链接}，访问密码：{密码}`
+ * - 密码未开启 / 无明文副本：纯链接
+ */
+function buildShareText(url: string): string {
+  const passwordText = passwordEnabled.value ? password.value : ''
+  if (passwordText) {
+    const fileName = documentPath.value.split('/').pop() || documentPath.value
+    const userName = currentUser.value?.name || ''
+    return `${userName}邀请你加入${fileName}，访问链接：${url}，访问密码：${passwordText}`
+  }
+  return url
+}
+
+async function copyLink(): Promise<void> {
+  let url = linkURL.value
+  // F3：任何状态必亮可点；url 为空（非 internet 范围 / 保存未生效）→ 点击自动切 internet 生成链接再复制。
+  if (!url || scope.value !== 'internet') {
+    try {
+      const link = await saveShare(documentPath.value, {
+        scope: 'internet',
+        permission: permission.value
+      })
+      scope.value = 'internet'
+      applyLink(link)
+      url = linkURL.value
+    } catch (error) {
+      console.warn('[share] copy link generate failed', error)
+      toast.error(dialogs.value['share.saveFailed'])
+      return
+    }
+  }
+  if (!url) {
+    toast.error(dialogs.value['share.saveFailed'])
+    return
+  }
+  copyText(buildShareText(url))
   toast.info(dialogs.value['share.copySuccess'])
 }
 
@@ -313,7 +360,10 @@ function commitPasswordInputAction(): void {
 }
 
 function copyPassword(): void {
-  if (!password.value) return
+  if (!password.value) {
+    toast.error(dialogs.value['share.password.missing'])
+    return
+  }
   copyText(password.value)
   toast.info(dialogs.value['share.copySuccess'])
 }
@@ -497,12 +547,12 @@ onMounted(() => {
                 </SelectRoot>
               </div>
 
-              <!-- ③ copy-btn（§1.1）：蓝底复制链接 -->
+              <!-- ③ copy-btn（§1.1）：蓝底复制链接。F3：任何状态必亮可点（不再按 linkURL 置灰）；
+                  空链接/非 internet 点击时自动切 internet 生成链接再复制（copyLink 兜底）。 -->
               <button
                 v-if="canEdit"
                 type="button"
-                class="flex h-8 w-full cursor-pointer items-center justify-center gap-1.5 rounded bg-accent text-xs font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
-                :disabled="!linkURL"
+                class="flex h-8 w-full cursor-pointer items-center justify-center gap-1.5 rounded bg-accent text-xs font-medium text-white hover:bg-accent/90"
                 data-test-id="share-copy-link"
                 @click="copyLink"
               >
@@ -540,7 +590,11 @@ onMounted(() => {
                       :aria-label="dialogs['share.password.enable']"
                       data-test-id="share-password-input"
                       class="h-6 w-[104px] rounded bg-panel-field px-2 font-mono text-[11px] text-surface outline-none placeholder:text-muted/50 focus:bg-panel-field-hover"
-                      :placeholder="dialogs['share.password.placeholder']"
+                      :placeholder="
+                        passwordEnabled && !password
+                          ? dialogs['share.password.recoverHint']
+                          : dialogs['share.password.placeholder']
+                      "
                       @input="canEdit && onPasswordInput"
                       @blur="canEdit && commitPasswordInputAction"
                       @keydown.enter.prevent="canEdit && commitPasswordInputAction"
@@ -556,9 +610,10 @@ onMounted(() => {
                     </button>
                     <button
                       type="button"
-                      class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
+                      class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-hover hover:text-surface disabled:cursor-not-allowed disabled:opacity-40"
                       :aria-label="dialogs['share.password.copy']"
                       data-test-id="share-password-copy"
+                      :disabled="!password"
                       @click="copyPassword"
                     >
                       <icon-lucide-copy class="size-[13px]" />
@@ -588,12 +643,14 @@ onMounted(() => {
                   class="flex h-7 items-center gap-2 px-1"
                   data-test-id="share-owner-row"
                 >
-                  <span
-                    class="flex size-6 shrink-0 items-center justify-center rounded-xl text-[10px] leading-none text-white"
-                    :style="{ backgroundColor: '#10B981' }"
-                  >
-                    {{ ownerRow.avatar.char }}
-                  </span>
+                  <AvatarImage
+                    :image="ownerRow.avatar.image"
+                    :alt="ownerRow.name"
+                    bg="#10B981"
+                    :char="ownerRow.avatar.char"
+                    img-class="size-6 shrink-0 rounded-xl object-cover"
+                    char-class="size-6 rounded-xl text-[10px] leading-none"
+                  />
                   <span class="min-w-0 flex-1 truncate text-xs text-surface">{{ ownerRow.name }}</span>
                   <span class="text-[11px] text-muted">{{ dialogs['share.owner'] }}</span>
                 </div>

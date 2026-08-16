@@ -8,8 +8,8 @@ export interface BridgeMemberInfo {
   avatar: { char: string; bg: string; image?: string }
   email: string
   createdAt: string
-  /** 明文密码（仅 admin/owner 调用方可见，且 owner 固定行不含）。 */
-  password?: string
+  /** 明文密码（仅 admin/owner 调用方可见，且 owner 固定行不含；无明文副本 → null）。 */
+  password?: string | null
   fixed?: boolean
 }
 

@@ -304,7 +304,7 @@ onUnmounted(() => {
     >
       <div class="relative flex min-w-0 flex-1">
         <EditorCanvas />
-        <MobileHud />
+        <MobileHud :online-users="onlineUsers" />
         <Toolbar />
       </div>
       <MobileDrawer />

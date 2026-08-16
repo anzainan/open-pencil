@@ -326,6 +326,8 @@
   "share.password.reset": "Aktiviert · aktualisieren zum Zurücksetzen",
   "share.password.title": "Passwort erforderlich",
   "share.password.placeholder": "Passwort eingeben",
+  "share.password.recoverHint": "Das ursprüngliche Passwort kann nicht wiederhergestellt werden. Einmal zurücksetzen, danach bleibt es dauerhaft sichtbar.",
+  "share.password.missing": "Bitte zuerst ein Passwort festlegen",
   "share.password.wrong": "Falsches Passwort. Bitte erneut versuchen.",
   "share.password.submit": "Öffnen",
   "share.addMember": "Mitglied hinzufügen",

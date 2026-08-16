@@ -326,6 +326,8 @@
   "share.password.reset": "Activé · actualiser pour réinitialiser",
   "share.password.title": "Mot de passe requis",
   "share.password.placeholder": "Saisir le mot de passe",
+  "share.password.recoverHint": "Le mot de passe d’origine ne peut pas être récupéré. Réinitialisez-le une fois et il restera visible en permanence.",
+  "share.password.missing": "Définissez d’abord un mot de passe",
   "share.password.wrong": "Mot de passe incorrect. Veuillez réessayer.",
   "share.password.submit": "Ouvrir",
   "share.addMember": "Ajouter un membre",

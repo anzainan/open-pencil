@@ -326,6 +326,8 @@
   "share.password.reset": "Включён · обновить для сброса",
   "share.password.title": "Требуется пароль",
   "share.password.placeholder": "Введите пароль",
+  "share.password.recoverHint": "Исходный пароль восстановить невозможно. Сбросьте его один раз, и он останется видимым навсегда.",
+  "share.password.missing": "Сначала установите пароль",
   "share.password.wrong": "Неверный пароль. Попробуйте ещё раз.",
   "share.password.submit": "Открыть",
   "share.addMember": "Добавить участника",

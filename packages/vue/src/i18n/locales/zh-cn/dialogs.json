@@ -326,6 +326,8 @@
   "share.password.reset": "已开启 · 刷新重置密码",
   "share.password.title": "需要密码",
   "share.password.placeholder": "请输入密码",
+  "share.password.recoverHint": "原密码无法恢复，重设一次后永久显示",
+  "share.password.missing": "请先设置密码",
   "share.password.wrong": "密码错误，请重试",
   "share.password.submit": "打开",
   "share.addMember": "添加成员",

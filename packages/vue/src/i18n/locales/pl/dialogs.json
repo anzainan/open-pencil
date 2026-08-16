@@ -326,6 +326,8 @@
   "share.password.reset": "Włączone · odśwież, aby zresetować",
   "share.password.title": "Wymagane hasło",
   "share.password.placeholder": "Wpisz hasło",
+  "share.password.recoverHint": "Oryginalne hasło nie może zostać odzyskane. Zresetuj je raz, a pozostanie trwale widoczne.",
+  "share.password.missing": "Najpierw ustaw hasło",
   "share.password.wrong": "Nieprawidłowe hasło. Spróbuj ponownie.",
   "share.password.submit": "Otwórz",
   "share.addMember": "Dodaj członka",

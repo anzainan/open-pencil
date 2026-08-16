@@ -296,6 +296,9 @@ export const dialogMessageDefaults = {
   'share.password.reset': 'On · refresh to reset',
   'share.password.title': 'Password required',
   'share.password.placeholder': 'Enter password',
+  'share.password.recoverHint':
+    'Original password cannot be recovered. Reset once and it will stay visible permanently.',
+  'share.password.missing': 'Please set a password first',
   'share.password.wrong': 'Wrong password. Please try again.',
   'share.password.submit': 'Open',
   'share.addMember': 'Add member',

@@ -326,6 +326,8 @@
   "share.password.reset": "有効 · リセットは更新",
   "share.password.title": "パスワードが必要です",
   "share.password.placeholder": "パスワードを入力",
+  "share.password.recoverHint": "元のパスワードは復元できません。一度リセットすると永久に表示されます。",
+  "share.password.missing": "先にパスワードを設定してください",
   "share.password.wrong": "パスワードが違います。もう一度お試しください。",
   "share.password.submit": "開く",
   "share.addMember": "メンバーを追加",
