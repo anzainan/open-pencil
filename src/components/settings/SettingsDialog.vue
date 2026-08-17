@@ -11,7 +11,7 @@ import {
   settingsDialogSection,
   settingsDirty
 } from '@/app/settings/dialog'
-import { commitPendingMembers, discardPendingMembers, loadTeamMembers } from '@/app/settings/team-store'
+import { commitPendingMembers, discardPendingMembers, ensureLoad } from '@/app/settings/team-store'
 import { toast } from '@/app/shell/ui'
 import ProfileSettingsPanel from '@/components/settings/profile/ProfileSettingsPanel.vue'
 import StockPhotoKeysSection from '@/components/settings/provider/StockPhotoKeysSection.vue'
@@ -30,8 +30,9 @@ const saving = ref(false)
 function onOpenChange(open: boolean): void {
   if (open) {
     settingsDialogOpen.value = true
-    // 打开即刷新团队成员（跨会话成员可能变化）；失败静默（面板首次挂载也会兜底拉取）。
-    void loadTeamMembers().catch(() => undefined)
+    // 打开即刷新团队成员（跨会话成员可能变化）；ensureLoad 与面板挂载共享单飞（只发一次 GET）；
+    // 失败静默（面板挂载兜底，store 失败不清空现值 + 错误标记可点击重试）。
+    void ensureLoad().catch(() => undefined)
     return
   }
   // 关闭时若有未保存更改 → 弹 UnsavedDialog 拦截，不直接关。

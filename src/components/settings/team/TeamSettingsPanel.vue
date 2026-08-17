@@ -6,12 +6,12 @@ import { DialogContent, DialogOverlay, DialogPortal, DialogRoot } from 'reka-ui'
 import { useI18n } from '@open-pencil/vue'
 
 import { isAdmin, useCurrentUser } from '@/app/auth/session'
-import { createMember } from '@/app/bridge/share'
 import { toast } from '@/app/shell/ui'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import AvatarImage from '@/components/ui/AvatarImage.vue'
 import {
-  loadTeamMembers,
+  addTeamMember,
+  ensureLoad,
   randomPassword,
   removeSelectedMembers,
   selectedCount,
@@ -19,6 +19,7 @@ import {
   setMemberPassword,
   setMemberRole,
   teamMembers,
+  teamMembersError,
   teamMembersLoaded,
   toggleMemberSelected
 } from '@/app/settings/team-store'
@@ -63,7 +64,8 @@ const removeConfirmText = computed(() => {
 
 onMounted(() => {
   // 每次面板挂载都重拉成员列表（会话内头像/密码变更即时刷新；列表小，代价可忽略）。
-  void loadTeamMembers().catch((error) => {
+  // ensureLoad 单飞去重：SettingsDialog 打开时若已在拉，本挂载共享同一请求。
+  void ensureLoad().catch((error) => {
     console.warn('[team] load failed', error)
   })
 })
@@ -90,6 +92,11 @@ function onRoleChange(id: string, value: string): void {
   setMemberRole(id, value as 'admin' | 'member')
 }
 
+/** 手动重试拉取（错误态卡片 / 空态刷新按钮）：失败静默，错误标记已由 store 置位。 */
+function retryLoad(): void {
+  void ensureLoad().catch(() => undefined)
+}
+
 function openAdd(): void {
   addName.value = ''
   addPassword.value = ''
@@ -107,19 +114,25 @@ async function addAndCopy(): Promise<void> {
   const password = addPassword.value || randomPassword()
   adding.value = true
   try {
-    const { user } = await createMember({ name, password, role: addRole.value })
+    const result = await addTeamMember({ name, password, role: addRole.value })
+    if (!result.ok) {
+      toast.error(dialogs.value['team.addFailed'])
+      return
+    }
     // 明文由服务端明文副本承载（GET /members admin 下发），刷新后行内默认显示。
-    const roleLabel = addRole.value === 'admin' ? dialogs.value['role.admin'] : dialogs.value['role.member']
-    copyText(`${user.name} / ${password} / ${roleLabel}`)
+    const roleLabel =
+      addRole.value === 'admin' ? dialogs.value['role.admin'] : dialogs.value['role.member']
+    copyText(`${result.user.name} / ${password} / ${roleLabel}`)
     toast.info(dialogs.value['team.addCopied'])
     addOpen.value = false
-    await loadTeamMembers()
-  } catch (error) {
-    console.warn('[team] add member failed', error)
-    toast.error(dialogs.value['team.addFailed'])
   } finally {
     adding.value = false
   }
+  // 走到这里 = createMember 已成功（失败分支已 return）。列表刷新独立于添加结果：
+  // 刷新失败只提示「列表刷新失败」，绝不误报「添加成员失败」（成员已创建，不重复创建）。
+  void ensureLoad().catch(() => {
+    toast.error(dialogs.value['team.listRefreshFailed'])
+  })
 }
 
 function openRemove(): void {
@@ -163,7 +176,21 @@ async function confirmRemove(): Promise<void> {
         <p class="truncate text-[13px] font-medium text-surface" data-test-id="team-card-name">
           {{ teamName }}
         </p>
-        <p class="text-[10px] text-muted" data-test-id="team-card-count">
+        <p
+          v-if="teamMembersError"
+          class="text-[10px]"
+          data-test-id="team-card-count-error"
+        >
+          <button
+            type="button"
+            class="cursor-pointer text-[10px] text-[#EF4444] underline hover:text-[#EF4444]/80"
+            data-test-id="team-card-retry"
+            @click="retryLoad"
+          >
+            {{ dialogs['team.loadFailedRetry'] }}
+          </button>
+        </p>
+        <p v-else class="text-[10px] text-muted" data-test-id="team-card-count">
           {{ dialogs['team.memberCount']({ count: teamMembers.length }) }}
         </p>
       </div>
@@ -196,6 +223,14 @@ async function confirmRemove(): Promise<void> {
         class="py-4 text-center text-[11px] text-muted"
       >
         {{ dialogs['team.noMembers'] }}
+        <button
+          type="button"
+          class="ml-2 cursor-pointer text-accent underline hover:text-accent/80"
+          data-test-id="team-empty-refresh"
+          @click="retryLoad"
+        >
+          {{ dialogs.refresh }}
+        </button>
       </div>
 
       <div

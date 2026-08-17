@@ -281,6 +281,8 @@ async function copyLink(): Promise<void> {
   let url = linkURL.value
   // F3：任何状态必亮可点；url 为空（非 internet 范围 / 保存未生效）→ 点击自动切 internet 生成链接再复制。
   if (!url || scope.value !== 'internet') {
+    // F3 保底：已有 url 即便 scope≠internet 也先复制纯链接（外链可访问性可能已失效，但内容不丢）。
+    if (url) copyText(buildShareText(url))
     try {
       const link = await saveShare(documentPath.value, {
         scope: 'internet',
@@ -291,12 +293,15 @@ async function copyLink(): Promise<void> {
       url = linkURL.value
     } catch (error) {
       console.warn('[share] copy link generate failed', error)
-      toast.error(dialogs.value['share.saveFailed'])
+      // 独立文案而非泛化的「保存失败」；再触发 load() 刷新 share 真值，防状态漂移残留。
+      void load()
+      toast.error(dialogs.value['share.copyLinkGenerateFailed'])
       return
     }
   }
   if (!url) {
-    toast.error(dialogs.value['share.saveFailed'])
+    void load()
+    toast.error(dialogs.value['share.copyLinkGenerateFailed'])
     return
   }
   copyText(buildShareText(url))

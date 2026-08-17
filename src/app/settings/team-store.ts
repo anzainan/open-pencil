@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 
 import {
+  createMember,
   deleteMember,
   listMembers,
   updateMember,
@@ -36,6 +37,13 @@ export function randomPassword(): string {
 
 export const teamMembers = computed(() => members.value)
 export const teamMembersLoaded = computed(() => loaded.value)
+/** 最近一次拉取是否失败（失败不清空已载列表；UI 据此显示「加载失败·点击重试」）。 */
+export const teamMembersError = ref(false)
+
+/** 请求序列号：过期响应（期间又有新请求）不覆盖新值，防双拉竞态 Last-Write-Wins 覆盖。 */
+let seq = 0
+/** 单飞锁：in-flight 时共享同一 Promise（SettingsDialog 与面板双拉只发一次 GET）。 */
+let inFlight: Promise<void> | null = null
 
 export const pendingCount = computed(() =>
   members.value.filter((member) => member.passwordTouched || member.roleTouched).length
@@ -65,10 +73,53 @@ function toDraft(member: BridgeMemberInfo): TeamMemberDraft {
 
 /** 拉取真实成员列表（GET /members；owner 行 fixed:true）。 */
 export async function loadTeamMembers(): Promise<void> {
-  const list = await listMembers()
-  members.value = list.map(toDraft)
-  loaded.value = true
-  syncDirty()
+  const run = ++seq
+  try {
+    const list = await listMembers()
+    // 过期响应（期间已有更新的拉取）不覆盖新值。
+    if (seq !== run) return
+    members.value = list.map(toDraft)
+    loaded.value = true
+    teamMembersError.value = false
+    syncDirty()
+  } catch (error) {
+    // 失败不清空已载列表（仅置错误标记供 UI 提示重试），且只有最新请求失败才置标记。
+    if (seq === run) teamMembersError.value = true
+    throw error
+  }
+}
+
+/**
+ * 单飞去重的加载入口：in-flight 时共享同一 Promise（SettingsDialog 与面板双拉去重，
+ * 只发一次 GET）；失败/成功后锁自动释放，可再次触发重试。
+ */
+export function ensureLoad(): Promise<void> {
+  if (inFlight) return inFlight
+  inFlight = loadTeamMembers().finally(() => {
+    if (inFlight) inFlight = null
+  })
+  return inFlight
+}
+
+export type AddTeamMemberOutcome = { ok: true; user: BridgeMemberInfo } | { ok: false }
+
+/**
+ * 添加成员并复制凭据（「添加并复制」核）：createMember 成功即成功、失败才算失败。
+ * 列表刷新由调用方在成功后再做（ensureLoad），其失败独立提示（team.listRefreshFailed）——
+ * 绝不能再落入「添加成员失败」分支（POST 成功 + 刷新失败曾误报，成员其实已创建）。
+ */
+export async function addTeamMember(input: {
+  name: string
+  password: string
+  role: 'admin' | 'member'
+}): Promise<AddTeamMemberOutcome> {
+  try {
+    const { user } = await createMember(input)
+    return { ok: true, user }
+  } catch (error) {
+    console.warn('[team] add member failed', error)
+    return { ok: false }
+  }
 }
 
 /** 设置某成员密码草稿（编辑框/随机按钮）；空串不视为修改。 */
