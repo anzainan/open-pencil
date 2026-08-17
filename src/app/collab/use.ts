@@ -74,6 +74,7 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     connect,
     disconnect,
     shareCurrentDoc,
+    syncAllNodesToYjs,
     updateCursor,
     updateSelection,
     setLocalName,

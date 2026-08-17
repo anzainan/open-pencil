@@ -77,7 +77,11 @@ function createCollabPanelContext(onlineUsers?: Ref<BridgePresenceUser[]>) {
     }))
     const yjsPeers = (collab?.remotePeers.value ?? []).map((peer) => ({
       ...peer,
-      avatar: avatarFor(peer.name, colorToCSS(peer.color))
+      avatar: avatarFor(
+        peer.name,
+        peer.avatarBg || colorToCSS(peer.color),
+        peer.avatarImage ?? undefined
+      )
     }))
     return [...presencePeers, ...yjsPeers]
   })

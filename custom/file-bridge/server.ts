@@ -38,6 +38,7 @@ import {
   TRASH_REL_DIR
 } from './lib/paths'
 import { StateStore } from './lib/state'
+import { deriveRoomId } from './lib/room-id'
 
 export interface BridgeServerOptions {
   port: number
@@ -49,6 +50,29 @@ export interface BridgeServerOptions {
 
 const VERSION = '0.3.0'
 const RECONCILE_MS = 60_000
+
+/**
+ * 解析 COLLAB_ICE_SERVERS_JSON 为 ICE server 数组（非法/空 → null → 浏览器回退官方默认）。
+ * 形如 `[{"urls":["stun:stun.example.com:3478"]}]`（含两端引号由 shell/env 责任方保证）。
+ */
+function parseCollabIceServers(raw: string | undefined): { urls: string | string[] }[] | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    const valid = parsed.filter(
+      (item): item is { urls: string | string[] } =>
+        !!item &&
+        typeof item === 'object' &&
+        'urls' in item &&
+        (typeof item.urls === 'string' || Array.isArray(item.urls))
+    )
+    return valid.length > 0 ? valid : null
+  } catch {
+    return null
+  }
+}
+
 const SSE_PING_MS = 25_000
 const MAX_BODY_BYTES = 512 * 1024 * 1024
 
@@ -342,6 +366,9 @@ export function startServer(options: BridgeServerOptions) {
   const designRoot = options.designRoot ?? process.env.DESIGN_ROOT ?? '/data/design'
   const stateDir = options.stateDir ?? process.env.STATE_DIR ?? '/data/state'
   const token = options.token ?? process.env.BRIDGE_TOKEN ?? ''
+  // P0 实时协作房间派生密钥：env 优先，否则回退 BRIDGE_TOKEN（未配置 → 空串，房间派生仍可用
+  // 但同一文件 token 不同时房间号不同——当前环境 BRIDGE_TOKEN 恒配置，正常场景不受影响）。
+  const collabRoomSecret = process.env.COLLAB_ROOM_SECRET?.trim() || token
 
   mkdirSync(designRoot, { recursive: true })
   mkdirSync(stateDir, { recursive: true })
@@ -1373,10 +1400,37 @@ function resolveShareBaseURL(): string {
         designRoot,
         token: token || null,
         pexelsKey: process.env.PEXELS_API_KEY?.trim() || null,
+        // P0 官方实时协作传输配置：自建 broker / ICE / WS 中继（未配置 → null，浏览器回退官方默认传输）。
+        collab: {
+          collabBrokerUrl: process.env.COLLAB_BROKER_URL?.trim() || null,
+          collabIceServers: parseCollabIceServers(process.env.COLLAB_ICE_SERVERS_JSON?.trim()),
+          collabWsRelayUrl: process.env.COLLAB_WS_RELAY_URL?.trim() || null
+        },
         ...(mcpEnabled && mcpProxy.isReady()
           ? { mcpAuthToken, mcpWsPath: '/ws', mcpHealthPath: '/health', mcpMcpPath: mcpPath }
           : {})
       })
+    }
+
+    if (method === 'GET' && path === '/api/v1/collab/room') {
+      // P0 官方实时协作房间派生：session 鉴权 + 编辑权限校验后，用服务端密钥对文档路径
+      // HMAC 派生稳定房间号。同一文件所有人拿到同一房间 → 同网自动聚到同一房。
+      const user = sessionUser(request)
+      if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
+      const docPath = url.searchParams.get('path') ?? ''
+      if (!docPath || !isSafeWorkspaceRelPath(docPath)) {
+        return json({ ok: false, error: 'invalid path' }, 400)
+      }
+      if (!permissions.resolvePermission(docPath, user).canEdit) {
+        return json({ ok: false, error: 'Forbidden' }, 403)
+      }
+      let roomId: string
+      try {
+        roomId = deriveRoomId(collabRoomSecret, docPath)
+      } catch {
+        return json({ ok: false, error: 'invalid path' }, 400)
+      }
+      return json({ ok: true, roomId })
     }
 
     // ---- 上游 MCP server 反代（MCP 开启时接管 /mcp；否则 /mcp 仍走桥接工具）----

@@ -1,6 +1,9 @@
 import type { Ref } from 'vue'
 import type { Awareness } from 'y-protocols/awareness'
 
+import { parseColor } from '@open-pencil/core/color'
+
+import { currentUser } from '@/app/auth/session'
 import { buildRemotePeers, remotePeersToCursors } from '@/app/collab/awareness'
 import type { CollabState } from '@/app/collab/types'
 import type { EditorStore } from '@/app/editor/active-store'
@@ -21,9 +24,16 @@ export function createLocalAwarenessActions({
   function broadcastAwareness() {
     const awareness = getAwareness()
     if (!awareness) return
+    // P0 身份注入：优先取当前登录账号（name + avatar 图片/底色）；localStorage 匿名仅作游客兜底。
+    const user = currentUser.value
+    const name = user?.name ?? state.value.localName
+    const avatarBg = user?.avatar.bg
+    const avatarImage = user?.avatar.image
     awareness.setLocalStateField('user', {
-      name: state.value.localName,
-      color: state.value.localColor
+      name: name || 'Anonymous',
+      color: avatarBg ? parseColor(avatarBg) : state.value.localColor,
+      avatarBg: avatarBg ?? null,
+      avatarImage: avatarImage ?? null
     })
   }
 
@@ -51,7 +61,8 @@ export function createLocalAwarenessActions({
 
     state.value.peers = peers
     store.state.remoteCursors = remotePeersToCursors(peers, store.state.currentPageId)
-    store.requestRender()
+    // P0 光标刷新只 bump renderVersion，不 bump sceneVersion（避免光标移动触发 autosave 误判 dirty）。
+    store.requestRepaint()
   }
 
   function setLocalName(name: string) {

@@ -10,6 +10,8 @@ import { useKeyboard } from '@/app/shell/keyboard/use'
 import { loadEditorLayout, saveEditorLayout } from '@/app/shell/layout-storage'
 import { openFileFromPath, useEditorMenu } from '@/app/shell/menu/use'
 import { useCollab, COLLAB_KEY } from '@/app/collab/use'
+import { getCollabConfig } from '@/app/collab/config'
+import { currentUser } from '@/app/auth/session'
 import { connectAutomation } from '@/app/automation/bridge/server'
 import { spawnMCPIfNeeded } from '@/app/automation/mcp/spawn'
 import { isTauri } from '@/app/tauri/env'
@@ -17,7 +19,7 @@ import { appMenuShortcut } from '@/app/shell/menu/shortcut'
 import { createDemoShapes } from '@/app/demo/document'
 import { useEditorStore } from '@/app/editor/active-store'
 import { openPermissionRequest } from '@/app/editor/readonly'
-import { BRIDGE_PROVIDER_ID } from '@/app/bridge/client'
+import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { useDocumentPresence } from '@/app/presence/use'
 import { createTab, activeTab, getActiveStore, tabCount } from '@/app/tabs'
 
@@ -82,6 +84,44 @@ watch(
 )
 const { onlineUsers } = useDocumentPresence(presencePath)
 provideCollabPanel(onlineUsers)
+
+// P0 官方实时协作自动进房：可编辑用户打开 bridge 存储文档 → 服务端派生房间号 →
+// connect + 立即全量灌入 Yjs（并列 presence 判定，同一 binding 源，避免多余请求）。
+// 只读 / 游客 / 空画布 / 非 bridge 文档 → 不 connect（头像已由 presence 展示）。
+const collabRoomPath = ref<string | null>(null)
+let collabConnectSeq = 0
+watch(
+  [() => activeTab.value, () => store.state.documentName, () => store.state.readOnly],
+  async () => {
+    const seq = ++collabConnectSeq
+    const binding = activeTab.value?.store.getStorageBinding()
+    const documentId =
+      binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId
+        ? binding.documentId
+        : null
+    const shouldConnect = !!documentId && !store.state.readOnly && !!currentUser.value
+    if (!shouldConnect) {
+      if (collabRoomPath.value) collab.disconnect()
+      collabRoomPath.value = null
+      return
+    }
+    if (collabRoomPath.value) {
+      if (collabRoomPath.value === documentId) return
+      collab.disconnect()
+      collabRoomPath.value = null
+    }
+    // 先取传输配置（room.ts 同步读缓存；失败回退官方默认），再解析房间号。
+    await getCollabConfig()
+    const roomId = await bridgeClient.resolveCollabRoom(documentId)
+    if (!roomId) return
+    if (seq !== collabConnectSeq) return
+    collab.disconnect()
+    collabRoomPath.value = documentId
+    collab.connect(roomId)
+    collab.syncAllNodesToYjs()
+  },
+  { immediate: true }
+)
 
 // 分享面板入口：view-only 协作者（readOnly=true）也要能看分享密码/链接 → 需协作者权限
 // （perm.canView）而非仅 !readOnly。bridge 文档打开时解析一次；失败按不可进入降级。

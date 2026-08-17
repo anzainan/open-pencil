@@ -3,6 +3,7 @@ import { joinRoom as joinTrysteroRoom } from 'trystero/mqtt'
 import * as awarenessProtocol from 'y-protocols/awareness'
 import * as Y from 'yjs'
 
+import { peekCollabConfig } from '@/app/collab/config'
 import { TRYSTERO_APP_ID } from '@/constants'
 
 type CollabRoomOptions = {
@@ -27,25 +28,30 @@ export function connectCollabRoom({
   setConnected,
   updatePeersList
 }: CollabRoomOptions): CollabRoomConnection {
+  const collabConfig = peekCollabConfig()
   const room = joinTrysteroRoom(
     {
       appId: TRYSTERO_APP_ID,
+      // P0 传输配置化：服务端下发自建 broker / ICE 时优先注入；未配置沿用官方默认。
       rtcConfig: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun.cloudflare.com:3478' },
-          {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          }
-        ]
-      }
+        iceServers: collabConfig?.collabIceServers?.length
+          ? collabConfig.collabIceServers
+          : [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun.cloudflare.com:3478' },
+              {
+                urls: 'turn:openrelay.metered.ca:443',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+              },
+              {
+                urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+              }
+            ]
+      },
+      relayUrls: collabConfig?.collabBrokerUrl ? [collabConfig.collabBrokerUrl] : undefined
     },
     roomId
   )

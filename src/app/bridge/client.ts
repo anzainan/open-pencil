@@ -415,6 +415,23 @@ export class BridgeClient {
     return new Uint8Array(await response.arrayBuffer())
   }
 
+  /**
+   * 解析协作房间号（P0 官方实时协作）：服务端 session 鉴权 + 编辑权限校验后由文档路径派生。
+   * 供打开 bridge 文档后自动进房用；失败（未登录/无权限/网络异常）返回 null，不阻塞打开流程。
+   */
+  async resolveCollabRoom(path: string): Promise<string | null> {
+    try {
+      const response = await fetch(`${this.apiBase}/collab/room?path=${encodeURIComponent(path)}`, {
+        headers: { Authorization: authHeader() ?? '' }
+      })
+      if (!response.ok) return null
+      const data = (await response.json()) as { roomId?: unknown }
+      return typeof data.roomId === 'string' ? data.roomId : null
+    } catch {
+      return null
+    }
+  }
+
   /** 上报活动文件（打开/切换 tab 时）。失败仅警告，不影响编辑。 */
   async reportActive(path: string): Promise<void> {
     await this.postState('/active', path)
