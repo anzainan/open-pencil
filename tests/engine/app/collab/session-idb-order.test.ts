@@ -1,6 +1,8 @@
 import { afterEach, beforeAll, describe, expect, mock, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 
+import type { connectCollabSession } from '@/app/collab/session'
+
 import * as Y from 'yjs'
 
 /**
@@ -51,7 +53,7 @@ mock.module('y-indexeddb', () => ({
 
 // trystero mock：joinRoom 返回最小可 leave 的 room。
 const joinRoomSpy = mock((_config: object, _roomId: string) => ({
-  makeAction: () => [(data: unknown) => undefined, (_fn: unknown) => undefined],
+  makeAction: () => [(_data: unknown) => undefined, (_fn: unknown) => undefined],
   onPeerJoin: (_fn: unknown) => undefined,
   onPeerLeave: (_fn: unknown) => undefined,
   leave: () => Promise.resolve()
@@ -60,16 +62,14 @@ mock.module('trystero/mqtt', () => ({
   joinRoom: joinRoomSpy
 }))
 
-let connectSession: typeof import('@/app/collab/session').connectCollabSession
-let registerObserversSpy: ReturnType<typeof mock>
+let connectSession: typeof connectCollabSession
 beforeAll(async () => {
   const sessionMod = await import('@/app/collab/session')
   connectSession = sessionMod.connectCollabSession
-  registerObserversSpy = mock((..._args: unknown[]) => undefined)
 })
 
-function fakeStore() {
-  return {
+function fakeStore(): Parameters<typeof connectSession>[0]['store'] {
+  const store: unknown = {
     graph: {
       getAllNodes: () => [] as unknown[],
       getNode: () => null,
@@ -79,7 +79,8 @@ function fakeStore() {
     onEditorEvent: () => () => undefined,
     requestRender: mock(() => undefined),
     undo: { canUndo: false, undo: () => undefined }
-  } as unknown as Parameters<typeof connectSession>[0]['store']
+  }
+  return store as Parameters<typeof connectSession>[0]['store']
 }
 
 function createHarness() {
@@ -142,7 +143,9 @@ describe('connectCollabSession y-indexeddb 载入时序（REQ-2/RC-B）', () => 
     expect(persistenceDeferred).not.toBeNull()
     persistenceDeferred?.resolve(null)
     // 链上 .catch().then() 需要完整微任务刷新后再断言。
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0)
+    })
 
     // 微任务队列刷新后：
     expect(runtime.suppressYjsEvents).toBe(false)

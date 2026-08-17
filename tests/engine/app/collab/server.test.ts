@@ -304,8 +304,8 @@ describe('REQ-4/5：active 按用户隔离 + bridge MCP 标注 owner 活动文�
   test('A/B 两人并发：各自记录互不覆盖；无 session（AI/桥接）默认看到 owner（安在南）', async () => {
     await startTestServer()
     const ownerToken = await login(OWNER.name, OWNER.password)
-    // 成员 B：登录后也打开一个文件。
-    const memberB = await createMember(ownerToken, 'collab B', 'bpass123')
+    // 成员 B：创建账号（副作用），登录后也打开一个文件。
+    await createMember(ownerToken, 'collab B', 'bpass123')
     const memberToken = await login('collab B', 'bpass123')
 
     // owner（A）打开 PixelMob/login.fig

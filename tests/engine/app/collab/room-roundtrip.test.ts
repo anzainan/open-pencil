@@ -88,11 +88,6 @@ function createLocalRoom(_roomId: string, selfMember: string): FakeRoom {
   return room
 }
 
-const joinRoomMock = mock((config: object, roomId: string) => {
-  const memberId = `member-${(joinedMembers.get(roomId)?.size ?? 0) + 1}`
-  return createLocalRoom(roomId, memberId)
-})
-
 // 捕获 joinRoom 收到的 config，供断言「配置追加官方默认」。
 const lastJoinConfig = { config: null as object | null }
 const joinRoomSpy = mock((config: object, roomId: string) => {
@@ -260,8 +255,7 @@ describe('connectCollabRoom 双连接同房间 round-trip（内存 relay mock �
     const roomId = randomUUID().slice(0, 8)
     joinedMembers.set(roomId, new Set())
     // 注入自定义 broker + ICE 后连接。config.ts 缓存是模块级单例；先 reset 再喂缓存。
-    const configModule =
-      (await import('@/app/collab/config')) as typeof import('@/app/collab/config')
+    const configModule = await import('@/app/collab/config')
     configModule.resetCollabConfigCache()
     const originalFetch = globalThis.fetch
     globalThis.fetch = (async () => ({
