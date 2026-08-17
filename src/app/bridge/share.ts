@@ -42,9 +42,32 @@ export interface BridgeShareVerify {
 
 const API_BASE = '/api/v1'
 
+const REQUEST_TIMEOUT_MS = 15_000
+
+/**
+ * 统一超时 fetch：默认 15s 未完成即 AbortController 中止并抛带可读 message 的错误。
+ * 间歇性桥接/网关窗口期内请求不再无限挂起（挂起 = 按钮恒灰 / 面板 0 的共同放大器）。
+ */
+async function fetchWithTimeout(
+  input: string,
+  init?: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(input, { ...init, signal: controller.signal })
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error('请求超时，请检查网络后重试')
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** 团队成员列表（login；owner 行带 fixed 标记，分享面板选人用）。 */
 export async function listMembers(): Promise<BridgeMemberInfo[]> {
-  const response = await fetch(`${API_BASE}/members`, {
+  const response = await fetchWithTimeout(`${API_BASE}/members`, {
     headers: { Authorization: authHeader() ?? '' }
   })
   if (!response.ok) throw new Error(`Bridge members failed (${response.status})`)
@@ -57,7 +80,7 @@ export async function uploadAvatar(
   data: string,
   ext: string
 ): Promise<{ char: string; bg: string; image?: string }> {
-  const response = await fetch(`${API_BASE}/avatars`, {
+  const response = await fetchWithTimeout(`${API_BASE}/avatars`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
     body: JSON.stringify({ data, ext })
@@ -75,7 +98,7 @@ export async function uploadAvatar(
   password: string
   role: 'admin' | 'member'
 }): Promise<{ user: BridgeMemberInfo; password: string }> {
-  const response = await fetch(`${API_BASE}/members`, {
+  const response = await fetchWithTimeout(`${API_BASE}/members`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
     body: JSON.stringify(input)
@@ -96,7 +119,7 @@ export async function updateMember(
   const body: Record<string, unknown> = {}
   if (input.password !== undefined) body.password = input.password
   if (input.role !== undefined) body.role = input.role
-  const response = await fetch(`${API_BASE}/members/${encodeURIComponent(id)}`, {
+  const response = await fetchWithTimeout(`${API_BASE}/members/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
     body: JSON.stringify(body)
@@ -106,7 +129,7 @@ export async function updateMember(
 
 /** 移除成员（admin；owner 服务端拒绝）。 */
 export async function deleteMember(id: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/members/${encodeURIComponent(id)}`, {
+  const response = await fetchWithTimeout(`${API_BASE}/members/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { Authorization: authHeader() ?? '' }
   })
@@ -129,7 +152,7 @@ export interface BridgeNotification {
 
 /** 通知列表（login，时间倒序）。 */
 export async function listNotifications(): Promise<BridgeNotification[]> {
-  const response = await fetch(`${API_BASE}/notifications`, {
+  const response = await fetchWithTimeout(`${API_BASE}/notifications`, {
     headers: { Authorization: authHeader() ?? '' }
   })
   if (!response.ok) throw new Error(`Bridge notifications failed (${response.status})`)
@@ -139,7 +162,7 @@ export async function listNotifications(): Promise<BridgeNotification[]> {
 
 /** 全部已读（login）。 */
 export async function markAllNotificationsRead(): Promise<void> {
-  const response = await fetch(`${API_BASE}/notifications/read-all`, {
+  const response = await fetchWithTimeout(`${API_BASE}/notifications/read-all`, {
     method: 'POST',
     headers: { Authorization: authHeader() ?? '' }
   })
@@ -151,7 +174,7 @@ export async function resolveNotification(
   id: string,
   action: 'approve' | 'reject'
 ): Promise<void> {
-  const response = await fetch(`${API_BASE}/notifications/${encodeURIComponent(id)}/action`, {
+  const response = await fetchWithTimeout(`${API_BASE}/notifications/${encodeURIComponent(id)}/action`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
     body: JSON.stringify({ action })
@@ -161,7 +184,7 @@ export async function resolveNotification(
 
 /** 取某文件分享设置（login）。 */
 export async function getShare(path: string): Promise<BridgeShareSettings> {
-  const response = await fetch(`${API_BASE}/share?path=${encodeURIComponent(path)}`, {
+  const response = await fetchWithTimeout(`${API_BASE}/share?path=${encodeURIComponent(path)}`, {
     headers: { Authorization: authHeader() ?? '' }
   })
   if (!response.ok) throw new Error(`Bridge share settings failed (${response.status}): ${path}`)
@@ -179,7 +202,7 @@ export async function saveShare(
 ): Promise<BridgeShareSettings> {
   const body: Record<string, unknown> = { path, scope: data.scope, permission: data.permission }
   if (data.password !== undefined) body.password = data.password
-  const response = await fetch(`${API_BASE}/share`, {
+  const response = await fetchWithTimeout(`${API_BASE}/share`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
     body: JSON.stringify(body)
@@ -192,7 +215,7 @@ export async function saveShare(
 
 /** 关闭分享（admin，删除外链）。 */
 export async function closeShare(path: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/share?path=${encodeURIComponent(path)}`, {
+  const response = await fetchWithTimeout(`${API_BASE}/share?path=${encodeURIComponent(path)}`, {
     method: 'DELETE',
     headers: { Authorization: authHeader() ?? '' }
   })
@@ -207,7 +230,7 @@ export async function saveFilePermissions(
     members?: { userId: string; permission: 'view' | 'edit' | 'none' }[]
   }
 ): Promise<void> {
-  const response = await fetch(`${API_BASE}/permissions`, {
+  const response = await fetchWithTimeout(`${API_BASE}/permissions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
     body: JSON.stringify({ path, ...data })
@@ -219,7 +242,7 @@ export async function saveFilePermissions(
 export async function verifyShare(token: string, password?: string): Promise<BridgeShareVerify> {
   const query = new URLSearchParams({ token })
   if (password) query.set('password', password)
-  const response = await fetch(`${API_BASE}/share/verify?${query.toString()}`)
+  const response = await fetchWithTimeout(`${API_BASE}/share/verify?${query.toString()}`)
   if (!response.ok) throw new Error(`Bridge share verify failed (${response.status})`)
   // 先读 text 再防御性解析：代理回落 / SPA fallback 会返回 200 HTML，
   // 盲 response.json() 抛 SyntaxError 会被上层 catch 坍缩成「链接不存在」。
@@ -234,14 +257,14 @@ export async function verifyShare(token: string, password?: string): Promise<Bri
 
 /** 游客：读外链文件字节（唯一游客文件读通道）。 */
 export async function getShareContent(token: string): Promise<Uint8Array> {
-  const response = await fetch(`${API_BASE}/share/${encodeURIComponent(token)}/content`)
+  const response = await fetchWithTimeout(`${API_BASE}/share/${encodeURIComponent(token)}/content`)
   if (!response.ok) throw new Error(`Bridge share content failed (${response.status})`)
   return new Uint8Array(await response.arrayBuffer())
 }
 
 /** 随机外链密码（login，6 位混合，供前端「刷新密码」）。 */
 export async function getRandomSharePassword(): Promise<string> {
-  const response = await fetch(`${API_BASE}/share/password`, {
+  const response = await fetchWithTimeout(`${API_BASE}/share/password`, {
     headers: { Authorization: authHeader() ?? '' }
   })
   if (!response.ok) throw new Error(`Bridge share password failed (${response.status})`)

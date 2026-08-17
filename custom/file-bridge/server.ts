@@ -800,7 +800,12 @@ export function startServer(options: BridgeServerOptions) {
     const name = typeof payload.name === 'string' ? payload.name.trim() : ''
     const password = typeof payload.password === 'string' ? payload.password : ''
     const role = payload.role === 'admin' || payload.role === 'member' ? payload.role : 'member'
-    const result = authStore.createUser({ name, password, role })
+    let result
+    try {
+      result = authStore.createUser({ name, password, role })
+    } catch (error) {
+      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
+    }
     if (!result.ok) {
       if (result.error.startsWith('user already exists')) {
         return json({ ok: false, error: result.error }, 409)
@@ -827,7 +832,12 @@ export function startServer(options: BridgeServerOptions) {
     }
     // owner 拒绝修改（不区分 admin 提权，直接 403）。
     if (authStore.isOwner(id)) return json({ ok: false, error: 'owner cannot be modified' }, 403)
-    const result = authStore.updateUser(id, input)
+    let result
+    try {
+      result = authStore.updateUser(id, input)
+    } catch (error) {
+      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
+    }
     if (!result.ok) {
       return result.error === 'not found'
         ? json({ ok: false, error: result.error }, 404)
@@ -840,7 +850,12 @@ export function startServer(options: BridgeServerOptions) {
     if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
     // owner 拒绝删除（固定账号，REQ §2.5）。
     if (authStore.isOwner(id)) return json({ ok: false, error: 'owner cannot be removed' }, 403)
-    const result = authStore.deleteUser(id)
+    let result
+    try {
+      result = authStore.deleteUser(id)
+    } catch (error) {
+      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
+    }
     if (!result.ok) {
       return result.error === 'not found'
         ? json({ ok: false, error: result.error }, 404)
@@ -928,7 +943,12 @@ export function startServer(options: BridgeServerOptions) {
       return json({ ok: false, error: `write failed: ${String(error)}` }, 500)
     }
     const relPath = `${AVATAR_REL_DIR}/${fileName}`
-    const result = authStore?.setAvatarImage(user.id, relPath)
+    let result
+    try {
+      result = authStore?.setAvatarImage(user.id, relPath)
+    } catch (error) {
+      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
+    }
     if (!result || !result.ok) {
       return json({ ok: false, error: result?.error ?? 'avatar update failed' }, 500)
     }
@@ -1199,7 +1219,12 @@ function resolveShareBaseURL(): string {
       return json({ ok: false, error: 'invalid password' }, 400)
     }
 
-    const link = shares.upsertLink(path, { scope, permission, password }, user.id)
+    let link
+    try {
+      link = shares.upsertLink(path, { scope, permission, password }, user.id)
+    } catch (error) {
+      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
+    }
     // admin 写档后回显明文（同事务刚落盘的副本）。
     return json({ ok: true, link: shareView(link, decryptPassword(link.passwordCipher)) })
   }
@@ -1213,7 +1238,11 @@ function resolveShareBaseURL(): string {
     if (path === '' || !isSafeWorkspaceRelPath(path)) {
       return json({ ok: false, error: 'invalid path' }, 400)
     }
-    shares.deleteLink(path)
+    try {
+      shares.deleteLink(path)
+    } catch (error) {
+      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
+    }
     return json({ ok: true, path, deleted: true })
   }
 
