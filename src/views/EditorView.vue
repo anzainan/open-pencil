@@ -72,13 +72,11 @@ provide(COLLAB_KEY, collab)
 // 游客 / 空画布 / demo 无 binding → 不启用心跳（游客不启用，避免无鉴权上报）。
 const presencePath = ref<string | null>(null)
 watch(
-  [() => activeTab.value, () => store.state.documentName],
+  [() => activeTab.value, () => activeTab.value?.store.getBindingDocumentId()?.value],
   () => {
     const binding = activeTab.value?.store.getStorageBinding()
     presencePath.value =
-      binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId
-        ? binding.documentId
-        : null
+      binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId ? binding.documentId : null
   },
   { immediate: true }
 )
@@ -88,37 +86,64 @@ provideCollabPanel(onlineUsers)
 // P0 官方实时协作自动进房：可编辑用户打开 bridge 存储文档 → 服务端派生房间号 →
 // connect + 立即全量灌入 Yjs（并列 presence 判定，同一 binding 源，避免多余请求）。
 // 只读 / 游客 / 空画布 / 非 bridge 文档 → 不 connect（头像已由 presence 展示）。
+// 触发信号用「binding 就绪」的真反应式 ref（getBindingDocumentId），不再依赖
+// documentName 的「值不变陷阱」：先置 documentName 后设 binding 的时序下，binding
+// 从 null→有值必然触发本 watch（tabs/openStorageDocumentInNewTab 也在改 documentName
+// 之前/之后都同步刷新该信号）。登录态（currentUser）也加入依赖，登录后补触发。
 const collabRoomPath = ref<string | null>(null)
 let collabConnectSeq = 0
-watch(
-  [() => activeTab.value, () => store.state.documentName, () => store.state.readOnly],
-  async () => {
-    const seq = ++collabConnectSeq
-    const binding = activeTab.value?.store.getStorageBinding()
-    const documentId =
-      binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId
-        ? binding.documentId
-        : null
-    const shouldConnect = !!documentId && !store.state.readOnly && !!currentUser.value
-    if (!shouldConnect) {
-      if (collabRoomPath.value) collab.disconnect()
-      collabRoomPath.value = null
-      return
+function connectSyncCollabRoom(): void {
+  void syncCollabRoom()
+}
+async function syncCollabRoom(attempt = 0): Promise<boolean> {
+  const seq = ++collabConnectSeq
+  const tab = activeTab.value
+  const binding = tab?.store.getStorageBinding()
+  const documentId =
+    binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId ? binding.documentId : null
+  const shouldConnect = !!documentId && !store.state.readOnly && !!currentUser.value
+  if (!shouldConnect) {
+    if (collabRoomPath.value) collab.disconnect()
+    collabRoomPath.value = null
+    // 首开 bridge 文件时序兜底：binding 可能恰在此次触发前尚未就绪（先置 documentName、
+    // 后设 binding），但该触发已经消费了本次 deps 变化；若 binding 稍后就绪，getBindingDocumentId
+    // 信号会再触发一次。为收敛「绑定尚空但 bridge 前台打开中」的残余窗口，这里按位递交一次
+    // rAF 重试（不轮询，最多 1 次），保证任何路径首次打开都进房。
+    const isBridgeForegroundOpen =
+      !!tab?.store.state.documentName && tab.store.state.autosaveEnabled && !store.state.loading
+    if (attempt === 0 && isBridgeForegroundOpen && !documentId) {
+      requestAnimationFrame(() => {
+        if (seq !== collabConnectSeq) return
+        void syncCollabRoom(attempt + 1)
+      })
     }
-    if (collabRoomPath.value) {
-      if (collabRoomPath.value === documentId) return
-      collab.disconnect()
-      collabRoomPath.value = null
-    }
-    // 先取传输配置（room.ts 同步读缓存；失败回退官方默认），再解析房间号。
-    await getCollabConfig()
-    const roomId = await bridgeClient.resolveCollabRoom(documentId)
-    if (!roomId) return
-    if (seq !== collabConnectSeq) return
+    return false
+  }
+  if (collabRoomPath.value) {
+    if (collabRoomPath.value === documentId) return true
     collab.disconnect()
-    collabRoomPath.value = documentId
-    collab.connect(roomId)
-    collab.syncAllNodesToYjs()
+    collabRoomPath.value = null
+  }
+  // 先取传输配置（room.ts 同步读缓存；失败回退官方默认），再解析房间号。
+  await getCollabConfig()
+  const roomId = await bridgeClient.resolveCollabRoom(documentId)
+  if (!roomId) return false
+  if (seq !== collabConnectSeq) return false
+  collab.disconnect()
+  collabRoomPath.value = documentId
+  collab.connect(roomId)
+  collab.syncAllNodesToYjs()
+  return true
+}
+watch(
+  [
+    () => activeTab.value,
+    () => activeTab.value?.store.getBindingDocumentId()?.value,
+    () => store.state.readOnly,
+    () => currentUser.value
+  ],
+  () => {
+    connectSyncCollabRoom()
   },
   { immediate: true }
 )
@@ -127,7 +152,7 @@ watch(
 // （perm.canView）而非仅 !readOnly。bridge 文档打开时解析一次；失败按不可进入降级。
 const shareAccessible = ref(false)
 watch(
-  [() => activeTab.value, () => store.state.documentName],
+  [() => activeTab.value, () => activeTab.value?.store.getBindingDocumentId()?.value],
   () => {
     const binding = activeTab.value?.store.getStorageBinding()
     if (binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId) {

@@ -70,6 +70,14 @@ export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
 
   let child: ReturnType<typeof spawn> | null = null
   let ready = false
+  let closing = false
+  /** 正在连接的浏览器 WebSocket 数量（>0 = 浏览器在线；0 = headless）。 */
+  let browserSockets = 0
+  /** headless 自动落盘定时器（REQ-7）：浏览器离线时周期 save_file，杜绝「内容在内存、磁盘不更新」。 */
+  let headlessAutosaveTimer: ReturnType<typeof setInterval> | null = null
+  /** 自动重启退避计数（REQ-6）。 */
+  let respawnBackoffMs = 500
+  let respawnTimer: ReturnType<typeof setTimeout> | null = null
 
   if (!enabled) {
     return {
@@ -111,10 +119,42 @@ export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
 
   function markReady(): void {
     ready = true
+    respawnBackoffMs = 500
     console.log('[file-bridge] MCP proxy ready ->', httpUrl)
   }
 
-  async function startSpawn(): Promise<void> {
+  /** REQ-7：headless（无浏览器挂载）时周期性 save_file，让 headless 会话编辑自动落盘。 */
+  function ensureHeadlessAutosave(): void {
+    if (headlessAutosaveTimer || !authToken) return
+    headlessAutosaveTimer = setInterval(() => {
+      if (!ready || browserSockets > 0) return
+      // save_file（不带 path）写回当前默认会话的 filePath；无会话/无路径时由服务端返回错误，静默忽略。
+      void fetch(`${httpUrl}/rpc`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ command: 'save_file', args: {} })
+      }).catch(() => undefined)
+    }, 3000)
+  }
+
+  /** REQ-6：MCP server 意外退出后自动重启（带退避），no_app → ok 自动恢复。 */
+  function scheduleRespawn(): void {
+    if (closing || child) return
+    if (respawnTimer) return
+    respawnTimer = setTimeout(() => {
+      respawnTimer = null
+      if (closing) return
+      console.warn(`[file-bridge] respawning MCP server (backoff ${respawnBackoffMs}ms)`)
+      void startSpawn().then((ok) => {
+        if (ok) markReady()
+        else scheduleRespawn()
+        return undefined
+      })
+    }, respawnBackoffMs)
+    respawnBackoffMs = Math.min(respawnBackoffMs * 2, 30_000)
+  }
+
+  async function startSpawn(): Promise<boolean> {
     const command = serverCmd?.trim() || 'bun run packages/mcp/src/index.ts'
     const env = {
       PORT: new URL(httpUrl).port,
@@ -133,23 +173,27 @@ export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
       child.on('error', (err) => {
         console.error(`[file-bridge] MCP spawn failed: ${err.message}`)
         child = null
+        scheduleRespawn()
       })
       child.on('exit', (code) => {
         console.error(`[file-bridge] MCP server exited (code ${code ?? 'null'})`)
         ready = false
         child = null
+        scheduleRespawn()
       })
       const ok = await waitForHealth(MCP_START_TIMEOUT_MS)
       if (ok) {
         markReady()
-      } else {
-        console.error(`[file-bridge] MCP server did not become healthy within ${MCP_START_TIMEOUT_MS}ms; proxy disabled`)
-        child?.kill()
-        child = null
+        return true
       }
+      console.error(`[file-bridge] MCP server did not become healthy within ${MCP_START_TIMEOUT_MS}ms; proxy disabled`)
+      child?.kill()
+      child = null
+      return false
     } catch (err) {
       console.error(`[file-bridge] MCP spawn threw: ${err instanceof Error ? err.message : String(err)}`)
       child = null
+      return false
     }
   }
 
@@ -162,10 +206,12 @@ export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
       else console.error('[file-bridge] External MCP server at', httpUrl, 'did not become healthy')
       return
     }
-    await startSpawn()
+    const ok = await startSpawn()
+    if (!ok) scheduleRespawn()
   }
 
   void start()
+  ensureHeadlessAutosave()
 
   return {
     isReady: () => ready,
@@ -196,6 +242,7 @@ export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
       return server.upgrade(request, { data: {} })
     },
     pipe(ws: ServerWebSocket) {
+      browserSockets++
       const state: PipeState = { buffer: [], client: null }
       ws.data = state
       const client = new WebSocket(wsURL)
@@ -214,7 +261,11 @@ export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
           void ws
         }
       }
+      const releaseBrowser = () => {
+        browserSockets = Math.max(0, browserSockets - 1)
+      }
       client.onclose = () => {
+        releaseBrowser()
         try {
           ws.close(1000, 'MCP proxy closed')
         } catch {
@@ -224,6 +275,7 @@ export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
         }
       }
       client.onerror = () => {
+        releaseBrowser()
         try {
           client.close()
         } catch {
@@ -243,6 +295,15 @@ export function createMcpProxy(options: McpProxyOptions): McpProxyHandle {
       }
     },
     close() {
+      closing = true
+      if (respawnTimer) {
+        clearTimeout(respawnTimer)
+        respawnTimer = null
+      }
+      if (headlessAutosaveTimer) {
+        clearInterval(headlessAutosaveTimer)
+        headlessAutosaveTimer = null
+      }
       child?.kill()
       child = null
       ready = false

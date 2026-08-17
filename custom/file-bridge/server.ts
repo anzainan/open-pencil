@@ -404,7 +404,13 @@ export function startServer(options: BridgeServerOptions) {
   // C-live：在线台账周期清理（15s 无心跳 → 下线；有移除则广播离开）。
   const presenceSweepTimer = startPresenceSweep(presence, bus)
 
-  const mcpDeps: McpDeps = { designRoot, state, token }
+  const mcpDeps: McpDeps = {
+    designRoot,
+    state,
+    token,
+    // REQ-4：bridge MCP 读 active / 标注 active 走 owner 维度（无 session → owner 账号）。
+    resolveActiveUserId: () => authStore?.getOwnerUserId() ?? null
+  }
 
   // ---- 可选的上游 MCP server（内存级实时协作：纯 JSON-RPC 转发，不解析画布）----
   const mcpAuthToken = process.env.MCP_AUTH_TOKEN?.trim() || ''
@@ -737,8 +743,18 @@ export function startServer(options: BridgeServerOptions) {
 
   // ---- active / recent ----
 
-  function getActive(): Response {
-    return json(state.getActive())
+  /**
+   * 读 active 的 owner 维度 key：有 session → 该用户自己的记录；无 session（AI/桥接）
+   * → owner（安在南）账号的记录。多人并发打开互不覆盖，AI 默认视窗 = 安在南的窗口。
+   */
+  function activeReadKey(request: Request): string | null {
+    const user = sessionUser(request)
+    if (user) return user.id
+    return authStore?.getOwnerUserId() ?? null
+  }
+
+  function getActive(request: Request): Response {
+    return json(state.getActive(activeReadKey(request)))
   }
 
   async function setActive(request: Request): Promise<Response> {
@@ -751,9 +767,11 @@ export function startServer(options: BridgeServerOptions) {
     const path = typeof payload.path === 'string' ? payload.path.trim() : ''
     if (!isSafeRelativePath(path)) return json({ ok: false, error: 'invalid path' }, 400)
 
-    state.setActive(path)
+    // 写侧维度：登录用户记到自己的 key；无 session（AI/桥接）记 primary（owner 默认）。
+    const userId = sessionUser(request)?.id ?? null
+    state.setActive(path, userId)
     bus.broadcast('active.changed', { path })
-    return json(state.getActive())
+    return json(state.getActive(userId))
   }
 
   function getRecent(): Response {
@@ -1505,7 +1523,7 @@ function resolveShareBaseURL(): string {
     }
 
     if (path === '/api/v1/active') {
-      if (method === 'GET') return getActive()
+      if (method === 'GET') return getActive(request)
       if (method === 'POST') {
         const denied = checkAuth(request, token)
         if (denied) return denied

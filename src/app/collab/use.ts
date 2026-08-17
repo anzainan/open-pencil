@@ -55,6 +55,7 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     broadcastAwareness,
     applyYjsToGraph,
     syncNodeToYjs,
+    syncAllNodesToYjs,
     resetFollow
   })
 

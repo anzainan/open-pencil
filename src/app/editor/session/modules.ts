@@ -1,13 +1,13 @@
 import { computed } from 'vue'
 
-import { dialogMessages } from '@open-pencil/vue'
 import type { Editor } from '@open-pencil/core/editor'
 import type { ExportRequest, IORegistry } from '@open-pencil/core/io'
+import { dialogMessages } from '@open-pencil/vue'
 
 import { createDocumentExportActions } from '@/app/document/export'
+import type { ExportOptions } from '@/app/document/export/types'
 import { createDocumentIOActions } from '@/app/document/io'
 import type { ViewportSize } from '@/app/document/io/types'
-import type { ExportOptions } from '@/app/document/export/types'
 import { createFlashActions } from '@/app/editor/flash'
 import { createMobileClipboardActions } from '@/app/editor/mobile-clipboard'
 import { createPenActions } from '@/app/editor/pen'
@@ -94,6 +94,7 @@ export function createEditorStoreModules(
     getDocumentFilePath: documentIO.getDocumentFilePath,
     getSourceIdentity: documentIO.getSourceIdentity,
     getStorageBinding: documentIO.getStorageBinding,
+    getBindingDocumentId: documentIO.getBindingDocumentId,
     setDocumentSource: documentIO.setDocumentSource,
     setStorageDocumentSource: documentIO.setStorageDocumentSource,
     setPlannedFilePath: documentIO.setPlannedFilePath,
@@ -103,13 +104,20 @@ export function createEditorStoreModules(
       documentIO.disposeDocumentIO()
     },
     ...documentExport,
-    exportTarget: async (target: ExportRequest['target'], formatId: string, options?: ExportOptions) => {
+    exportTarget: async (
+      target: ExportRequest['target'],
+      formatId: string,
+      options?: ExportOptions
+    ) => {
       await documentExport.exportTarget(target, formatId, options)
     },
     exportTargets: async (requests: Parameters<typeof documentExport.exportTargets>[0]) => {
       await documentExport.exportTargets(requests)
     },
-    exportSelection: async (scale: number, formatId: 'png' | 'jpg' | 'webp' | 'svg' | 'pdf' | 'pptx' | 'fig') => {
+    exportSelection: async (
+      scale: number,
+      formatId: 'png' | 'jpg' | 'webp' | 'svg' | 'pdf' | 'pptx' | 'fig'
+    ) => {
       await documentExport.exportSelection(scale, formatId)
     },
     ...mobileClipboard,

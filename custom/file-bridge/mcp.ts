@@ -39,6 +39,8 @@ export interface McpDeps {
   designRoot: string
   state: StateStore
   token: string
+  /** 解析 active 的 owner 维度 userId（无 session 时回退 owner 账号）；供 AI 默认视窗。 */
+  resolveActiveUserId?: () => string | null
 }
 
 const SERVER_INFO = { name: 'openpencil-file-bridge', version: '0.2.0' }
@@ -53,7 +55,7 @@ interface JsonRpcRequest {
 const TOOL_DEFS = [
   {
     name: 'bridge_get_active',
-    description: 'Get the currently active design file (the one open in the web editor). Returns { path?, openedAt?, updatedAt? }.',
+    description: 'Get the currently active design file for the owner (the one open in the owner\u2019s web editor window). Returns { path?, openedAt?, updatedAt?, session }.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false }
   },
   {
@@ -63,7 +65,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'bridge_list_files',
-    description: 'List all design files under the design root, grouped by brand. Returns { groups, flat }.',
+    description: 'List all design files under the design root, grouped by brand. The owner\u2019s currently active file is marked "active": true. Returns { groups, flat, activePath }.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false }
   },
   {
@@ -146,12 +148,20 @@ async function handleMessage(msg: JsonRpcRequest, deps: McpDeps, authHeader: str
       try {
         switch (name) {
           case 'bridge_get_active':
-            return rpcResult(id, textContent(JSON.stringify(deps.state.getActive(), null, 2)))
+            return rpcResult(id, textContent(JSON.stringify(deps.state.getActive(deps.resolveActiveUserId?.() ?? null), null, 2)))
           case 'bridge_get_recent':
             return rpcResult(id, textContent(JSON.stringify({ recents: deps.state.getRecent() }, null, 2)))
           case 'bridge_list_files': {
             const listing = scanDesignRoot(deps.designRoot)
-            return rpcResult(id, textContent(JSON.stringify(listing, null, 2)))
+            const activePath = deps.state.getActive(deps.resolveActiveUserId?.() ?? null).path ?? null
+            const flat = (listing.flat ?? []).map((file) => ({
+              ...file,
+              active: activePath != null && file.path === activePath
+            }))
+            return rpcResult(
+              id,
+              textContent(JSON.stringify({ ...listing, flat, activePath }, null, 2))
+            )
           }
           case 'bridge_read_file': {
             const rel = typeof args.path === 'string' ? args.path : ''
@@ -215,7 +225,7 @@ async function handleMessage(msg: JsonRpcRequest, deps: McpDeps, authHeader: str
             if (!isAuthorized(authHeader, deps.token)) {
               return rpcResult(id, textContent('ERROR: unauthorized (BRIDGE_TOKEN required)'))
             }
-            const active = deps.state.setActive(rel)
+            const active = deps.state.setActive(rel, deps.resolveActiveUserId?.() ?? null)
             return rpcResult(id, textContent(JSON.stringify(active, null, 2)))
           }
           default:

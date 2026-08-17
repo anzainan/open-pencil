@@ -281,3 +281,90 @@ describe('/api/v1/config collab 字段（P0 传输配置下发）', () => {
     expect(body.collab).toBeUndefined()
   })
 })
+
+describe('REQ-4/5：active 按用户隔离 + bridge MCP 标注 owner 活动文件', () => {
+  const OWNER = { name: '安在南', password: 'zhangzainan' }
+
+  async function postActive(token: string | null, path: string): Promise<Response> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) headers.Authorization = `Bearer ${token}`
+    return fetch(`${currentBase}/api/v1/active`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ path })
+    })
+  }
+
+  async function getActive(token: string | null): Promise<Response> {
+    const headers: Record<string, string> = {}
+    if (token) headers.Authorization = `Bearer ${token}`
+    return fetch(`${currentBase}/api/v1/active`, { headers })
+  }
+
+  test('A/B 两人并发：各自记录互不覆盖；无 session（AI/桥接）默认看到 owner（安在南）', async () => {
+    await startTestServer()
+    const ownerToken = await login(OWNER.name, OWNER.password)
+    // 成员 B：登录后也打开一个文件。
+    const memberB = await createMember(ownerToken, 'collab B', 'bpass123')
+    const memberToken = await login('collab B', 'bpass123')
+
+    // owner（A）打开 PixelMob/login.fig
+    expect((await postActive(ownerToken, 'PixelMob/login.fig')).status).toBe(200)
+    // 成员 B 打开自己的文件（不覆盖 owner）
+    expect((await postActive(memberToken, 'PixelMob/b.fig')).status).toBe(200)
+
+    // 各自 session 读回自己的记录。
+    const ownerBody = (await (await getActive(ownerToken)).json()) as { path?: string }
+    expect(ownerBody.path).toBe('PixelMob/login.fig')
+    const memberBody = (await (await getActive(memberToken)).json()) as { path?: string }
+    expect(memberBody.path).toBe('PixelMob/b.fig')
+
+    // 无 session（AI / op 脚本走 BRIDGE_TOKEN）→ 默认视窗 = owner（安在南）的记录。
+    const anonBody = (await (await getActive(null)).json()) as { path?: string }
+    expect(anonBody.path).toBe('PixelMob/login.fig')
+  })
+
+  test('AI 显式指定文件能力不变：list_documents（bridge MCP）列出并标注 owner 活动文件', async () => {
+    await startTestServer()
+    const ownerToken = await login(OWNER.name, OWNER.password)
+    expect((await postActive(ownerToken, 'PixelMob/login.fig')).status).toBe(200)
+    // 写一个真实存在的文件，让 bridge_list_files 能扫到。
+    const writeRes = await fetch(`${currentBase}/api/v1/files/PixelMob%2Flogin.fig`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        Authorization: `Bearer ${ownerToken}`
+      },
+      body: new Uint8Array([1, 2, 3, 4])
+    })
+    expect(writeRes.status).toBe(200)
+
+    // 通过 bridge MCP 调用 bridge_list_files（带 BRIDGE_TOKEN，无 session = AI 视角）。
+    // 测试环境未开上游 MCP（MCP_AUTH_TOKEN 空）→ 桥接工具挂载在 /mcp。
+    const mcpRes = await fetch(`${currentBase}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ownerToken}`
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'bridge_list_files', arguments: {} }
+      })
+    })
+    expect(mcpRes.status).toBe(200)
+    const mcpBody = (await mcpRes.json()) as {
+      result?: { content?: Array<{ type: string; text?: string }> }
+    }
+    const text = mcpBody.result?.content?.[0]?.text ?? ''
+    const listing = JSON.parse(text) as {
+      flat: Array<{ path: string; active: boolean }>
+      activePath: string | null
+    }
+    expect(listing.activePath).toBe('PixelMob/login.fig')
+    const loginEntry = listing.flat.find((f) => f.path === 'PixelMob/login.fig')
+    expect(loginEntry?.active).toBe(true)
+  })
+})

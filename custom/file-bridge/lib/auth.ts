@@ -192,6 +192,11 @@ export class AuthStore {
     return id === this.ownerFixed
   }
 
+  /** owner（安在南）的 userId；seed 前的空台账返回 null。 */
+  getOwnerUserId(): string | null {
+    return this.ownerFixed || null
+  }
+
   /**
    * 对外视图：默认去掉全部密码字段；withPassword 时对非 owner 成员附明文（admin 专用，
    * 服务端在 GET /members 上做角色门槛）。所有者固定标记 + 不回显密码（owner 不可改密）。

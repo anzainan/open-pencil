@@ -93,8 +93,16 @@ const joinRoomMock = mock((config: object, roomId: string) => {
   return createLocalRoom(roomId, memberId)
 })
 
+// 捕获 joinRoom 收到的 config，供断言「配置追加官方默认」。
+const lastJoinConfig = { config: null as object | null }
+const joinRoomSpy = mock((config: object, roomId: string) => {
+  lastJoinConfig.config = config
+  const memberId = `member-${(joinedMembers.get(roomId)?.size ?? 0) + 1}`
+  return createLocalRoom(roomId, memberId)
+})
+
 mock.module('trystero/mqtt', () => ({
-  joinRoom: joinRoomMock
+  joinRoom: joinRoomSpy
 }))
 
 function serialize(data: unknown): Uint8Array {
@@ -245,6 +253,54 @@ describe('connectCollabRoom 双连接同房间 round-trip（内存 relay mock �
     const roomId = randomUUID().slice(0, 8)
     joinedMembers.set(roomId, new Set())
     createConnection(roomId)
-    expect(joinRoomMock).toHaveBeenCalled()
+    expect(joinRoomSpy).toHaveBeenCalled()
+  })
+
+  test('REQ-3（RC-D）：relayUrls / ICE 配置**追加**官方默认而非独占', async () => {
+    const roomId = randomUUID().slice(0, 8)
+    joinedMembers.set(roomId, new Set())
+    // 注入自定义 broker + ICE 后连接。config.ts 缓存是模块级单例；先 reset 再喂缓存。
+    const configModule =
+      (await import('@/app/collab/config')) as typeof import('@/app/collab/config')
+    configModule.resetCollabConfigCache()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => ({
+      ok: true,
+      async json() {
+        return {
+          collab: {
+            collabBrokerUrl: 'wss://custom-broker.local:9001/mqtt',
+            collabIceServers: [{ urls: 'stun:custom-stun.local:3478' }],
+            collabWsRelayUrl: null
+          }
+        }
+      }
+    })) as typeof fetch
+    try {
+      await configModule.getCollabConfig()
+      expect(configModule.peekCollabConfig()?.collabBrokerUrl).toBe(
+        'wss://custom-broker.local:9001/mqtt'
+      )
+      createConnection(roomId)
+      // 断言：relayUrls = [自定义 broker, ...官方默认]；ICE = [自定义, ...官方默认]。
+      const config = lastJoinConfig.config as {
+        relayUrls?: string[]
+        rtcConfig?: { iceServers: Array<{ urls: string | string[] }> }
+      }
+      expect(config.relayUrls?.[0]).toBe('wss://custom-broker.local:9001/mqtt')
+      expect(config.relayUrls).toContain('wss://test.mosquitto.org:8081/mqtt')
+      expect(config.relayUrls).toContain('wss://broker.emqx.io:8084/mqtt')
+      expect(config.relayUrls).toContain('wss://broker.hivemq.com:8884/mqtt')
+      // ICE：自定义在前，官方 STUN/TURN 兜底在后。
+      expect(config.rtcConfig?.iceServers[0]?.urls).toBe('stun:custom-stun.local:3478')
+      const urls = config.rtcConfig?.iceServers?.map((s) =>
+        Array.isArray(s.urls) ? s.urls.join('|') : s.urls
+      )
+      expect(urls).toContain('stun:stun.l.google.com:19302')
+      expect(urls).toContain('turn:openrelay.metered.ca:443')
+    } finally {
+      globalThis.fetch = originalFetch
+      configModule.resetCollabConfigCache()
+    }
   })
 })
