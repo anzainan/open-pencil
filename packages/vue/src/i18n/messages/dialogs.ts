@@ -320,6 +320,7 @@ export const dialogMessageDefaults = {
     'After removal, this member can no longer access this board and their edit permission is revoked immediately.',
   'share.saveSuccess': 'Share settings saved',
   'share.saveFailed': 'Save failed',
+  'share.notReady': 'File not ready yet, sharing settings cannot be saved',
   'share.copyLinkGenerateFailed': 'Generating the link failed. Please check your network and retry',
   'share.readonlyNotice': 'Read-only preview',
   'share.linkNotFound': 'This link does not exist or has been closed',

@@ -345,6 +345,7 @@
   "share.removeDesc": "Tras la eliminación, este miembro ya no podrá acceder al tablero y su permiso de edición se revocará inmediatamente.",
   "share.saveSuccess": "Ajustes de uso compartido guardados",
   "share.saveFailed": "Error al guardar",
+  "share.notReady": "El archivo aún no está listo, no se pueden guardar los ajustes de uso compartido",
   "share.copyLinkGenerateFailed": "No se pudo generar el enlace. Comprueba tu red y vuelve a intentarlo",
   "share.readonlyNotice": "Vista previa de solo lectura",
   "share.linkNotFound": "Este enlace no existe o se ha cerrado",

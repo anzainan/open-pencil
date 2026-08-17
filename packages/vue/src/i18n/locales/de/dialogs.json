@@ -345,6 +345,7 @@
   "share.removeDesc": "Danach kann dieses Mitglied nicht mehr auf die Tafel zugreifen; die Bearbeitungsrechte werden sofort entzogen.",
   "share.saveSuccess": "Freigabeeinstellungen gespeichert",
   "share.saveFailed": "Speichern fehlgeschlagen",
+  "share.notReady": "Datei noch nicht bereit, Freigabeeinstellungen können nicht gespeichert werden",
   "share.copyLinkGenerateFailed": "Fehler beim Generieren des Links. Netzwerk prüfen und erneut versuchen",
   "share.readonlyNotice": "Schreibgeschützte Vorschau",
   "share.linkNotFound": "Dieser Link existiert nicht oder wurde geschlossen",

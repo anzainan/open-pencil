@@ -345,6 +345,7 @@
   "share.removeDesc": "Dopo la rimozione, questo membro non potrà più accedere alla lavagna e il permesso di modifica verrà revocato immediatamente.",
   "share.saveSuccess": "Impostazioni di condivisione salvate",
   "share.saveFailed": "Salvataggio non riuscito",
+  "share.notReady": "File non ancora pronto, impossibile salvare le impostazioni di condivisione",
   "share.copyLinkGenerateFailed": "Impossibile generare il link. Controlla la rete e riprova",
   "share.readonlyNotice": "Anteprima di sola lettura",
   "share.linkNotFound": "Questo link non esiste o è stato chiuso",

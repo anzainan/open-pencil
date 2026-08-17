@@ -345,6 +345,7 @@
   "share.removeDesc": "削除後、このメンバーはホワイトボードにアクセスできなくなり、編集権限は直ちに失効します。",
   "share.saveSuccess": "共有設定を保存しました",
   "share.saveFailed": "保存に失敗しました",
+  "share.notReady": "ファイルが未準備のため、共有設定を保存できません",
   "share.copyLinkGenerateFailed": "リンクの生成に失敗しました。ネットワークを確認して再試行してください",
   "share.readonlyNotice": "読み取り専用プレビュー",
   "share.linkNotFound": "このリンクは存在しないか、閉じられています",

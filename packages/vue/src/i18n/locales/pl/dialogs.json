@@ -345,6 +345,7 @@
   "share.removeDesc": "Po usunięciu członek nie będzie miał dostępu do tablicy, a uprawnienia edycji zostaną natychmiast cofnięte.",
   "share.saveSuccess": "Zapisano ustawienia udostępniania",
   "share.saveFailed": "Zapis nie powiódł się",
+  "share.notReady": "Plik nie jest jeszcze gotowy, nie można zapisać ustawień udostępniania",
   "share.copyLinkGenerateFailed": "Nie udało się wygenerować linku. Sprawdź sieć i spróbuj ponownie",
   "share.readonlyNotice": "Podgląd tylko do odczytu",
   "share.linkNotFound": "Ten link nie istnieje lub został zamknięty",

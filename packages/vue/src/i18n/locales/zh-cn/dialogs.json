@@ -345,6 +345,7 @@
   "share.removeDesc": "移除后该成员将无法访问此白板，其编辑权限立即撤销。",
   "share.saveSuccess": "分享设置已保存",
   "share.saveFailed": "保存失败",
+  "share.notReady": "文件尚未就绪，暂时无法保存分享设置",
   "share.copyLinkGenerateFailed": "链接生成失败，请检查网络后重试",
   "share.readonlyNotice": "只读预览",
   "share.linkNotFound": "链接不存在或已关闭",

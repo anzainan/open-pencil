@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useClipboard } from '@vueuse/core'
 import {
   PopoverContent,
@@ -61,7 +61,25 @@ const popoverOpen = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 
-const documentPath = computed(() => store.getStorageBinding()?.documentId ?? '')
+const documentPath = ref('')
+
+/**
+ * 同步当前存储绑定的文档路径。binding 是 source-state 闭包、非响应式（Arch 根因 A），
+ * 以其唯一响应式代理 documentName 为 watch 依赖，变化时重读 binding；
+ * 面板打开 / copyLink 前也显式调用，补「首个文件打开时 documentName 先置值、
+ * binding 后写（同值不再触发 watch）」的时序缺口。
+ */
+function syncDocumentPath(): void {
+  documentPath.value = store.getStorageBinding()?.documentId ?? ''
+}
+
+watch(
+  () => store.state.documentName,
+  () => {
+    syncDocumentPath()
+  },
+  { immediate: true }
+)
 const canEdit = computed(() => isAdmin.value)
 /** 当前用户对该文件是否为协作者（perm.canView）：决定分享密码明文可看/可复制。 */
 const canView = ref(false)
@@ -189,7 +207,11 @@ async function load(): Promise<void> {
 }
 
 function withSaving(fn: () => Promise<void>): Promise<void> {
-  if (!documentPath.value) return Promise.resolve()
+  if (!documentPath.value) {
+    // Arch 根因 A 兜底：路径仍未就绪时不再静默丢弃任务，显式提示让用户看到原因。
+    toast.error(dialogs.value['share.notReady'])
+    return Promise.resolve()
+  }
   // 保存中到达的新任务不再静默丢弃（根因 D）：记下最新任务，当前任务结束后重放（Last-Write-Wins）。
   if (saving.value) {
     pendingSaveTask = fn
@@ -294,12 +316,14 @@ async function copyLink(): Promise<void> {
     } catch (error) {
       console.warn('[share] copy link generate failed', error)
       // 独立文案而非泛化的「保存失败」；再触发 load() 刷新 share 真值，防状态漂移残留。
+      syncDocumentPath()
       void load()
       toast.error(dialogs.value['share.copyLinkGenerateFailed'])
       return
     }
   }
   if (!url) {
+    syncDocumentPath()
     void load()
     toast.error(dialogs.value['share.copyLinkGenerateFailed'])
     return
@@ -440,7 +464,7 @@ onMounted(() => {
 <template>
   <PopoverRoot
     v-model:open="popoverOpen"
-    @update:open="(open: boolean) => { if (open) { addMemberOpen = false; void load() } }"
+    @update:open="(open: boolean) => { if (open) { addMemberOpen = false; syncDocumentPath(); void load() } }"
   >
     <PopoverTrigger as-child>
       <button
