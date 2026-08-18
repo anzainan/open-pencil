@@ -18,7 +18,9 @@ export function connectAutomation(
   options?: { wsPath?: string }
 ) {
   const token = authToken ?? randomHex(32)
-  const wsURL = options?.wsPath ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${options.wsPath}` : `ws://127.0.0.1:${AUTOMATION_HTTP_PORT}`
+  const wsURL = options?.wsPath
+    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${options.wsPath}`
+    : `ws://127.0.0.1:${AUTOMATION_HTTP_PORT}`
   let ws: WebSocket | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined
   let intentionalDisconnect = false
@@ -49,8 +51,21 @@ export function connectAutomation(
   }
 
   let unsubscribeGraphReplaced: (() => void) | null = null
+  let graphWatchRetryTimer: ReturnType<typeof setTimeout> | undefined
   function watchGraphReplacements() {
-    const store = getStore()
+    let store: EditorStore
+    try {
+      store = getStore()
+    } catch (e) {
+      // 无 active tab（EditorView 先于首个 tab 挂载）：延后重试而非崩溃，register 链路保持可恢复。
+      console.warn(
+        '[Automation] graph watch deferred until an active tab exists:',
+        e instanceof Error ? e.message : e
+      )
+      clearTimeout(graphWatchRetryTimer)
+      graphWatchRetryTimer = setTimeout(watchGraphReplacements, 500)
+      return
+    }
     unsubscribeGraphReplaced = store.onEditorEvent('graph:replaced', broadcastGraphReplaced)
   }
 
@@ -122,6 +137,7 @@ export function connectAutomation(
     intentionalDisconnect = true
     unsubscribeGraphReplaced?.()
     unsubscribeGraphReplaced = null
+    clearTimeout(graphWatchRetryTimer)
     clearTimeout(reconnectTimer)
     ws?.close()
     ws = null

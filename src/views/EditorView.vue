@@ -11,7 +11,7 @@ import { loadEditorLayout, saveEditorLayout } from '@/app/shell/layout-storage'
 import { openFileFromPath, useEditorMenu } from '@/app/shell/menu/use'
 import { useCollab, COLLAB_KEY } from '@/app/collab/use'
 import { getCollabConfig } from '@/app/collab/config'
-import { currentUser } from '@/app/auth/session'
+import { currentUser, restoreSession } from '@/app/auth/session'
 import { connectAutomation } from '@/app/automation/bridge/server'
 import { spawnMCPIfNeeded } from '@/app/automation/mcp/spawn'
 import { isTauri } from '@/app/tauri/env'
@@ -267,6 +267,8 @@ async function bindAssociatedFileOpen() {
 
 onMounted(async () => {
   try {
+    // web 生产模式：/api/v1/config 仅登录态下发 MCP token/wsPath，取 config 前确保会话恢复完成（幂等）。
+    await restoreSession()
     const mcp = await spawnMCPIfNeeded()
     mcpCleanup.value = mcp?.disconnect ?? null
     const tauri = isTauri()
