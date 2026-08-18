@@ -72,11 +72,11 @@ type CollabSessionResources = {
  */
 function supportsRealtimeTransport(): boolean {
   if (!IS_BROWSER) return true
-  const subtle = window.crypto?.subtle
+  if (!window.isSecureContext) return false
+  const subtle = window.crypto.subtle
   return (
-    window.isSecureContext &&
-    typeof subtle?.digest === 'function' &&
-    typeof subtle?.importKey === 'function'
+    typeof subtle.digest === 'function' &&
+    typeof subtle.importKey === 'function'
   )
 }
 
