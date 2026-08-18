@@ -11,7 +11,7 @@ import { connectCollabRoom } from '@/app/collab/room'
 import type { CollabState } from '@/app/collab/types'
 import { bindCollabGraphEvents, registerYjsObservers } from '@/app/collab/yjs-sync'
 import type { EditorStore } from '@/app/editor/active-store'
-import { PEER_COLORS } from '@/constants'
+import { IS_BROWSER, PEER_COLORS } from '@/constants'
 
 export type CollabRuntime = {
   ydoc: Y.Doc | null
@@ -63,6 +63,21 @@ type CollabSessionResources = {
   unbindGraphEvents: (() => void) | null
   stopZoomWatch: (() => void) | null
   resetFollow: () => void
+}
+
+/**
+ * Trystero's encrypted WebRTC transport uses Web Crypto. Browsers expose
+ * `crypto.subtle` only in a secure context, so an HTTP LAN deployment must
+ * not create a room and then repeatedly fail on every document update.
+ */
+function supportsRealtimeTransport(): boolean {
+  if (!IS_BROWSER) return true
+  if (!window.isSecureContext) return false
+  const subtle = window.crypto.subtle
+  return (
+    typeof subtle.digest === 'function' &&
+    typeof subtle.importKey === 'function'
+  )
 }
 
 export function createCollabRuntime(): CollabRuntime {
@@ -165,6 +180,10 @@ export function connectCollabSession({
   syncAllNodesToYjs
 }: ConnectCollabSessionOptions) {
   if (runtime.room) disconnect()
+  if (!supportsRealtimeTransport()) {
+    console.warn('[collab] real-time transport requires an HTTPS secure context')
+    return
+  }
 
   runtime.connectedStore = store
   state.value.roomId = roomId

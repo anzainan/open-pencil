@@ -312,7 +312,7 @@
   "perm.requestSent": "Solicitud enviada — esperando la aprobación del administrador",
   "perm.editGranted": "Permiso de edición concedido — ya puede editar",
   "share.title": "Compartir archivo",
-  "share.scope.internet": "Cualquiera en internet",
+  "share.scope.internet": "Cualquiera en la red local",
   "share.scope.team": "Miembros del equipo",
   "share.scope.self": "Solo yo",
   "share.scope.collab": "Solo accesible para colaboradores",

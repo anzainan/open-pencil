@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - master
+      # 独立的 NAS 局域网协作版：每次修复自动产出 web-latest，供 NAS 拉取。
+      - agent/fix-lan-static-sharing
     tags:
       - 'v*'
 

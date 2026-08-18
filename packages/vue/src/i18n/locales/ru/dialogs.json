@@ -312,7 +312,7 @@
   "perm.requestSent": "Запрос отправлен — ожидание одобрения администратора",
   "perm.editGranted": "Право редактирования выдано — теперь вы можете редактировать",
   "share.title": "Поделиться файлом",
-  "share.scope.internet": "Любой в интернете",
+  "share.scope.internet": "Любой в локальной сети",
   "share.scope.team": "Участники команды",
   "share.scope.self": "Только я",
   "share.scope.collab": "Доступно только соавторам",

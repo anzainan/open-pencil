@@ -85,16 +85,8 @@ export function createSaveActions({
    * 工作区不可达时回退到原 saveFigFileAs 行为（Tauri 原生 / 浏览器下载）。
    */
   async function saveUntitledToWorkspace() {
-    const token = await bridgeClient.getToken()
-    if (!token) {
-      await saveFigFileAs()
-      return
-    }
-
     const requested = promptForWorkspaceFileName()
-    if (requested === null) return
     const base = sanitizeWorkspaceFileName(requested)
-    if (!base) return
 
     let path: string
     try {
@@ -120,9 +112,16 @@ export function createSaveActions({
     }
   }
 
-  function promptForWorkspaceFileName(): string | null {
-    const defaultName = state.documentName === 'Untitled' ? '' : state.documentName
-    return window.prompt('保存到工作区根目录，请输入文件名：', defaultName)
+  function promptForWorkspaceFileName(): string {
+    const defaultName = state.documentName === 'Untitled' ? 'Untitled' : state.documentName
+    try {
+      // Some embedded browsers deliberately disable synchronous dialogs.  A
+      // failed naming prompt must not prevent the normal Save action from
+      // writing the document to the workspace.
+      return window.prompt('保存到工作区根目录，请输入文件名：', defaultName) || defaultName
+    } catch {
+      return defaultName
+    }
   }
 
   /** 另存为/导出的快照序列化：失败统一提示「导出失败」并抛出（与落盘「保存失败」区分）。 */
@@ -177,8 +176,14 @@ export function createSaveActions({
       return
     }
 
-    const filename = prompt(dialogMessages.get().saveAsPrompt, getDownloadName() ?? 'Untitled.fig')
-    if (!filename) return
+    const defaultFilename = getDownloadName() ?? 'Untitled.fig'
+    let filename = defaultFilename
+    try {
+      filename = prompt(dialogMessages.get().saveAsPrompt, defaultFilename) || defaultFilename
+    } catch (error) {
+      // Keep Save As usable in the same embedded-browser environment as Save.
+      console.warn('[document] save-as prompt unavailable; using the default filename', error)
+    }
     setStorageBinding(null)
     setDownloadName(filename)
     state.documentName = documentNameFromFigPath(filename)

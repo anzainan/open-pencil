@@ -139,6 +139,13 @@ function serveStatic(urlPath: string, distDir: string): Response {
     return new Response('Bad Request', { status: 400 })
   }
 
+  // The browser build uses `/Mobai/` as its public base so token shares can
+  // live at `/Mobai/:token`.  Static files still live directly in `dist`.
+  // Without normalising the prefix, a missing `dist/Mobai/assets/*` path
+  // falls back to index.html and the browser tries to execute HTML as JS.
+  if (rel === 'Mobai') rel = ''
+  else if (rel.startsWith('Mobai/')) rel = rel.slice('Mobai/'.length)
+
   const indexFile = join(distDir, 'index.html')
   if (rel === '') return serveFileResponse(indexFile, 'no-cache')
 
@@ -1155,9 +1162,14 @@ export function startServer(options: BridgeServerOptions) {
     return json({ ok: true })
   }
 
-/** 外链域名：SHARE_BASE_URL 环境变量优先（H 子路径起），默认公网域名。 */
+/**
+ * Share URLs must never fall back to a public domain.  Deployments provide a
+ * LAN address through SHARE_BASE_URL; an unset development environment falls
+ * back to the local bridge only.
+ */
 function resolveShareBaseURL(): string {
-  return process.env.SHARE_BASE_URL?.trim() || 'https://anzainan.iepose.cn'
+  const configured = process.env.SHARE_BASE_URL?.trim()
+  return (configured || `http://127.0.0.1:${process.env.BRIDGE_PORT ?? '8080'}`).replace(/\/+$/, '')
 }
 
   // ---- 分享/外链（Phase C：真实台账 + 游客外链 + P0 安全收紧）----
