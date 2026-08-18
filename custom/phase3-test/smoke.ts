@@ -21,6 +21,8 @@ const distDir = join(root, 'dist')
 mkdirSync(designRoot, { recursive: true })
 mkdirSync(distDir, { recursive: true })
 writeFileSync(join(distDir, 'index.html'), '<html><body>smoke</body></html>')
+mkdirSync(join(distDir, 'assets'), { recursive: true })
+writeFileSync(join(distDir, 'assets', 'boot.js'), 'export const boot = true')
 mkdirSync(join(designRoot, 'PixelMob'), { recursive: true })
 writeFileSync(join(designRoot, 'PixelMob', 'login.fig'), 'FIG-LOGIN-CONTENT')
 
@@ -87,6 +89,12 @@ async function main() {
   const server = startServer({ port: PORT, designRoot, stateDir, distDir, token: TOKEN })
 
   const client = new BridgeClient({ apiBase: BASE })
+
+  // ---- 0. SPA static paths ----
+  console.log('\n[0] SPA static paths')
+  const asset = await fetch(`http://127.0.0.1:${PORT}/Mobai/assets/boot.js`)
+  check('Mobai-prefixed asset resolves to dist asset', asset.status === 200)
+  check('Mobai-prefixed asset is JavaScript, not SPA HTML', (await asset.text()) === 'export const boot = true')
 
   // ---- 1. bridge-fs provider registration ----
   console.log('\n[1] bridge-fs provider registration')
