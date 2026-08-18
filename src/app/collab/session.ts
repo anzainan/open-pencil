@@ -11,7 +11,7 @@ import { connectCollabRoom } from '@/app/collab/room'
 import type { CollabState } from '@/app/collab/types'
 import { bindCollabGraphEvents, registerYjsObservers } from '@/app/collab/yjs-sync'
 import type { EditorStore } from '@/app/editor/active-store'
-import { PEER_COLORS } from '@/constants'
+import { IS_BROWSER, PEER_COLORS } from '@/constants'
 
 export type CollabRuntime = {
   ydoc: Y.Doc | null
@@ -71,7 +71,7 @@ type CollabSessionResources = {
  * not create a room and then repeatedly fail on every document update.
  */
 function supportsRealtimeTransport(): boolean {
-  if (typeof window === 'undefined') return true
+  if (!IS_BROWSER) return true
   const subtle = window.crypto?.subtle
   return (
     window.isSecureContext &&
