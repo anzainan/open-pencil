@@ -180,8 +180,9 @@ export function createSaveActions({
     let filename = defaultFilename
     try {
       filename = prompt(dialogMessages.get().saveAsPrompt, defaultFilename) || defaultFilename
-    } catch {
+    } catch (error) {
       // Keep Save As usable in the same embedded-browser environment as Save.
+      console.warn('[document] save-as prompt unavailable; using the default filename', error)
     }
     setStorageBinding(null)
     setDownloadName(filename)
