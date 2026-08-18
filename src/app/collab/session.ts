@@ -65,6 +65,21 @@ type CollabSessionResources = {
   resetFollow: () => void
 }
 
+/**
+ * Trystero's encrypted WebRTC transport uses Web Crypto. Browsers expose
+ * `crypto.subtle` only in a secure context, so an HTTP LAN deployment must
+ * not create a room and then repeatedly fail on every document update.
+ */
+function supportsRealtimeTransport(): boolean {
+  if (typeof window === 'undefined') return true
+  const subtle = window.crypto?.subtle
+  return (
+    window.isSecureContext &&
+    typeof subtle?.digest === 'function' &&
+    typeof subtle?.importKey === 'function'
+  )
+}
+
 export function createCollabRuntime(): CollabRuntime {
   return {
     ydoc: null,
@@ -165,6 +180,10 @@ export function connectCollabSession({
   syncAllNodesToYjs
 }: ConnectCollabSessionOptions) {
   if (runtime.room) disconnect()
+  if (!supportsRealtimeTransport()) {
+    console.warn('[collab] real-time transport requires an HTTPS secure context')
+    return
+  }
 
   runtime.connectedStore = store
   state.value.roomId = roomId
