@@ -126,10 +126,9 @@ const scopeMenuOptions = computed(() => [
 ])
 
 /** 访问范围触发器文案：team（仅协作者）时高亮显示「仅协作者可访问」（§1.2 C）。 */
-const scopeLabel = computed(() => {
-  if (scope.value === 'team') return dialogs.value['share.scope.collab']
-  return scopeMenuOptions.value.find((opt) => opt.value === scope.value)?.label ?? ''
-})
+const scopeLabel = computed(
+  () => scopeMenuOptions.value.find((opt) => opt.value === scope.value)?.label ?? ''
+)
 
 const permissionOptions = computed(() => [
   { value: 'view' as Perm, label: dialogs.value['share.permission.view'] },

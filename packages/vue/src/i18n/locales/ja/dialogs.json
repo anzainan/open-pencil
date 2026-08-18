@@ -312,7 +312,7 @@
   "perm.requestSent": "リクエストを送信しました。管理者の承認をお待ちください",
   "perm.editGranted": "編集権限が付与されました — これで編集できます",
   "share.title": "ファイルを共有",
-  "share.scope.internet": "インターネット上の誰でも",
+  "share.scope.internet": "ローカルネットワーク上のすべてのユーザー",
   "share.scope.team": "チームメンバー",
   "share.scope.self": "自分のみ",
   "share.scope.collab": "コラボレーターのみアクセス可能",
