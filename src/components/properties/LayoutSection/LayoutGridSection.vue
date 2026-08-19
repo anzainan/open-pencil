@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { useEditor, useI18n, useSceneComputed } from '@open-pencil/vue'
 
-import { useEditorStore } from '@/app/editor/active-store'
 import NumberField from '@/components/inputs/NumberField.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
@@ -16,8 +15,6 @@ import SharedStyleField from '@/components/properties/shared-style/SharedStyleFi
 import type { LayoutGrid } from '@open-pencil/scene-graph'
 
 const editor = useEditor()
-const store = useEditorStore()
-const readOnly = computed(() => store.state.readOnly)
 const { panels } = useI18n()
 
 const selectedNode = useSceneComputed(() => editor.getSelectedNode() ?? null)
@@ -78,9 +75,9 @@ function isGrid(grid: LayoutGrid): boolean {
 
 <template>
   <PanelSection :label="panels.layoutGrids" :empty="grids.length === 0">
-    <SharedStyleField kind="grid" :label="panels.gridStyle" :disabled="readOnly" />
+    <SharedStyleField kind="grid" :label="panels.gridStyle" />
     <template #actions>
-      <IconButton :label="panels.addLayoutGrid" :disabled="readOnly" @click="add">
+      <IconButton :label="panels.addLayoutGrid" @click="add">
         <icon-lucide-plus class="size-3.5" />
       </IconButton>
     </template>
@@ -91,7 +88,6 @@ function isGrid(grid: LayoutGrid): boolean {
           :model-value="gridPattern(grid)"
           :options="patternOptions"
           :label="panels.layoutGrids"
-          :disabled="readOnly"
           @change="
             patch(index, { pattern: $event as LayoutGrid['pattern'] }, 'Change grid pattern')
           "
@@ -110,7 +106,6 @@ function isGrid(grid: LayoutGrid): boolean {
               :model-value="grid.count ?? grid.numSections ?? 1"
               :min="1"
               :aria-label="panels.gridCount"
-              :disabled="readOnly"
               @update:model-value="patch(index, { count: $event })"
             />
           </PanelFieldGroup>
@@ -119,7 +114,6 @@ function isGrid(grid: LayoutGrid): boolean {
               :model-value="grid.gutterSize ?? 0"
               :min="0"
               :aria-label="panels.gridGutter"
-              :disabled="readOnly"
               @update:model-value="patch(index, { gutterSize: $event })"
             />
           </PanelFieldGroup>
@@ -128,7 +122,6 @@ function isGrid(grid: LayoutGrid): boolean {
               :model-value="grid.sectionSize ?? 0"
               :min="1"
               :aria-label="panels.gridSectionSize"
-              :disabled="readOnly"
               @update:model-value="patch(index, { sectionSize: $event })"
             />
           </PanelFieldGroup>
@@ -136,7 +129,6 @@ function isGrid(grid: LayoutGrid): boolean {
             <NumberField
               :model-value="grid.offset ?? 0"
               :aria-label="panels.gridMargin"
-              :disabled="readOnly"
               @update:model-value="patch(index, { offset: $event })"
             />
           </PanelFieldGroup>
@@ -146,17 +138,12 @@ function isGrid(grid: LayoutGrid): boolean {
         <IconButton
           :label="panels.toggleVisibility"
           :active="grid.visible === false"
-          :disabled="readOnly"
           @click="patch(index, { visible: grid.visible === false }, 'Toggle layout guide')"
         >
           <icon-lucide-eye-off v-if="grid.visible === false" class="size-3.5" />
           <icon-lucide-eye v-else class="size-3.5" />
         </IconButton>
-        <IconButton
-          :label="panels.removeLayoutGrid"
-          :disabled="readOnly"
-          @click="remove(index)"
-        >
+        <IconButton :label="panels.removeLayoutGrid" @click="remove(index)">
           <icon-lucide-minus class="size-3.5" />
         </IconButton>
       </template>

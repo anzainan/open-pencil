@@ -3,7 +3,6 @@ import { computed } from 'vue'
 
 import { MIXED, useComponentProperties, useI18n } from '@open-pencil/vue'
 
-import { useEditorStore } from '@/app/editor/active-store'
 import ComponentPropertyTextField from './ComponentPropertyTextField.vue'
 
 import AppSelect from '@/components/ui/AppSelect.vue'
@@ -13,8 +12,6 @@ import PanelSection from '@/components/ui/panel/PanelSection.vue'
 
 const { active, controls, setValue } = useComponentProperties()
 const { panels } = useI18n()
-const store = useEditorStore()
-const readOnly = computed(() => store.state.readOnly)
 const componentSectionUI = { title: 'text-component' }
 
 function selectOptions(control: (typeof controls.value)[number]) {
@@ -50,7 +47,6 @@ const sectionLabel = computed(() =>
           v-if="control.type === 'TEXT'"
           :value="control.value"
           :label="control.name"
-          :disabled="readOnly"
           :data-property="control.id"
           @commit="setValue(control.id, $event)"
         />
@@ -59,7 +55,6 @@ const sectionLabel = computed(() =>
             :model-value="booleanValue(control)"
             :label="control.name"
             :state="control.value === MIXED ? 'mixed' : 'idle'"
-            :disabled="readOnly"
             :data-property="control.id"
             @update:model-value="setValue(control.id, String($event))"
           />
@@ -69,7 +64,6 @@ const sectionLabel = computed(() =>
           :label="control.name"
           :model-value="selectValue(control)"
           :options="selectOptions(control)"
-          :disabled="readOnly"
           :data-property="control.id"
           @update:model-value="updateSelect(control.id, $event)"
         />

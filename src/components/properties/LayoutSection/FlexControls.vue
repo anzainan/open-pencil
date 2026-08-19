@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { tv } from 'tailwind-variants'
 import {
   SelectContent,
@@ -12,7 +12,6 @@ import {
   SelectViewport
 } from 'reka-ui'
 
-import { useEditorStore } from '@/app/editor/active-store'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import layoutAlignmentTheme from '@/theme/layout-alignment'
 
@@ -25,8 +24,6 @@ import { useI18n, useLayoutControlsContext } from '@open-pencil/vue'
 import type { LayoutDirection, LayoutAlign } from '@open-pencil/scene-graph'
 
 const ctx = useLayoutControlsContext()
-const store = useEditorStore()
-const readOnly = computed(() => store.state.readOnly)
 const layoutAlignment = tv(layoutAlignmentTheme)
 const alignmentStyles = layoutAlignment()
 const gapFieldRef = ref<HTMLElement | null>(null)
@@ -58,7 +55,6 @@ function alignmentCellClass(primary: LayoutAlign, counter: string) {
     <label class="mb-1 block text-[11px] text-muted">{{ panels.direction }}</label>
     <AppSelect
       :model-value="ctx.layoutDirection"
-      :disabled="readOnly"
       :options="[
         { value: 'AUTO', label: panels.auto },
         { value: 'LTR', label: 'LTR' },
@@ -78,7 +74,6 @@ function alignmentCellClass(primary: LayoutAlign, counter: string) {
         :min="0"
         :node-id="ctx.node.id"
         binding-path="itemSpacing"
-        :disabled="readOnly"
         @update:model-value="ctx.updateProp('itemSpacing', $event)"
         @commit="(v: number, p: number) => ctx.commitProp('itemSpacing', v, p)"
       >
@@ -98,7 +93,6 @@ function alignmentCellClass(primary: LayoutAlign, counter: string) {
         :min="0"
         :node-id="ctx.node.id"
         binding-path="counterAxisSpacing"
-        :disabled="readOnly"
         @update:model-value="ctx.updateProp('counterAxisSpacing', $event)"
         @commit="(v: number, p: number) => ctx.commitProp('counterAxisSpacing', v, p)"
       >
@@ -126,7 +120,7 @@ function alignmentCellClass(primary: LayoutAlign, counter: string) {
           <icon-lucide-align-horizontal-space-between v-else class="size-3.5" />
         </span>
         <span class="flex-1 truncate text-xs text-surface">{{ panels.auto }}</span>
-        <SelectRoot :model-value="'AUTO'" :disabled="readOnly" @update:model-value="setGapMode">
+        <SelectRoot :model-value="'AUTO'" @update:model-value="setGapMode">
           <SelectTrigger
             data-test-id="layout-gap-menu"
             :reference="anchorRef(gapFieldRef)"
@@ -167,7 +161,6 @@ function alignmentCellClass(primary: LayoutAlign, counter: string) {
           :min="0"
           :node-id="ctx.node.id"
           binding-path="itemSpacing"
-          :disabled="readOnly"
           @update:model-value="ctx.updateProp('itemSpacing', $event)"
           @commit="(v: number, p: number) => ctx.commitProp('itemSpacing', v, p)"
         >
@@ -179,7 +172,7 @@ function alignmentCellClass(primary: LayoutAlign, counter: string) {
             <icon-lucide-align-horizontal-space-between v-else class="size-3.5" />
           </template>
           <template #after-variable>
-            <SelectRoot :model-value="'FIXED'" :disabled="readOnly" @update:model-value="setGapMode">
+            <SelectRoot :model-value="'FIXED'" @update:model-value="setGapMode">
               <SelectTrigger
                 data-test-id="layout-gap-menu"
                 :reference="anchorRef(gapFieldRef)"
@@ -216,7 +209,6 @@ function alignmentCellClass(primary: LayoutAlign, counter: string) {
       </div>
     </template>
     <button
-      :disabled="readOnly"
       class="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded border border-border bg-transparent text-muted hover:bg-hover hover:text-surface disabled:cursor-not-allowed disabled:opacity-50"
       @click="ctx.toggleIndividualPadding"
     >
@@ -238,7 +230,6 @@ function alignmentCellClass(primary: LayoutAlign, counter: string) {
         v-for="cell in ctx.alignGrid"
         :key="`${cell.primary}-${cell.counter}`"
         :data-active="isAlignmentActive(cell.primary, cell.counter) || undefined"
-        :disabled="readOnly"
         :class="alignmentCellClass(cell.primary, cell.counter)"
         @click="ctx.setAlignment(ctx.gapAuto ? 'SPACE_BETWEEN' : cell.primary, cell.counter)"
       >

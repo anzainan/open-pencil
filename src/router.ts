@@ -6,8 +6,7 @@ import HomeView from './views/HomeView.vue'
 import TrashView from './views/TrashView.vue'
 
 const router = createRouter({
-  // H 子路径（ARCH-mobai-subpath.md 方案 A）：router base 跟随构建 base（/Mobai/），
-  // 否则页面 URL 落在 /Mobai/... 时路由全失配。
+  // router base 跟随 import.meta.env.BASE_URL（根路径 /），保证部署子路径变化时路由不失配。
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', component: HomeView },

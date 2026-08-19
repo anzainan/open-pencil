@@ -56,19 +56,14 @@ const { topMenus } = useAppMenu()
 const menuCls = useMenuUI()
 const mainMenuCls = useMenuUI({ content: 'min-w-52' })
 const subMenuCls = useMenuUI({ content: 'min-w-44' })
-// H 子路径：图标走 BASE_URL 前缀（/Mobai/favicon-32.png）。
+// 图标走 BASE_URL 前缀（根路径 /，favicon-32.png 随构建 base 解析）。
 const faviconSrc = import.meta.env.BASE_URL + 'favicon-32.png'
 </script>
 
 <template>
   <div class="shrink-0 border-b border-border">
     <div class="flex items-center gap-2 px-2 py-1.5">
-      <img
-        data-test-id="app-logo"
-        :src="faviconSrc"
-        class="size-4"
-        alt="OpenPencil"
-      />
+      <img data-test-id="app-logo" :src="faviconSrc" class="size-4" alt="OpenPencil" />
       <input
         v-if="editingName"
         ref="nameInput"

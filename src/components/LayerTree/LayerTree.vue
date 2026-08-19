@@ -61,18 +61,12 @@ watch(
   () => store.state.renameNodeId,
   (id) => {
     if (!id) return
-    if (store.state.readOnly) return
     const node = store.graph.getNode(id)
     store.state.renameNodeId = null
     if (node) rename.start(node.id, node.name)
   },
   { immediate: true }
 )
-
-function onRenameStart(id: string, name: string) {
-  if (store.state.readOnly) return
-  rename.start(id, name)
-}
 
 function onLayerRightClick(e: MouseEvent) {
   const row = (e.target as HTMLElement).closest<HTMLElement>('[data-node-id]')
@@ -217,7 +211,7 @@ function onFocusOut(event: FocusEvent, actions: LayerTreeRootActions) {
                       :expanded="isExpanded"
                       :actions="actions"
                       :chrome="chrome(scope)"
-                      @rename-start="onRenameStart"
+                      @rename-start="rename.start"
                     />
                   </LayerTreeItem>
                 </TreeItem>

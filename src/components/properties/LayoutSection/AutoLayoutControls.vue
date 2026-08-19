@@ -3,7 +3,6 @@ import { computed } from 'vue'
 
 import { useI18n, useLayoutControlsContext } from '@open-pencil/vue'
 
-import { useEditorStore } from '@/app/editor/active-store'
 import IconButton from '@/components/ui/IconButton.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import Tip from '@/components/ui/Tip.vue'
@@ -12,8 +11,6 @@ import type { LayoutMode } from '@open-pencil/scene-graph'
 
 const ctx = useLayoutControlsContext()
 const { panels } = useI18n()
-const store = useEditorStore()
-const readOnly = computed(() => store.state.readOnly)
 
 const layoutModes = computed<Array<{ value: LayoutMode; label: string }>>(() => [
   { value: 'NONE', label: panels.value.freeform },
@@ -35,7 +32,6 @@ function setLayoutMode(mode: string) {
         :model-value="ctx.node.layoutMode"
         :options="layoutModes"
         :label="panels.flow"
-        :disabled="readOnly"
         :ui="{ root: 'flex min-w-0 flex-1' }"
         @change="setLayoutMode"
       >
@@ -54,7 +50,6 @@ function setLayoutMode(mode: string) {
         :label="panels.layoutWrap"
         size="md"
         :active="ctx.node.layoutWrap === 'WRAP'"
-        :disabled="readOnly"
         @click="ctx.updateProp('layoutWrap', ctx.node.layoutWrap === 'WRAP' ? 'NO_WRAP' : 'WRAP')"
       >
         <icon-lucide-wrap-text class="size-3.5" />

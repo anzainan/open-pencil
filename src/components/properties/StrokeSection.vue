@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 
-import { useEditorStore } from '@/app/editor/active-store'
 import {
   applySolidStrokeColor,
   BindableValueRoot,
@@ -45,8 +44,6 @@ const { advancedActive, cap, join, miterLimit } = strokeCtx
 const colorProvider = useColorBindingProvider()
 const okhcl = useOkHCL()
 const { panels, dialogs } = useI18n()
-const store = useEditorStore()
-const readOnly = computed(() => store.state.readOnly)
 const expandedSides = ref(false)
 
 function strokePreview(stroke: Stroke, color: Color): Fill {
@@ -105,20 +102,15 @@ function onToggleSides(activeNode: SceneNode | null) {
     v-slot="{ items, isMixed, activeNode, selectedNodeIds, flush, actions }"
     prop-key="strokes"
     :label="panels.stroke"
-    :disabled="readOnly"
   >
     <PanelSection :label="panels.stroke" :empty="!isMixed && items.length === 0">
       <template #actions>
-        <IconButton
-          :label="panels.addStroke"
-          :disabled="readOnly"
-          @click="actions.add(strokeCtx.defaultStroke)"
-        >
+        <IconButton :label="panels.addStroke" @click="actions.add(strokeCtx.defaultStroke)">
           <icon-lucide-plus class="size-3.5" />
         </IconButton>
       </template>
 
-      <SharedStyleField kind="stroke" :label="panels.strokeStyle" :disabled="readOnly" />
+      <SharedStyleField kind="stroke" :label="panels.strokeStyle" />
 
       <p v-if="isMixed" class="text-[11px] text-muted">{{ panels.mixedStrokesHelp }}</p>
 
@@ -140,7 +132,6 @@ function onToggleSides(activeNode: SceneNode | null) {
           <PaintField
             :opacity="stroke.opacity"
             :opacity-label="panels.opacity"
-            :disabled="readOnly"
             @update:opacity="actions.patch(index, { opacity: $event })"
           >
             <template #preview>
@@ -163,7 +154,6 @@ function onToggleSides(activeNode: SceneNode | null) {
                   <button
                     type="button"
                     :aria-label="panels.stroke"
-                    :disabled="readOnly"
                     class="size-4 shrink-0 cursor-pointer rounded-sm border-0 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <FillSwatch
@@ -181,7 +171,6 @@ function onToggleSides(activeNode: SceneNode | null) {
                 :resolved-color="binding.resolvedValue"
                 :variable-name="binding.variable?.name"
                 :label="panels.stroke"
-                :disabled="readOnly"
                 @update="
                   updateStrokeColor(
                     binding.actions,
@@ -205,7 +194,6 @@ function onToggleSides(activeNode: SceneNode | null) {
                 "
                 :create-name-placeholder="panels.variableName"
                 :create-submit-label="panels.create"
-                :disabled="readOnly"
               />
             </template>
           </PaintField>
@@ -218,7 +206,6 @@ function onToggleSides(activeNode: SceneNode | null) {
           :ui="{ trigger: 'w-[88px] flex-none' }"
           :model-value="strokeCtx.currentAlign(activeNode)"
           :options="strokeCtx.alignOptions"
-          :disabled="readOnly"
           data-property="stroke-align"
           @update:model-value="strokeCtx.updateAlign($event as Stroke['align'], activeNode)"
         />
@@ -229,7 +216,6 @@ function onToggleSides(activeNode: SceneNode | null) {
             icon="W"
             :model-value="items[0]?.weight ?? 1"
             :min="0"
-            :disabled="readOnly"
             data-property="stroke-weight"
             @update:model-value="actions.patch(0, { weight: $event })"
           />
@@ -239,7 +225,6 @@ function onToggleSides(activeNode: SceneNode | null) {
           size="md"
           class="size-[26px] shrink-0"
           :active="expandedSides"
-          :disabled="readOnly"
           data-property="stroke-sides"
           @click="onToggleSides(activeNode)"
         >
@@ -253,7 +238,6 @@ function onToggleSides(activeNode: SceneNode | null) {
           size="md"
           class="shrink-0"
           :active="strokeCtx.dashState(items[0]).on"
-          :disabled="readOnly"
           data-property="stroke-dash"
           @click="actions.patch(0, strokeCtx.toggleDash(items[0]))"
         >
@@ -268,7 +252,6 @@ function onToggleSides(activeNode: SceneNode | null) {
             icon="D"
             :model-value="items[0]?.dashPattern?.[0] ?? 6"
             :min="1"
-            :disabled="readOnly"
             data-property="stroke-dash-length"
             @update:model-value="actions.patch(0, strokeCtx.setDash(items[0], $event))"
           />
@@ -277,7 +260,6 @@ function onToggleSides(activeNode: SceneNode | null) {
             icon="G"
             :model-value="items[0]?.dashPattern?.[1] ?? items[0]?.dashPattern?.[0] ?? 6"
             :min="1"
-            :disabled="readOnly"
             data-property="stroke-dash-gap"
             @update:model-value="actions.patch(0, strokeCtx.setGap(items[0], $event))"
           />
@@ -290,7 +272,6 @@ function onToggleSides(activeNode: SceneNode | null) {
             :model-value="cap === MIXED ? 'MIXED' : cap"
             :options="strokeCtx.capOptions"
             :label="panels.strokeCap"
-            :disabled="readOnly"
             data-property="stroke-cap"
             @update:model-value="setCap"
           >
@@ -309,7 +290,6 @@ function onToggleSides(activeNode: SceneNode | null) {
             :model-value="join === MIXED ? 'MIXED' : join"
             :options="strokeCtx.joinOptions"
             :label="panels.strokeJoin"
-            :disabled="readOnly"
             data-property="stroke-join"
             @update:model-value="setJoin"
           >
@@ -327,7 +307,6 @@ function onToggleSides(activeNode: SceneNode | null) {
           <NumberField
             :model-value="miterLimit"
             :min="1"
-            :disabled="readOnly"
             data-property="stroke-miter-limit"
             :aria-label="panels.strokeMiterLimit"
             @update:model-value="strokeCtx.updateMiterLimit"
@@ -350,7 +329,6 @@ function onToggleSides(activeNode: SceneNode | null) {
           :label="side[0].toUpperCase()"
           :model-value="strokeCtx.borderWeight(activeNode, side)"
           :min="0"
-          :disabled="readOnly"
           :data-property="`stroke-${side}-weight`"
           @update:model-value="strokeCtx.updateBorderWeight(side, $event, activeNode)"
         />

@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useEffectsControls, useI18n } from '@open-pencil/vue'
 
-import { useEditorStore } from '@/app/editor/active-store'
 import ColorInput from '@/components/ColorPicker/ColorInput.vue'
 import NumberField from '@/components/inputs/NumberField.vue'
 import PropertyItemRow from '@/components/properties/item-list/PropertyItemRow.vue'
@@ -24,8 +22,6 @@ import type { Effect, Fill } from '@open-pencil/scene-graph'
 const effectsCtx = useEffectsControls()
 const { panels } = useI18n()
 const blendModeOptions = useBlendModeOptions()
-const store = useEditorStore()
-const readOnly = computed(() => store.state.readOnly)
 
 function effectPreview(effect: Effect): Fill {
   return {
@@ -42,20 +38,18 @@ function effectPreview(effect: Effect): Fill {
     v-slot="{ items, isMixed, activeNode, flush, actions }"
     prop-key="effects"
     :label="panels.effects"
-    :disabled="readOnly"
   >
     <PanelSection :label="panels.effects" :empty="!isMixed && items.length === 0">
       <template #actions>
         <IconButton
           :label="panels.addEffect"
-          :disabled="readOnly"
           @click="actions.add(effectsCtx.createDefaultEffect())"
         >
           <icon-lucide-plus class="size-3.5" />
         </IconButton>
       </template>
 
-      <SharedStyleField kind="effect" :label="panels.effectStyle" :disabled="readOnly" />
+      <SharedStyleField kind="effect" :label="panels.effectStyle" />
 
       <p v-if="isMixed" class="text-[11px] text-muted">{{ panels.mixedEffectsHelp }}</p>
 
@@ -90,7 +84,6 @@ function effectPreview(effect: Effect): Fill {
                       ? panels.collapseEffectSettings
                       : panels.expandEffectSettings
                   "
-                  :disabled="readOnly"
                   data-property="effect-expand"
                   class="flex size-5 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded border border-border bg-input p-0 disabled:cursor-not-allowed disabled:opacity-50"
                   @click="effectsCtx.toggleExpand(index)"
@@ -109,7 +102,6 @@ function effectPreview(effect: Effect): Fill {
                 :model-value="effect.type"
                 :options="effectsCtx.effectOptions"
                 :label="panels.effects"
-                :disabled="readOnly"
                 data-property="effect-type"
                 @update:model-value="
                   effectsCtx.updateType(actions.patch, activeNode, index, $event as Effect['type'])
@@ -127,7 +119,6 @@ function effectPreview(effect: Effect): Fill {
                   :model-value="effect.blendMode ?? 'NORMAL'"
                   :options="blendModeOptions"
                   :label="panels.blendMode"
-                  :disabled="readOnly"
                   data-property="effect-blend-mode"
                   @update:model-value="
                     commitDiscretePropertyListChange(flush, () =>
@@ -142,7 +133,6 @@ function effectPreview(effect: Effect): Fill {
                     <NumberField
                       icon="X"
                       :model-value="effect.offset.x"
-                      :disabled="readOnly"
                       data-property="effect-offset-x"
                       @update:model-value="
                         effectsCtx.scrubEffect(activeNode, index, {
@@ -160,7 +150,6 @@ function effectPreview(effect: Effect): Fill {
                     <NumberField
                       icon="Y"
                       :model-value="effect.offset.y"
-                      :disabled="readOnly"
                       data-property="effect-offset-y"
                       @update:model-value="
                         effectsCtx.scrubEffect(activeNode, index, {
@@ -182,7 +171,6 @@ function effectPreview(effect: Effect): Fill {
                       icon="B"
                       :model-value="effect.radius"
                       :min="0"
-                      :disabled="readOnly"
                       data-property="effect-radius"
                       @update:model-value="
                         effectsCtx.scrubEffect(activeNode, index, { radius: $event })
@@ -194,7 +182,6 @@ function effectPreview(effect: Effect): Fill {
                     <NumberField
                       icon="S"
                       :model-value="effect.spread"
-                      :disabled="readOnly"
                       data-property="effect-spread"
                       @update:model-value="
                         effectsCtx.scrubEffect(activeNode, index, { spread: $event })
@@ -209,7 +196,6 @@ function effectPreview(effect: Effect): Fill {
                     class="min-w-0 flex-1"
                     :color="effect.color"
                     editable
-                    :disabled="readOnly"
                     @update="effectsCtx.updateColor(actions.patch, index, $event)"
                   />
                   <Tip :label="panels.opacity">
@@ -219,7 +205,6 @@ function effectPreview(effect: Effect): Fill {
                       :model-value="Math.round(effect.color.a * 100)"
                       :min="0"
                       :max="100"
-                      :disabled="readOnly"
                       data-property="effect-opacity"
                       @update:model-value="
                         effectsCtx.scrubEffect(activeNode, index, {
@@ -242,7 +227,6 @@ function effectPreview(effect: Effect): Fill {
                 icon="B"
                 :model-value="effect.radius"
                 :min="0"
-                :disabled="readOnly"
                 data-property="effect-radius"
                 @update:model-value="effectsCtx.scrubEffect(activeNode, index, { radius: $event })"
                 @commit="effectsCtx.commitEffect(activeNode, index, { radius: $event })"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, type ComponentPublicInstance } from 'vue'
+import { ref, watch, type ComponentPublicInstance } from 'vue'
 import { templateRef } from '@vueuse/core'
 import { tv } from 'tailwind-variants'
 import {
@@ -13,7 +13,6 @@ import {
 import type { SceneNode } from '@open-pencil/scene-graph'
 import { PageListRoot, useFlatReorderDrag, useI18n, useInlineRename } from '@open-pencil/vue'
 
-import { useEditorStore } from '@/app/editor/active-store'
 import Tip from '@/components/ui/Tip.vue'
 import { useMenuUI } from '@/components/ui/menu'
 import pageListTheme from '@/theme/page-list'
@@ -27,8 +26,6 @@ interface PageActions {
 }
 
 const pageInput = templateRef<HTMLInputElement>('pageInput')
-const store = useEditorStore()
-const readOnly = computed(() => store.state.readOnly)
 const rename = useInlineRename((id, name) => pageActions.value?.rename(id, name))
 const { panels, pages: pageMessages } = useI18n()
 const menuCls = useMenuUI({
@@ -55,7 +52,6 @@ watch(pageInput, (input) => {
 })
 
 function startRename(pg: PageItem, renamePage: (pageId: string, name: string) => void) {
-  if (readOnly.value) return
   setPageActions(renamePage)
   rename.start(pg.id, pg.name)
 }
@@ -93,12 +89,7 @@ function setupPageRowRef(
       <div :class="baseStyles.header()">
         <span data-test-id="pages-header" :class="baseStyles.title()">{{ panels.pages }}</span>
         <Tip :label="panels.addPage">
-          <button
-            data-test-id="pages-add"
-            :disabled="readOnly"
-            :class="baseStyles.add()"
-            @click="actions.add()"
-          >
+          <button data-test-id="pages-add" :class="baseStyles.add()" @click="actions.add()">
             +
           </button>
         </Tip>
@@ -165,7 +156,6 @@ function setupPageRowRef(
                 <ContextMenuItem
                   data-test-id="pages-context-rename"
                   :class="menuCls.item"
-                  :disabled="readOnly"
                   @select="startRename(pg, actions.rename)"
                 >
                   <icon-lucide-pencil :class="menuCls.icon" />
@@ -174,7 +164,7 @@ function setupPageRowRef(
                 <ContextMenuItem
                   data-test-id="pages-context-delete"
                   :class="menuCls.item"
-                  :disabled="readOnly || pages.length <= 1"
+                  :disabled="pages.length <= 1"
                   @select="actions.delete(pg.id)"
                 >
                   <icon-lucide-trash-2 :class="menuCls.icon" />

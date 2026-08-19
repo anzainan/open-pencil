@@ -13,7 +13,6 @@ import { useEditorStore } from '@/app/editor/active-store'
 import type { Color, Fill } from '@open-pencil/scene-graph'
 
 const editor = useEditorStore()
-const readOnly = computed(() => editor.state.readOnly)
 const pageColor = computed(() => editor.state.pageColor)
 const pageFill = computed<Fill>(() => ({
   type: 'SOLID',
@@ -37,7 +36,6 @@ function updatePageColor(color: Color) {
     <PaintField
       :opacity="pageColor.a"
       :opacity-label="panels.opacity"
-      :disabled="readOnly"
       @update:opacity="updatePageAlpha"
     >
       <template #preview>
@@ -46,7 +44,6 @@ function updatePageColor(color: Color) {
             <button
               type="button"
               :aria-label="panels.pageBackground"
-              :disabled="readOnly"
               class="size-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FillSwatch :fill="pageFill" class="size-full" />
@@ -55,12 +52,7 @@ function updatePageColor(color: Color) {
         </ColorPicker>
       </template>
       <template #value>
-        <PaintValue
-          :color="pageColor"
-          :label="panels.pageBackground"
-          :disabled="readOnly"
-          @update="updatePageColor"
-        />
+        <PaintValue :color="pageColor" :label="panels.pageBackground" @update="updatePageColor" />
       </template>
     </PaintField>
   </PanelSection>

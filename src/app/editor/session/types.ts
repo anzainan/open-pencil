@@ -14,7 +14,6 @@ export function createInitialAppEditorState(pageId: string): AppEditorState {
     mobileDrawerSnap: 'closed',
     clipboardHTML: '',
     autosaveEnabled: false,
-    readOnly: false,
     cursorCanvasX: null,
     cursorCanvasY: null,
     nodeEditState: null,
@@ -34,8 +33,6 @@ export type AppEditorState = EditorState & {
   mobileDrawerSnap: 'closed' | 'half' | 'full'
   clipboardHTML: string
   autosaveEnabled: boolean
-  /** 只读模式（无编辑权限）：禁编辑工具/动作、关 autosave、禁保存导出，仅可查看。 */
-  readOnly: boolean
   cursorCanvasX: number | null
   cursorCanvasY: number | null
   nodeEditState: NodeEditState | null

@@ -1,15 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
 import { useLayoutControlsContext } from '@open-pencil/vue'
-
-import { useEditorStore } from '@/app/editor/active-store'
 
 import type { PaddingProp } from '@/components/properties/LayoutSection/types'
 
 const ctx = useLayoutControlsContext()
-const store = useEditorStore()
-const readOnly = computed(() => store.state.readOnly)
 
 const paddingSides: Array<{ prop: PaddingProp; icon: string }> = [
   { prop: 'paddingTop', icon: 'top' },
@@ -30,7 +25,6 @@ const paddingSides: Array<{ prop: PaddingProp; icon: string }> = [
       :min="0"
       :node-id="ctx.node.id"
       binding-path="paddingLeft"
-      :disabled="readOnly"
       @update:model-value="ctx.setHorizontalPadding"
       @commit="ctx.commitHorizontalPadding"
     >
@@ -44,7 +38,6 @@ const paddingSides: Array<{ prop: PaddingProp; icon: string }> = [
       :min="0"
       :node-id="ctx.node.id"
       binding-path="paddingTop"
-      :disabled="readOnly"
       @update:model-value="ctx.setVerticalPadding"
       @commit="ctx.commitVerticalPadding"
     >
@@ -62,7 +55,6 @@ const paddingSides: Array<{ prop: PaddingProp; icon: string }> = [
       :min="0"
       :node-id="ctx.node.id"
       :binding-path="side.prop"
-      :disabled="readOnly"
       @update:model-value="ctx.updateProp(side.prop, $event)"
       @commit="(v: number, p: number) => ctx.commitProp(side.prop, v, p)"
     >
