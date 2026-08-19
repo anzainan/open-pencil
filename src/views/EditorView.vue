@@ -59,7 +59,7 @@ useEditorMenu()
 const collab = useCollab(getActiveStore)
 provide(COLLAB_KEY, collab)
 
-// H 子路径：图标走 BASE_URL 前缀（/Mobai/favicon-32.png）。
+// 图标走 BASE_URL 前缀（根路径 /）。
 const faviconSrc = import.meta.env.BASE_URL + 'favicon-32.png'
 
 useEventListener(
