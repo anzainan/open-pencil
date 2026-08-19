@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDocumentWorkspace, useI18n } from '@open-pencil/vue'
 
@@ -38,7 +38,8 @@ const workspace = useDocumentWorkspace({
   refreshInterval: 60_000,
   previewConcurrency: 6
 })
-const documents = workspace.documents
+// useDocumentWorkspace 返回 Readonly 包装，网格组件需要可写 Ref → 断言收敛类型。
+const documents = workspace.documents as Ref<StorageDocument[]>
 const loading = workspace.loading
 const errorMessage = computed(() => {
   const reason = workspace.error.value

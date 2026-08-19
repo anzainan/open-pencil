@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, useAttrs, watch } from 'vue'
+import { useAttrs, watch } from 'vue'
 import { tv } from 'tailwind-variants'
 import {
   TreeItem,
@@ -50,7 +50,6 @@ const attrs = useAttrs()
 const styles = tv(layerTreeTheme)()
 provideLayerTreeUI(() => ui)
 const store = useEditorStore()
-const readOnly = computed(() => store.state.readOnly)
 const rename = useInlineRename((id, name) => store.renameNode(id, name))
 const renameControls = {
   commit: rename.commit,

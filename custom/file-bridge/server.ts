@@ -13,17 +13,6 @@ import {
 import { EventBus, FileWatcher, sseResponse } from './lib/events'
 import { createMcpProxy, type McpProxyHandle } from './mcp-proxy'
 import { handleMcpRequest, type McpDeps } from './mcp'
-import { decryptPassword } from './lib/crypto'
-import { AuthStore, isAdminRole, type User, type UserRole } from './lib/auth'
-import { NotificationStore } from './lib/notifications'
-import { PresenceStore } from './lib/presence'
-import { PermissionStore } from './lib/permissions'
-import {
-  generateRandomPassword,
-  ShareStore,
-  type SharePermission,
-  type ShareScope
-} from './lib/share'
 import { Manifest } from './lib/manifest'
 import {
   ALLOWED_DESIGN_EXTENSIONS,
@@ -32,13 +21,11 @@ import {
   isSafeRelativePath,
   isSafeWorkspaceName,
   isSafeWorkspaceRelPath,
-  OPENPENCIL_REL_DIR,
   resolveDesignPath,
   resolveFontPath,
   TRASH_REL_DIR
 } from './lib/paths'
 import { StateStore } from './lib/state'
-import { deriveRoomId } from './lib/room-id'
 
 export interface BridgeServerOptions {
   port: number
@@ -50,29 +37,6 @@ export interface BridgeServerOptions {
 
 const VERSION = '0.3.0'
 const RECONCILE_MS = 60_000
-
-/**
- * 解析 COLLAB_ICE_SERVERS_JSON 为 ICE server 数组（非法/空 → null → 浏览器回退官方默认）。
- * 形如 `[{"urls":["stun:stun.example.com:3478"]}]`（含两端引号由 shell/env 责任方保证）。
- */
-function parseCollabIceServers(raw: string | undefined): { urls: string | string[] }[] | null {
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return null
-    const valid = parsed.filter(
-      (item): item is { urls: string | string[] } =>
-        !!item &&
-        typeof item === 'object' &&
-        'urls' in item &&
-        (typeof item.urls === 'string' || Array.isArray(item.urls))
-    )
-    return valid.length > 0 ? valid : null
-  } catch {
-    return null
-  }
-}
-
 const SSE_PING_MS = 25_000
 const MAX_BODY_BYTES = 512 * 1024 * 1024
 
@@ -281,84 +245,7 @@ function methodNotAllowed(): Response {
 function checkAuth(request: Request, token: string): Response | null {
   const header = request.headers.get('authorization') ?? ''
   if (token && constantTimeEqual(header, `Bearer ${token}`)) return null
-  // checkAuth 升级（Phase A）：BRIDGE_TOKEN 或有效 session token 二选一。
-  if (authStore && sessionUser(request)) return null
   return json({ ok: false, error: 'Unauthorized' }, 401)
-}
-
-// ---- 账号会话（Phase A：登录/成员）。checkAuth 与登录态路由共享。 ----
-let authStore: AuthStore | null = null
-
-function bearerToken(request: Request): string {
-  const header = request.headers.get('authorization') ?? ''
-  return header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : ''
-}
-
-/** 从 Authorization: Bearer <session-token> 解析当前登录用户（无/失效返回 null）。 */
-function sessionUser(request: Request): User | null {
-  if (!authStore) return null
-  const token = bearerToken(request)
-  if (!token) return null
-  return authStore.getSessionUser(token)
-}
-
-/** 登录态用户（非 owner/admin 返回 null）。 */
-function adminUser(request: Request): User | null {
-  const user = sessionUser(request)
-  if (!user || !isAdminRole(user.role)) return null
-  return user
-}
-
-/** C-live 在线台账周期清理：按 path 聚合被移除用户，逐个 path 广播最新快照（含离开后清空）。 */
-function sweepExpiredPresence(presence: PresenceStore, bus: EventBus): void {
-  const removedByPath = new Map<string, { path: string; userId: string }[]>()
-  for (const item of presence.sweep()) {
-    const list = removedByPath.get(item.path) ?? []
-    list.push(item)
-    removedByPath.set(item.path, list)
-  }
-  for (const path of removedByPath.keys()) {
-    bus.broadcast('online.changed', { path, users: presence.snapshot(path) })
-  }
-}
-
-/** 启动在线台账周期清理定时器（15s 无心跳 → 下线并广播离开）。 */
-function startPresenceSweep(presence: PresenceStore, bus: EventBus): ReturnType<typeof setInterval> {
-  const PRESENCE_SWEEP_MS = 15_000
-  return setInterval(() => {
-    sweepExpiredPresence(presence, bus)
-  }, PRESENCE_SWEEP_MS)
-}
-
-/**
- * POST /api/v1/online（login）→ {path} 心跳上报。返回该 path 最新在线快照
- * （上报即广播，其它 SSE 客户端实时感知新协作者）。
- */
-async function reportOnline(request: Request, presence: PresenceStore): Promise<Response> {
-  const user = sessionUser(request)
-  if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-  let payload: { path?: unknown }
-  try {
-    payload = JSON.parse(await request.text())
-  } catch {
-    return json({ ok: false, error: 'invalid JSON body' }, 400)
-  }
-  const path = typeof payload.path === 'string' ? payload.path.trim() : ''
-  if (!isSafeRelativePath(path)) return json({ ok: false, error: 'invalid path' }, 400)
-  const users = presence.upsert(path, {
-    userId: user.id,
-    name: user.name,
-    avatar: { ...user.avatar }
-  })
-  return json({ ok: true, users })
-}
-
-/** GET /api/v1/online?path=（login）→ 该 path 当前在线快照（前端挂载时拉取自愈）。 */
-function getOnline(request: Request, presence: PresenceStore): Response {
-  const url = new URL(request.url)
-  const path = url.searchParams.get('path') ?? ''
-  if (!isSafeRelativePath(path)) return json({ ok: false, error: 'invalid path' }, 400)
-  return json({ users: presence.snapshot(path) })
 }
 
 export function startServer(options: BridgeServerOptions) {
@@ -366,24 +253,12 @@ export function startServer(options: BridgeServerOptions) {
   const designRoot = options.designRoot ?? process.env.DESIGN_ROOT ?? '/data/design'
   const stateDir = options.stateDir ?? process.env.STATE_DIR ?? '/data/state'
   const token = options.token ?? process.env.BRIDGE_TOKEN ?? ''
-  // P0 实时协作房间派生密钥：env 优先，否则回退 BRIDGE_TOKEN（未配置 → 空串，房间派生仍可用
-  // 但同一文件 token 不同时房间号不同——当前环境 BRIDGE_TOKEN 恒配置，正常场景不受影响）。
-  const collabRoomSecret = process.env.COLLAB_ROOM_SECRET?.trim() || token
 
   mkdirSync(designRoot, { recursive: true })
   mkdirSync(stateDir, { recursive: true })
 
   const state = new StateStore(stateDir)
   const bus = new EventBus(SSE_PING_MS)
-  // 文档在线台账（C-live 方案二）：心跳 upsert + 15s 超时 sweep，变更经 bus 广播 online.changed。
-  const presence = new PresenceStore(bus)
-  // 账号/会话台账（Phase A）：users.json seed 默认管理员，sessions.json 跨容器持久化。
-  authStore = new AuthStore(designRoot)
-  // 权限台账 + 通知台账（Phase B）：permissions.json 权限引擎，notifications.json 权限申请落库。
-  const permissions = new PermissionStore(designRoot)
-  const notifications = new NotificationStore(designRoot)
-  // 外链台账（Phase C）：share.json 存外链（token/密码/internet scope），成员权限仍走 permissions.json。
-  const shares = new ShareStore(designRoot)
   // homepage 可见性白名单台账：只展示经首页/工作区创建链路登记的内容（方案 A）。
   const manifest = new Manifest(designRoot)
   const watcher = new FileWatcher(
@@ -401,15 +276,12 @@ export function startServer(options: BridgeServerOptions) {
     watcher.reconcile(scanManifestFiles(designRoot, manifest.files))
   }, RECONCILE_MS)
 
-  // C-live：在线台账周期清理（15s 无心跳 → 下线；有移除则广播离开）。
-  const presenceSweepTimer = startPresenceSweep(presence, bus)
-
   const mcpDeps: McpDeps = {
     designRoot,
     state,
     token,
-    // REQ-4：bridge MCP 读 active / 标注 active 走 owner 维度（无 session → owner 账号）。
-    resolveActiveUserId: () => authStore?.getOwnerUserId() ?? null
+    // 单用户本地模式：无账号体系，active 读写统一走 primary 槽位。
+    resolveActiveUserId: () => null
   }
 
   // ---- 可选的上游 MCP server（内存级实时协作：纯 JSON-RPC 转发，不解析画布）----
@@ -743,18 +615,13 @@ export function startServer(options: BridgeServerOptions) {
 
   // ---- active / recent ----
 
-  /**
-   * 读 active 的 owner 维度 key：有 session → 该用户自己的记录；无 session（AI/桥接）
-   * → owner（安在南）账号的记录。多人并发打开互不覆盖，AI 默认视窗 = 安在南的窗口。
-   */
-  function activeReadKey(request: Request): string | null {
-    const user = sessionUser(request)
-    if (user) return user.id
-    return authStore?.getOwnerUserId() ?? null
+  /** 读 active key：单用户本地模式（无账号体系），固定 null → primary 槽位。 */
+  function activeReadKey(): string | null {
+    return null
   }
 
-  function getActive(request: Request): Response {
-    return json(state.getActive(activeReadKey(request)))
+  function getActive(): Response {
+    return json(state.getActive(activeReadKey()))
   }
 
   async function setActive(request: Request): Promise<Response> {
@@ -767,8 +634,8 @@ export function startServer(options: BridgeServerOptions) {
     const path = typeof payload.path === 'string' ? payload.path.trim() : ''
     if (!isSafeRelativePath(path)) return json({ ok: false, error: 'invalid path' }, 400)
 
-    // 写侧维度：登录用户记到自己的 key；无 session（AI/桥接）记 primary（owner 默认）。
-    const userId = sessionUser(request)?.id ?? null
+    // 写侧维度：单用户本地模式，统一记 primary。
+    const userId = activeReadKey()
     state.setActive(path, userId)
     bus.broadcast('active.changed', { path })
     return json(state.getActive(userId))
@@ -792,605 +659,6 @@ export function startServer(options: BridgeServerOptions) {
     return json({ recents: state.getRecent() })
   }
 
-  // ---- 账号会话与成员管理（Phase A：登录 / session 恢复 / 成员 CRUD）----
-
-  async function login(request: Request): Promise<Response> {
-    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
-    let payload: { name?: unknown; password?: unknown }
-    try {
-      payload = JSON.parse(await request.text())
-    } catch {
-      return json({ ok: false, error: 'invalid JSON body' }, 400)
-    }
-    const name = typeof payload.name === 'string' ? payload.name.trim() : ''
-    const password = typeof payload.password === 'string' ? payload.password : ''
-    if (!name || !password) return json({ ok: false, error: 'name and password are required' }, 400)
-    const user = authStore.verifyCredentials(name, password)
-    if (!user) return json({ ok: false, error: 'invalid credentials' }, 401)
-    const token = authStore.createSession(user.id)
-    return json({ token, user: authStore.toPublicUser(user) })
-  }
-
-  function logout(request: Request): Response {
-    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
-    const token = bearerToken(request)
-    if (!token || !authStore.getSessionUser(token)) {
-      return json({ ok: false, error: 'Unauthorized' }, 401)
-    }
-    authStore.destroySession(token)
-    return json({ ok: true })
-  }
-
-  function session(request: Request): Response {
-    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
-    const user = sessionUser(request)
-    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-    return json({ user: authStore.toPublicUser(user) })
-  }
-
-  /** GET /members：admin/owner → 附成员明文密码（withPassword）；member → 无密码字段。 */
-  function listMembers(withPassword: boolean): Response {
-    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
-    return json({ members: authStore.listUsers({ withPassword }) })
-  }
-
-  async function createMember(request: Request): Promise<Response> {
-    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
-    let payload: { name?: unknown; password?: unknown; role?: unknown }
-    try {
-      payload = JSON.parse(await request.text())
-    } catch {
-      return json({ ok: false, error: 'invalid JSON body' }, 400)
-    }
-    const name = typeof payload.name === 'string' ? payload.name.trim() : ''
-    const password = typeof payload.password === 'string' ? payload.password : ''
-    const role = payload.role === 'admin' || payload.role === 'member' ? payload.role : 'member'
-    let result
-    try {
-      result = authStore.createUser({ name, password, role })
-    } catch (error) {
-      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
-    }
-    if (!result.ok) {
-      if (result.error.startsWith('user already exists')) {
-        return json({ ok: false, error: result.error }, 409)
-      }
-      return json({ ok: false, error: result.error }, 400)
-    }
-    // 添加成员返回含明文密码（「添加并复制」用）；其余场景密码字段绝不出现在响应里。
-    return json({ user: result.user, password: result.password }, 201)
-  }
-
-  async function updateMember(request: Request, id: string): Promise<Response> {
-    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
-    let payload: { password?: unknown; role?: unknown }
-    try {
-      payload = JSON.parse(await request.text())
-    } catch {
-      return json({ ok: false, error: 'invalid JSON body' }, 400)
-    }
-    const input: { password?: string; role?: UserRole } = {}
-    if (typeof payload.password === 'string') input.password = payload.password
-    if (payload.role === 'admin' || payload.role === 'member') input.role = payload.role
-    if (input.password === undefined && input.role === undefined) {
-      return json({ ok: false, error: 'nothing to update' }, 400)
-    }
-    // owner 拒绝修改（不区分 admin 提权，直接 403）。
-    if (authStore.isOwner(id)) return json({ ok: false, error: 'owner cannot be modified' }, 403)
-    let result
-    try {
-      result = authStore.updateUser(id, input)
-    } catch (error) {
-      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
-    }
-    if (!result.ok) {
-      return result.error === 'not found'
-        ? json({ ok: false, error: result.error }, 404)
-        : json({ ok: false, error: result.error }, 400)
-    }
-    return json({ user: result.user })
-  }
-
-  function deleteMember(id: string): Response {
-    if (!authStore) return json({ ok: false, error: 'auth not ready' }, 500)
-    // owner 拒绝删除（固定账号，REQ §2.5）。
-    if (authStore.isOwner(id)) return json({ ok: false, error: 'owner cannot be removed' }, 403)
-    let result
-    try {
-      result = authStore.deleteUser(id)
-    } catch (error) {
-      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
-    }
-    if (!result.ok) {
-      return result.error === 'not found'
-        ? json({ ok: false, error: result.error }, 404)
-        : json({ ok: false, error: result.error }, 400)
-    }
-    return json({ deleted: true })
-  }
-
-  // ---- 头像（Phase G：真实图片上传，存 designRoot/.openpixel/avatars/，隐藏系统目录）----
-
-  const AVATAR_REL_DIR = 'avatars'
-  const MAX_AVATAR_BYTES = 5 * 1024 * 1024
-
-  /** 校验解码字节的 magic bytes 与扩展名是否匹配（拒绝伪装成图片的任意文件）。 */
-  function matchesImageSignature(ext: string, bytes: Uint8Array): boolean {
-    if (bytes.length < 12) return false
-    if (ext === 'png') {
-      return bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
-    }
-    if (ext === 'jpg' || ext === 'jpeg') {
-      return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
-    }
-    if (ext === 'webp') {
-      return (
-        bytes[0] === 0x52 &&
-        bytes[1] === 0x49 &&
-        bytes[2] === 0x46 &&
-        bytes[3] === 0x46 &&
-        bytes[8] === 0x57 &&
-        bytes[9] === 0x45 &&
-        bytes[10] === 0x42 &&
-        bytes[11] === 0x50
-      )
-    }
-    return false
-  }
-
-  /** POST /api/v1/avatars（login，本人）：base64 图片上传 → 写 .openpixel/avatars/ → 更新 users.json。 */
-  async function uploadAvatar(request: Request): Promise<Response> {
-    const user = sessionUser(request)
-    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-    let payload: { data?: unknown; ext?: unknown }
-    try {
-      payload = JSON.parse(await request.text())
-    } catch {
-      return json({ ok: false, error: 'invalid JSON body' }, 400)
-    }
-    if (typeof payload.data !== 'string' || !payload.data) {
-      return json({ ok: false, error: 'image data is required' }, 400)
-    }
-    const ext = typeof payload.ext === 'string' ? payload.ext.toLowerCase().replace(/^\./, '') : ''
-    if (!['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
-      return json({ ok: false, error: 'ext must be png/jpg/jpeg/webp' }, 400)
-    }
-    let bytes: Uint8Array
-    try {
-      bytes = Uint8Array.from(atob(payload.data), (char) => char.charCodeAt(0))
-    } catch {
-      return json({ ok: false, error: 'invalid base64 image data' }, 400)
-    }
-    if (bytes.byteLength === 0 || bytes.byteLength > MAX_AVATAR_BYTES) {
-      return json({ ok: false, error: 'image must be 1 byte to 5MB' }, 400)
-    }
-    if (!matchesImageSignature(ext, bytes)) {
-      return json({ ok: false, error: 'image signature does not match extension' }, 400)
-    }
-    // 文件名带版本号（userId-mtime）：同名覆盖重传时 relPath 变化 → 前端 useAvatarURL watch 天然触发重拉
-    // （否则同 ext 覆盖路径不变，旧 objectURL 不失效，见 ARCH-usersys-pw-disappear §6.2b/C3）。
-    const fileName = `${user.id}-${Date.now()}.${ext === 'jpeg' ? 'jpg' : ext}`
-    const oldRel = user.avatar?.image
-    const avatarDir = join(designRoot, OPENPENCIL_REL_DIR, AVATAR_REL_DIR)
-    try {
-      mkdirSync(avatarDir, { recursive: true })
-      await Bun.write(join(avatarDir, fileName), bytes)
-      // 清理旧头像文件（防同一用户多次上传堆积；仅删本人头像目录内文件）。
-      if (oldRel && oldRel.startsWith(`${AVATAR_REL_DIR}/`) && oldRel !== `${AVATAR_REL_DIR}/${fileName}`) {
-        const oldFile = join(designRoot, OPENPENCIL_REL_DIR, oldRel)
-        const rootResolved = resolve(avatarDir)
-        const fullResolved = resolve(oldFile)
-        if (fullResolved.startsWith(rootResolved + sep) && existsSync(fullResolved) && !isDirectory(fullResolved)) {
-          rmSync(fullResolved, { force: true })
-        }
-      }
-    } catch (error) {
-      return json({ ok: false, error: `write failed: ${String(error)}` }, 500)
-    }
-    const relPath = `${AVATAR_REL_DIR}/${fileName}`
-    let result
-    try {
-      result = authStore?.setAvatarImage(user.id, relPath)
-    } catch (error) {
-      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
-    }
-    if (!result || !result.ok) {
-      return json({ ok: false, error: result?.error ?? 'avatar update failed' }, 500)
-    }
-    return json({ ok: true, user: result.user, avatar: result.user.avatar })
-  }
-
-  /** GET /api/v1/avatars/:file（login）：仅放行 .openpixel/avatars/ 内图片，防遍历其他 .openpixel 内容。 */
-  function serveAvatar(request: Request, fileName: string): Response {
-    const user = sessionUser(request)
-    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-    if (!/^[A-Za-z0-9_-]+\.(png|jpe?g|webp)$/i.test(fileName)) {
-      return json({ ok: false, error: 'invalid avatar file' }, 400)
-    }
-    const avatarDir = join(designRoot, OPENPENCIL_REL_DIR, AVATAR_REL_DIR)
-    const rootResolved = resolve(avatarDir)
-    const full = resolve(avatarDir, fileName)
-    if (full !== rootResolved && !full.startsWith(rootResolved + sep)) {
-      return json({ ok: false, error: 'unsafe path' }, 403)
-    }
-    if (!existsSync(full) || isDirectory(full)) {
-      return json({ ok: false, error: 'not found' }, 404)
-    }
-    return new Response(Bun.file(full), {
-      headers: {
-        'Content-Type': mimeFor(full),
-        'Cache-Control': 'no-cache',
-        'X-Content-Type-Options': 'nosniff'
-      }
-    })
-  }
-
-  // ---- 权限模型（Phase B：真实拦截。文件权限 > 文件夹权限 > 默认，16:28 拍板）----
-
-  /** 解析当前登录用户对某路径的权限（打开/编辑前真实校验；path 空 → 根默认）。 */
-  function getPermissions(request: Request): Response {
-    const user = sessionUser(request)
-    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-    const url = new URL(request.url)
-    const path = url.searchParams.get('path') ?? ''
-    if (path !== '' && !isSafeWorkspaceRelPath(path)) {
-      return json({ ok: false, error: 'invalid path' }, 400)
-    }
-    const resolved = permissions.resolvePermission(path, user)
-    // Phase C：附带最近命中 entry 的成员列表（分享面板成员行用：文件级优先，否则父文件夹继承）。
-    const entry = permissions.getEntryForPath(path)
-    return json({ ...resolved, members: entry?.members ?? [], membersPath: entry?.path ?? '' })
-  }
-
-  /** 无编辑权用户申请编辑权限 → 通知 owner + 所有 admin（同人同路径未读去重）。 */
-  async function createPermissionRequest(request: Request): Promise<Response> {
-    const user = sessionUser(request)
-    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-    let payload: { path?: unknown }
-    try {
-      payload = JSON.parse(await request.text())
-    } catch {
-      return json({ ok: false, error: 'invalid JSON body' }, 400)
-    }
-    const path = typeof payload.path === 'string' ? payload.path.trim() : ''
-    if (path !== '' && !isSafeWorkspaceRelPath(path)) {
-      return json({ ok: false, error: 'invalid path' }, 400)
-    }
-    // 去重：同人同路径已有未读申请 → 不再追加（返回成功，幂等）。
-    if (notifications.hasUnreadPermissionRequest(user.id, path)) {
-      return json({ ok: true, deduped: true })
-    }
-    const recipients = authStore?.listUsers().filter((member) => isAdminRole(member.role)) ?? []
-    for (const recipient of recipients) {
-      notifications.addNotification({
-        type: 'permission_request',
-        fromUserId: user.id,
-        targetUserId: recipient.id,
-        path,
-        title: `${user.name} 请求编辑权限`,
-        detail: `请求编辑 ${path}`,
-        action: 'approve'
-      })
-    }
-    return json({ ok: true, sent: recipients.length })
-  }
-
-  // ---- 通知中心（Phase D：列表 / action 批准拒绝 / 全部已读）----
-
-  /** GET /api/v1/notifications（login）→ 当前用户通知列表（时间倒序）。 */
-  function listNotifications(request: Request): Response {
-    const user = sessionUser(request)
-    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-    return json({ notifications: notifications.listNotificationsFor(user.id) })
-  }
-
-  /**
-   * POST /api/v1/notifications/:id/action（login）→ {action: approve|reject}。
-   * permission_request 批准 → 给申请者写该文件可编辑权限（permissions.json upsert）；
-   * join_request 批准 → 解析请求状态（现状无独立注册流，申请者已是成员则无需再添加）；
-   * 处理完成后给申请者生成结果通知。
-   */
-  async function resolveNotificationAction(request: Request, id: string): Promise<Response> {
-    const user = sessionUser(request)
-    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-    let payload: { action?: unknown }
-    try {
-      payload = JSON.parse(await request.text())
-    } catch {
-      return json({ ok: false, error: 'invalid JSON body' }, 400)
-    }
-    const action = payload.action === 'approve' || payload.action === 'reject' ? payload.action : ''
-    if (!action) return json({ ok: false, error: 'action must be approve or reject' }, 400)
-
-    const item = notifications.getById(id)
-    if (!item) return json({ ok: false, error: 'not found' }, 404)
-    if (item.targetUserId !== undefined && item.targetUserId !== user.id) {
-      return json({ ok: false, error: 'Forbidden' }, 403)
-    }
-    if (item.status !== 'unread') return json({ ok: false, error: 'already processed' }, 409)
-
-    const applicant = authStore?.getUserById(item.fromUserId) ?? null
-
-    if (action === 'approve' && item.type === 'permission_request' && item.path) {
-      // 批准 = 给申请者写该路径可编辑权限（保留既有 entry 的 scope/type，防覆盖文件夹继承）。
-      const existing = permissions.getEntry(item.path)
-      const members = [
-        ...(existing?.members ?? []).filter((member) => member.userId !== item.fromUserId),
-        { userId: item.fromUserId, permission: 'edit' as const }
-      ]
-      const scope = existing?.scope ?? 'team'
-      let type = existing?.type ?? 'file'
-      if (!existing) {
-        // 无既有 entry 时按路径是否为目录决定类型（文件夹级权限继承到内部文件）。
-        const full = resolveWithin(designRoot, `/${item.path}`)
-        if (full && isDirectory(full)) type = 'folder'
-      }
-      permissions.upsertEntry(item.path, { type, scope, members })
-    }
-
-    notifications.updateStatus(id, action === 'approve' ? 'approved' : 'rejected')
-
-    // 生成结果通知给申请者（非本人处理时才通知，避免自己批准自己时收到冗余通知）。
-    if (applicant && applicant.id !== user.id) {
-      notifications.addNotification({
-        type: 'permission_change',
-        fromUserId: user.id,
-        targetUserId: applicant.id,
-        path: item.path,
-        title:
-          action === 'approve'
-            ? `${user.name} 已批准你的权限申请`
-            : `${user.name} 拒绝了你的权限申请`,
-        detail: item.path ? `关于 ${item.path}` : '团队申请'
-      })
-    }
-    return json({ ok: true, status: action === 'approve' ? 'approved' : 'rejected' })
-  }
-
-  /** POST /api/v1/notifications/read-all（login）→ 当前用户全部已读。 */
-  function markNotificationsRead(request: Request): Response {
-    const user = sessionUser(request)
-    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-    notifications.markAllReadFor(user.id)
-    return json({ ok: true })
-  }
-
-/** 外链域名：SHARE_BASE_URL 环境变量优先（H 子路径起），默认公网域名。 */
-function resolveShareBaseURL(): string {
-  return process.env.SHARE_BASE_URL?.trim() || 'https://anzainan.iepose.cn'
-}
-
-  // ---- 分享/外链（Phase C：真实台账 + 游客外链 + P0 安全收紧）----
-
-  const SHARE_BASE_URL = resolveShareBaseURL()
-
-  function shareURL(token: string): string {
-    return `${SHARE_BASE_URL}/Mobai/${token}`
-  }
-
-  /** 外链对外视图：绝不暴露密码哈希；非 internet 范围不出 token/url（外链不可访问）。
-   *  `password` 为明文副本（AES-256-GCM 解密；无 key / 存量仅哈希 → null），调用方按权限注入。 */
-  function shareView(link: {
-    path: string
-    scope: ShareScope
-    permission: SharePermission
-    passwordHash: string | null
-    token: string
-    members: { userId: string; permission: 'view' | 'edit' | 'none' }[]
-    createdBy: string
-    createdAt: string
-  }, password: string | null): Record<string, unknown> {
-    return {
-      path: link.path,
-      scope: link.scope,
-      permission: link.permission,
-      passwordEnabled: link.passwordHash !== null,
-      password,
-      token: link.scope === 'internet' ? link.token : null,
-      url: link.scope === 'internet' ? shareURL(link.token) : null,
-      members: link.members,
-      createdBy: link.createdBy,
-      createdAt: link.createdAt
-    }
-  }
-
-  /** admin 判定通用返回：无 session → 401；非 admin 登录 → 403。 */
-  function adminDenied(request: Request): Response {
-    return sessionUser(request)
-      ? json({ ok: false, error: 'Forbidden' }, 403)
-      : json({ ok: false, error: 'Unauthorized' }, 401)
-  }
-
-  /** GET /api/v1/share?path= → 该文件分享设置（login；无 → 默认空）。
-   *  password 明文仅对「该文件协作者」（resolvePermission.canView）下发；非协作者 member 返回
-   *  password:null（不 403，防探测）。游客无 session → 401（上方天然拦截）。 */
-  function getShare(request: Request): Response {
-    const user = sessionUser(request)
-    if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-    const url = new URL(request.url)
-    const path = url.searchParams.get('path') ?? ''
-    if (path !== '' && !isSafeWorkspaceRelPath(path)) {
-      return json({ ok: false, error: 'invalid path' }, 400)
-    }
-    const link = shares.getLink(path)
-    if (!link) {
-      return json({
-        exists: false,
-        path,
-        scope: 'self',
-        permission: 'view',
-        passwordEnabled: false,
-        password: null,
-        token: null,
-        url: null,
-        members: []
-      })
-    }
-    const canView = permissions.resolvePermission(path, user).canView
-    const password = canView ? decryptPassword(link.passwordCipher) : null
-    return json({ exists: true, ...shareView(link, password) })
-  }
-
-  /**
-   * POST /api/v1/share（admin）→ {path, scope, permission, password?}。
-   * scope=internet → 生成/保留外链 token + url；scope 非 internet → 不开放外链（verify 返回 closed）。
-   * password 语义：不传 = 保留原密码；'' = 清空密码；非空字符串 = 设置新密码。
-   */
-  async function createShare(request: Request): Promise<Response> {
-    const user = adminUser(request)
-    if (!user) return adminDenied(request)
-    let payload: { path?: unknown; scope?: unknown; permission?: unknown; password?: unknown }
-    try {
-      payload = JSON.parse(await request.text())
-    } catch {
-      return json({ ok: false, error: 'invalid JSON body' }, 400)
-    }
-    const path = typeof payload.path === 'string' ? payload.path.trim() : ''
-    if (path === '' || !isSafeWorkspaceRelPath(path)) {
-      return json({ ok: false, error: 'invalid path' }, 400)
-    }
-    const scope: ShareScope =
-      payload.scope === 'internet' || payload.scope === 'team' || payload.scope === 'self'
-        ? payload.scope
-        : 'team'
-    const permission: SharePermission = payload.permission === 'edit' ? 'edit' : 'view'
-
-    let password: string | null | undefined
-    if (payload.password === undefined) {
-      password = undefined // 保留原密码
-    } else if (typeof payload.password === 'string') {
-      password = payload.password === '' ? 'clear' : payload.password
-    } else {
-      return json({ ok: false, error: 'invalid password' }, 400)
-    }
-
-    let link
-    try {
-      link = shares.upsertLink(path, { scope, permission, password }, user.id)
-    } catch (error) {
-      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
-    }
-    // admin 写档后回显明文（同事务刚落盘的副本）。
-    return json({ ok: true, link: shareView(link, decryptPassword(link.passwordCipher)) })
-  }
-
-  /** DELETE /api/v1/share?path= → 关闭分享（删外链）。 */
-  function deleteShare(request: Request): Response {
-    const user = adminUser(request)
-    if (!user) return adminDenied(request)
-    const url = new URL(request.url)
-    const path = url.searchParams.get('path') ?? ''
-    if (path === '' || !isSafeWorkspaceRelPath(path)) {
-      return json({ ok: false, error: 'invalid path' }, 400)
-    }
-    try {
-      shares.deleteLink(path)
-    } catch (error) {
-      return json({ ok: false, error: `persist failed: ${String(error)}` }, 500)
-    }
-    return json({ ok: true, path, deleted: true })
-  }
-
-  /**
-   * GET /api/v1/share/verify（public）→ 游客落地页校验。
-   * token 无效/已关 → {exists:false}；有密码未提供或错误 → {exists:true, needPassword:true}；
-   * 通过 → {exists:true, path, fileName, permission, scope}。
-   */
-  function verifyShare(request: Request): Response {
-    const url = new URL(request.url)
-    const token = url.searchParams.get('token') ?? ''
-    const password = url.searchParams.get('password') ?? ''
-    if (!token) return json({ exists: false })
-    const result = shares.verifyToken(token)
-    if (!result) return json({ exists: false })
-    const { link } = result
-    if (link.passwordHash && link.passwordSalt) {
-      if (!password) return json({ exists: true, needPassword: true })
-      if (!shares.verifyPassword(link, password)) {
-        return json({ exists: true, needPassword: true, wrongPassword: true })
-      }
-    }
-    return json({
-      exists: true,
-      path: result.path,
-      fileName: result.fileName,
-      permission: link.permission,
-      scope: link.scope
-    })
-  }
-
-  /** GET /api/v1/share/:token/content（public）→ 游客只读读字节（唯一游客文件读通道）。 */
-  function serveShareContent(request: Request, token: string): Response {
-    const result = shares.verifyToken(token)
-    if (!result) return json({ ok: false, error: 'not found' }, 404)
-    const full = resolveDesignPath(designRoot, result.path)
-    if (!full) return json({ ok: false, error: 'unsafe path' }, 403)
-    if (!existsSync(full) || isDirectory(full)) {
-      return json({ ok: false, error: 'not found' }, 404)
-    }
-    const isPen = /\.pen$/i.test(result.path)
-    return new Response(Bun.file(full), {
-      headers: {
-        'Content-Type': isPen ? 'application/json; charset=utf-8' : 'application/octet-stream',
-        'Cache-Control': 'no-cache',
-        'X-Content-Type-Options': 'nosniff'
-      }
-    })
-  }
-
-  /** 随机外链密码生成（供前端「刷新密码」按钮；6 位混合大小写+数字，REQ §9.4）。 */
-  function generateSharePassword(): Response {
-    return json({ password: generateRandomPassword() })
-  }
-
-  /**
-   * POST /api/v1/permissions（admin）→ {path, scope?, members?}：写文件级权限条目。
-   * 供分享面板保存（成员权限 + 范围落 permissions.json，立即生效；resolvePermission 已读它）。
-   */
-  async function upsertFilePermission(request: Request): Promise<Response> {
-    const user = adminUser(request)
-    if (!user) return adminDenied(request)
-    let payload: { path?: unknown; scope?: unknown; members?: unknown }
-    try {
-      payload = JSON.parse(await request.text())
-    } catch {
-      return json({ ok: false, error: 'invalid JSON body' }, 400)
-    }
-    const path = typeof payload.path === 'string' ? payload.path.trim() : ''
-    if (path === '' || !isSafeWorkspaceRelPath(path)) {
-      return json({ ok: false, error: 'invalid path' }, 400)
-    }
-    const scope =
-      payload.scope === 'internet' || payload.scope === 'team' || payload.scope === 'self'
-        ? payload.scope
-        : undefined
-    let members: { userId: string; permission: 'view' | 'edit' | 'none' }[] | undefined
-    if (Array.isArray(payload.members)) {
-      members = payload.members.filter(
-        (member): member is { userId: string; permission: 'view' | 'edit' | 'none' } =>
-          !!member &&
-          typeof member.userId === 'string' &&
-          (member.permission === 'view' || member.permission === 'edit' || member.permission === 'none')
-      )
-    }
-    if (scope === undefined && members === undefined) {
-      return json({ ok: false, error: 'nothing to update' }, 400)
-    }
-    const existing = permissions.getEntry(path)
-    // 路径为目录 → 文件夹级权限（自动继承到内部文件，REQ §5）；否则文件级。
-    let type: 'folder' | 'file' = existing?.type ?? 'file'
-    if (!existing) {
-      const full = resolveWithin(designRoot, `/${path}`)
-      if (full && isDirectory(full)) type = 'folder'
-    }
-    const entry = permissions.upsertEntry(path, {
-      type,
-      scope: scope ?? existing?.scope ?? 'self',
-      members: members ?? existing?.members ?? []
-    })
-    return json({ ok: true, entry })
-  }
-
   // ---- 路由 ----
 
   async function route(
@@ -1406,49 +674,17 @@ function resolveShareBaseURL(): string {
     }
 
     if (method === 'GET' && path === '/api/v1/config') {
-      // P0 安全收紧（Phase C）：仅登录态下发完整配置（含 BRIDGE_TOKEN/PEXELS/MCP token）。
-      // 未登录 → 只回公开最小配置（游客拿不到写令牌，杜绝借外链写盘）。
-      const user = sessionUser(request)
-      if (!user) {
-        return json({ ok: true, version: VERSION, designRoot, token: null, pexelsKey: null })
-      }
+      // 单用户本地模式：无条件下发完整配置（AI 写盘令牌自动获取，无需登录）。
       return json({
         ok: true,
         version: VERSION,
         designRoot,
         token: token || null,
         pexelsKey: process.env.PEXELS_API_KEY?.trim() || null,
-        // P0 官方实时协作传输配置：自建 broker / ICE / WS 中继（未配置 → null，浏览器回退官方默认传输）。
-        collab: {
-          collabBrokerUrl: process.env.COLLAB_BROKER_URL?.trim() || null,
-          collabIceServers: parseCollabIceServers(process.env.COLLAB_ICE_SERVERS_JSON?.trim()),
-          collabWsRelayUrl: process.env.COLLAB_WS_RELAY_URL?.trim() || null
-        },
         ...(mcpEnabled && mcpProxy.isReady()
           ? { mcpAuthToken, mcpWsPath: '/ws', mcpHealthPath: '/health', mcpMcpPath: mcpPath }
           : {})
       })
-    }
-
-    if (method === 'GET' && path === '/api/v1/collab/room') {
-      // P0 官方实时协作房间派生：session 鉴权 + 编辑权限校验后，用服务端密钥对文档路径
-      // HMAC 派生稳定房间号。同一文件所有人拿到同一房间 → 同网自动聚到同一房。
-      const user = sessionUser(request)
-      if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-      const docPath = url.searchParams.get('path') ?? ''
-      if (!docPath || !isSafeWorkspaceRelPath(docPath)) {
-        return json({ ok: false, error: 'invalid path' }, 400)
-      }
-      if (!permissions.resolvePermission(docPath, user).canEdit) {
-        return json({ ok: false, error: 'Forbidden' }, 403)
-      }
-      let roomId: string
-      try {
-        roomId = deriveRoomId(collabRoomSecret, docPath)
-      } catch {
-        return json({ ok: false, error: 'invalid path' }, 400)
-      }
-      return json({ ok: true, roomId })
     }
 
     // ---- 上游 MCP server 反代（MCP 开启时接管 /mcp；否则 /mcp 仍走桥接工具）----
@@ -1523,7 +759,7 @@ function resolveShareBaseURL(): string {
     }
 
     if (path === '/api/v1/active') {
-      if (method === 'GET') return getActive(request)
+      if (method === 'GET') return getActive()
       if (method === 'POST') {
         const denied = checkAuth(request, token)
         if (denied) return denied
@@ -1538,20 +774,6 @@ function resolveShareBaseURL(): string {
         const denied = checkAuth(request, token)
         if (denied) return denied
         return setRecent(request)
-      }
-      return methodNotAllowed()
-    }
-
-    if (path === '/api/v1/online') {
-      if (method === 'GET') {
-        const denied = checkAuth(request, token)
-        if (denied) return denied
-        return getOnline(request, presence)
-      }
-      if (method === 'POST') {
-        const denied = checkAuth(request, token)
-        if (denied) return denied
-        return reportOnline(request, presence)
       }
       return methodNotAllowed()
     }
@@ -1684,139 +906,6 @@ function resolveShareBaseURL(): string {
       return methodNotAllowed()
     }
 
-    // ---- 账号会话与成员管理（Phase A）----
-
-    if (path === '/api/v1/auth/login') {
-      if (method !== 'POST') return methodNotAllowed()
-      return login(request)
-    }
-
-    if (path === '/api/v1/auth/logout') {
-      if (method !== 'POST') return methodNotAllowed()
-      return logout(request)
-    }
-
-    if (path === '/api/v1/auth/session') {
-      if (method !== 'GET') return methodNotAllowed()
-      return session(request)
-    }
-
-    if (path === '/api/v1/members') {
-      if (method === 'GET') {
-        const user = sessionUser(request)
-        if (!user) return json({ ok: false, error: 'Unauthorized' }, 401)
-        // 成员明文密码仅 owner/admin 可见；member 调用方维持无密码响应。
-        return listMembers(isAdminRole(user.role))
-      }
-      if (method === 'POST') {
-        // 成员权限：仅管理员和所有者可操作。
-        const user = adminUser(request)
-        if (!user) {
-          return sessionUser(request)
-            ? json({ ok: false, error: 'Forbidden' }, 403)
-            : json({ ok: false, error: 'Unauthorized' }, 401)
-        }
-        return createMember(request)
-      }
-      return methodNotAllowed()
-    }
-
-    const memberMatch = path.match(/^\/api\/v1\/members\/(.+)$/)
-    if (memberMatch) {
-      const raw = memberMatch[1]
-      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
-      const user = adminUser(request)
-      if (!user) {
-        return sessionUser(request)
-          ? json({ ok: false, error: 'Forbidden' }, 403)
-          : json({ ok: false, error: 'Unauthorized' }, 401)
-      }
-      const id = decodeURIComponent(raw)
-      if (method === 'PATCH') return updateMember(request, id)
-      if (method === 'DELETE') return deleteMember(id)
-      return methodNotAllowed()
-    }
-
-    // ---- 头像（Phase G）----
-
-    if (path === '/api/v1/avatars') {
-      if (method !== 'POST') return methodNotAllowed()
-      return uploadAvatar(request)
-    }
-
-    const avatarMatch = path.match(/^\/api\/v1\/avatars\/([^/]+)$/)
-    if (avatarMatch) {
-      const raw = avatarMatch[1]
-      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
-      if (method !== 'GET') return methodNotAllowed()
-      const fileName = decodeURIComponent(raw)
-      return serveAvatar(request, fileName)
-    }
-
-    if (path === '/api/v1/permissions') {
-      if (method === 'GET') return getPermissions(request)
-      // Phase C：POST = 写文件级权限条目（分享面板成员/范围保存）。
-      if (method === 'POST') return upsertFilePermission(request)
-      return methodNotAllowed()
-    }
-
-    if (path === '/api/v1/permission-request') {
-      if (method !== 'POST') return methodNotAllowed()
-      return createPermissionRequest(request)
-    }
-
-    // ---- 通知中心（Phase D）----
-
-    if (path === '/api/v1/notifications') {
-      if (method !== 'GET') return methodNotAllowed()
-      return listNotifications(request)
-    }
-
-    if (path === '/api/v1/notifications/read-all') {
-      if (method !== 'POST') return methodNotAllowed()
-      return markNotificationsRead(request)
-    }
-
-    const notificationMatch = path.match(/^\/api\/v1\/notifications\/([^/]+)\/action$/)
-    if (notificationMatch) {
-      const raw = notificationMatch[1]
-      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
-      if (method !== 'POST') return methodNotAllowed()
-      const id = decodeURIComponent(raw)
-      return resolveNotificationAction(request, id)
-    }
-
-    // ---- 分享/外链（Phase C）----
-
-    if (path === '/api/v1/share') {
-      if (method === 'GET') return getShare(request)
-      if (method === 'POST') return createShare(request)
-      if (method === 'DELETE') return deleteShare(request)
-      return methodNotAllowed()
-    }
-
-    if (path === '/api/v1/share/verify') {
-      if (method !== 'GET') return methodNotAllowed()
-      return verifyShare(request)
-    }
-
-    if (path === '/api/v1/share/password') {
-      if (method !== 'GET') return methodNotAllowed()
-      // 顺手收紧：随机密码生成仅 admin/owner（member 借接口可爆破探测）。
-      const user = adminUser(request)
-      if (!user) return adminDenied(request)
-      return generateSharePassword()
-    }
-
-    const shareContentMatch = path.match(/^\/api\/v1\/share\/([^/]+)\/content$/)
-    if (shareContentMatch) {
-      const raw = shareContentMatch[1]
-      if (raw === undefined) return json({ ok: false, error: 'not found' }, 404)
-      if (method !== 'GET') return methodNotAllowed()
-      const token = decodeURIComponent(raw)
-      return serveShareContent(request, token)
-    }
-
     if (path.startsWith('/api/')) return json({ ok: false, error: 'not found' }, 404)
 
     return serveStatic(path, distDir)
@@ -1848,7 +937,6 @@ function resolveShareBaseURL(): string {
 
   const shutdown = () => {
     clearInterval(reconcileTimer)
-    clearInterval(presenceSweepTimer)
     watcher.stop()
     bus.close()
     mcpProxy.close()

@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDocumentWorkspace, useI18n } from '@open-pencil/vue'
 
 import {
   activeStorageProviderID,
   BRIDGE_STORAGE_PROVIDER,
-  storageProviderRegistry,
   type StorageDocument
 } from '@/app/integrations/storage'
 import { openSettingsDialog, settingsDialogOpen } from '@/app/settings/dialog'
@@ -28,12 +27,6 @@ const { dialogs } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const folderName = computed(() => String(route.params.name ?? ''))
-const provider = computed(() => storageProviderRegistry.get(activeStorageProviderID.value))
-const workspaceLabel = computed(() =>
-  provider.value.id === BRIDGE_STORAGE_PROVIDER.id
-    ? dialogs.value.cloudWorkspace
-    : provider.value.label
-)
 const configured = ref(false)
 const workspace = useDocumentWorkspace({
   source: createStorageWorkspaceSource((snapshot) => {
@@ -42,7 +35,8 @@ const workspace = useDocumentWorkspace({
   refreshInterval: 60_000,
   previewConcurrency: 6
 })
-const documents = workspace.documents
+// useDocumentWorkspace 返回 Readonly 包装，网格组件需要可写 Ref → 断言收敛类型。
+const documents = workspace.documents as Ref<StorageDocument[]>
 const loading = workspace.loading
 const errorMessage = computed(() => {
   const reason = workspace.error.value

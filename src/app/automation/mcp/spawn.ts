@@ -4,7 +4,6 @@ import { AUTOMATION_HTTP_PORT } from '@open-pencil/core/constants'
 import { randomHex } from '@open-pencil/core/random'
 import type { DiscoveryInfo } from '@open-pencil/mcp/discovery'
 
-import { getSessionToken } from '@/app/auth/session'
 import { decodeTauriStderr } from '@/app/shell/ui'
 import { resolvePlatformCommand } from '@/app/tauri/command'
 import { isTauri } from '@/app/tauri/env'
@@ -387,19 +386,14 @@ export async function spawnMCPIfNeeded(): Promise<AutomationServerHandle | null>
  * `/api/v1/config`; returns null when the container does not advertise MCP
  * (graceful — automation simply stays off, matching the pre-MCP behavior).
  * Retries briefly since the container MCP server boots after file-bridge.
- * The config endpoint only issues mcpAuthToken/mcpWsPath for authenticated
- * requests, so the session token is attached when a login exists (same auth
- * system as BridgeClient write APIs); guests keep the unauthenticated
- * minimal-config behavior unchanged.
+ * The config endpoint serves the full configuration unconditionally (single-user
+ * local mode, no login required).
  */
 async function resolveWebMCPHandle(): Promise<AutomationServerHandle | null> {
   const attempts = 5
   for (let i = 0; i < attempts; i++) {
     try {
-      const headers: Record<string, string> = {}
-      const sessionToken = getSessionToken()
-      if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`
-      const res = await fetch('/api/v1/config', { signal: AbortSignal.timeout(2000), headers })
+      const res = await fetch('/api/v1/config', { signal: AbortSignal.timeout(2000) })
       if (!res.ok) return null
       const data = (await res.json()) as {
         mcpAuthToken?: string | null
