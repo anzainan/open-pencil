@@ -18,9 +18,8 @@ import { createDevServerOptions } from './vite/server'
 const host = process.env.TAURI_DEV_HOST
 
 export default defineConfig(async ({ command }) => ({
-  // H 外网子路径接入（ARCH-mobai-subpath.md 方案 A）：构建产物统一挂在 /Mobai/ 下，
-  // NPM `location /Mobai/ { proxy_pass .../; }` 去前缀后由 file-bridge 按根路径服务。
-  base: '/Mobai/',
+  // 纯本地部署（软路由 Docker 局域网直连）：根路径 '/'，无需子路径反代剥前缀。
+  base: '/',
   resolve: {
     alias: createOpenPencilAliases(__dirname)
   },
