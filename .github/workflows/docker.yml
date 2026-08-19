@@ -41,6 +41,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=web-latest
+            type=raw,value=lan-collab
             type=semver,pattern={{version}}
 
       - name: Build and push image
@@ -56,20 +57,20 @@ jobs:
       # 导出镜像 tar（供软路由 docker load，绕开软路由无法直连 ghcr.io 的问题）
       - name: Export image tarball
         run: |
-          docker pull ghcr.io/${{ github.repository }}:web-latest
+          docker pull ghcr.io/${{ github.repository }}:lan-collab
           mkdir -p /tmp/img
-          docker save ghcr.io/${{ github.repository }}:web-latest | gzip > /tmp/img/openpencil-web-latest.tar.gz
+          docker save ghcr.io/${{ github.repository }}:lan-collab | gzip > /tmp/img/openpencil-lan-collab.tar.gz
           ls -lh /tmp/img/
 
       - name: Upload tarball to Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: web-latest
-          name: OpenPencil web-latest
+          tag_name: lan-collab
+          name: OpenPencil lan-collab
           body: |
-            OpenPencil web 镜像 tar.gz（供软路由 docker load）
+            OpenPencil lan-collab 镜像 tar.gz（供软路由 docker load）
             自动构建：${{ github.sha }}
-          files: /tmp/img/openpencil-web-latest.tar.gz
+          files: /tmp/img/openpencil-lan-collab.tar.gz
           allowUpdates: true
           draft: false
           prerelease: false
