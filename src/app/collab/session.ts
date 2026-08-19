@@ -38,7 +38,6 @@ type ConnectCollabSessionOptions = {
   broadcastAwareness: () => void
   applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
   syncNodeToYjs: (nodeId: string) => void
-  syncAllNodesToYjs: () => void
 }
 
 type CollabConnectionActionsOptions = {
@@ -50,7 +49,6 @@ type CollabConnectionActionsOptions = {
   broadcastAwareness: () => void
   applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
   syncNodeToYjs: (nodeId: string) => void
-  syncAllNodesToYjs: () => void
   resetFollow: () => void
 }
 
@@ -100,7 +98,6 @@ export function createCollabConnectionActions({
   broadcastAwareness,
   applyYjsToGraph,
   syncNodeToYjs,
-  syncAllNodesToYjs,
   resetFollow
 }: CollabConnectionActionsOptions) {
   function connect(roomId: string) {
@@ -114,8 +111,7 @@ export function createCollabConnectionActions({
       tickFollow,
       broadcastAwareness,
       applyYjsToGraph,
-      syncNodeToYjs,
-      syncAllNodesToYjs
+      syncNodeToYjs
     })
   }
 
@@ -161,8 +157,7 @@ export function connectCollabSession({
   tickFollow,
   broadcastAwareness,
   applyYjsToGraph,
-  syncNodeToYjs,
-  syncAllNodesToYjs
+  syncNodeToYjs
 }: ConnectCollabSessionOptions) {
   if (runtime.room) disconnect()
 
@@ -172,19 +167,13 @@ export function connectCollabSession({
   runtime.awareness = new awarenessProtocol.Awareness(runtime.ydoc)
   runtime.ynodes = runtime.ydoc.getMap('nodes')
   runtime.yimages = runtime.ydoc.getMap('images')
-  // RC-B：IndexeddbPersistence 建立后旧会话缓存以异步 IDB 载入方式回灌进 Yjs。
-  // 在载入完成前注册观测器会让陈旧快照逐属性 LWW 覆盖新图（bump sceneVersion →
-  // autosave 把旧状态写盘）。修法：先用 suppressYjsEvents 闸住加载回灌，等 whenSynced
-  // resolve（初次载入完成）后再放行并全量压过缓存一次，保证「缓存先落、最新图后写」。
-  const persistence = new IndexeddbPersistence(`op-room-${roomId}`, runtime.ydoc)
-  runtime.persistence = persistence
+  runtime.persistence = new IndexeddbPersistence(`op-room-${roomId}`, runtime.ydoc)
 
   runtime.awareness.on('change', () => {
     updatePeersList()
     tickFollow()
   })
 
-  // 注册观测器保持原样（连接即注册，不延迟事件流）；只在缓存回灌完成前抑制回放。
   registerYjsObservers({
     store,
     ynodes: runtime.ynodes,
@@ -195,19 +184,6 @@ export function connectCollabSession({
     },
     applyYjsToGraph
   })
-
-  // RC-B：初次载入完成前闸住旧缓存回灌，完成后用当前图压过缓存（LWW 定序收口）。
-  runtime.suppressYjsEvents = true
-  void persistence.whenSynced
-    .catch(() => undefined)
-    .then(() => {
-      // 连接可能在 IDB 初次载入完成前被 disconnect 销毁；此时 runtime.ydoc 已置 null，
-      // 不再对已销毁的 ydoc 做压盖，避免在我方断开后再操作失效内存。
-      if (!runtime.ydoc) return undefined
-      runtime.suppressYjsEvents = false
-      syncAllNodesToYjs()
-      return undefined
-    })
 
   const roomConnection = connectCollabRoom({
     roomId,
@@ -246,7 +222,6 @@ export function resetCollabRuntime(runtime: CollabRuntime) {
   runtime.ynodes = null
   runtime.yimages = null
   runtime.connectedStore = null
-  runtime.suppressYjsEvents = false
 }
 
 export function resetCollabConnectionState(state: Ref<CollabState>) {

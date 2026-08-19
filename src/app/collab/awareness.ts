@@ -26,16 +26,12 @@ export function buildRemotePeers(
 
   states.forEach((peerState, clientId) => {
     if (clientId === localClientId) return
-    const user = peerState.user as
-      | { name?: string; color?: Color; avatarImage?: string | null; avatarBg?: string | null }
-      | undefined
+    const user = peerState.user as { name?: string; color?: Color } | undefined
     if (!user) return
     peers.push({
       clientId,
       name: user.name || 'Anonymous',
       color: user.color || PEER_COLORS[clientId % PEER_COLORS.length],
-      avatarImage: user.avatarImage ?? null,
-      avatarBg: user.avatarBg ?? null,
       cursor: peerState.cursor as RemotePeer['cursor'],
       selection: peerState.selection as string[]
     })

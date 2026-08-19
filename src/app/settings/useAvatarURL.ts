@@ -1,16 +1,12 @@
 import { onUnmounted, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
 
-import { authHeader } from '@/app/bridge/client'
-
 /**
  * 头像渲染（fetch + blob + objectURL）。
  *
- * `<img>` 发起的 GET 无法携带 `Authorization` 头，而 `serveAvatar` 强制登录态（未登录 401）。
- * 本组合式用带鉴权的 `fetch` 拉取头像 → `URL.createObjectURL`，让 4 个组件 7 处头像
- * 上传后立即可见；fetch 失败（401/网络/服务端异常）返回 null，由既有字符头像 fallback 接管。
+ * `<img>` 发起的 GET 无法携带 `Authorization` 头，本组合式用 fetch 拉取头像 →
+ * `URL.createObjectURL`；fetch 失败（404/网络/服务端异常）返回 null，由既有字符头像 fallback 接管。
  *
  * - watch(relImage)：换值重拉 + revoke 旧 objectURL；onUnmounted 统一 revoke。
- * - 鉴权头获取方式与全站其余 API 一致（authHeader()，见 bridge/client.ts:103-106）。
  */
 export function useAvatarURL(relImage: MaybeRefOrGetter<string | null | undefined>) {
   const avatarURL = ref<string | null>(null)
@@ -35,11 +31,8 @@ export function useAvatarURL(relImage: MaybeRefOrGetter<string | null | undefine
       avatarURL.value = null
       return
     }
-    const headers: Record<string, string> = {}
-    const auth = authHeader()
-    if (auth) headers.Authorization = auth
     try {
-      const response = await fetch(`/api/v1/avatars/${encodeURIComponent(fileName)}`, { headers })
+      const response = await fetch(`/api/v1/avatars/${encodeURIComponent(fileName)}`)
       if (seq !== requestSeq) return
       if (!response.ok) {
         revoke()

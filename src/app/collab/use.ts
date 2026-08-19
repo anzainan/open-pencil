@@ -55,7 +55,6 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     broadcastAwareness,
     applyYjsToGraph,
     syncNodeToYjs,
-    syncAllNodesToYjs,
     resetFollow
   })
 
@@ -75,7 +74,6 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     connect,
     disconnect,
     shareCurrentDoc,
-    syncAllNodesToYjs,
     updateCursor,
     updateSelection,
     setLocalName,

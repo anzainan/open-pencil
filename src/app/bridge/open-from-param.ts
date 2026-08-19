@@ -1,4 +1,3 @@
-import { hasSession, restoreSession } from '@/app/auth/session'
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { clearRememberedWorkspaceFile } from '@/app/bridge/restore'
 import { activeStorageProviderID, type StorageDocument } from '@/app/integrations/storage'
@@ -13,11 +12,8 @@ export async function openFileFromQueryParam(): Promise<void> {
   const relPath = params.get('file')
   if (!relPath || relPath.trim() === '') return
 
-  // B2：打开前先恢复登录态（restoreSession 幂等）——getFileMeta 必须带 session token，
-  // 否则服务端 401 会被误判成「文件已删除」并清掉 ?file=。未登录交路由守卫跳登录，保留参数。
-  await restoreSession()
-  if (!hasSession()) return
-
+  // 无登录态依赖：单用户本地模式下 file-bridge 写接口只认 BRIDGE_TOKEN（/config 下发），
+  // ?file= 直接信任并走 getFileMeta + 本地缓存恢复链路。
   activeStorageProviderID.value = BRIDGE_PROVIDER_ID
   const name = relPath.split(/[\\/]/).pop() ?? 'file.fig'
   try {
@@ -42,8 +38,7 @@ export async function openFileFromQueryParam(): Promise<void> {
       await router.replace('/editor')
     }
   } catch (error) {
-    // 401（会话失效/未就绪）或网络/服务端错误：不清 ?file=、不弹「已删除」；
-    // 会话失效由路由守卫/登录页接管，刷新后仍可恢复原文件。
+    // 401（bridge token 未配置/不匹配）或网络/服务端错误：不清 ?file=、不弹「已删除」，刷新后仍可重试恢复。
     console.warn('[open-from-param] meta check failed, keep ?file=', error)
   }
 }

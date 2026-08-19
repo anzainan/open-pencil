@@ -4,7 +4,7 @@ export interface RemotePeer {
   clientId: number
   name: string
   color: Color
-  /** P0 身份注入：远端账号头像（URL 字符串，不塞 blob；缺省回落字符+底色渲染）。 */
+  /** 兼容字段：官方 awareness 不再下发，仅 CollabPanel context（白名单文件）读取，恒为 undefined。 */
   avatarImage?: string | null
   avatarBg?: string | null
   cursor?: { x: number; y: number; pageId: string }

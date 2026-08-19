@@ -1,4 +1,4 @@
-import { AuthError, getSessionToken } from '@/app/auth/session'
+import { AuthError } from '@/app/auth/session'
 
 export const BRIDGE_PROVIDER_ID = 'bridge-fs'
 
@@ -59,14 +59,12 @@ export interface BridgePinEntry {
 }
 
 export interface BridgeFileEvent {
-  type: 'file.changed' | 'file.created' | 'file.deleted' | 'active.changed' | 'online.changed'
+  type: 'file.changed' | 'file.created' | 'file.deleted' | 'active.changed'
   path: string
   brand?: string
-  /** 仅 online.changed：该 path 的全量在线快照（服务端台账视图，前端无需合并）。 */
-  users?: BridgePresenceUser[]
 }
 
-/** 在线协作者（POST/GET /api/v1/online 与 SSE online.changed 共用视图）。 */
+/** 兼容类型：presence 台账已随 Phase 1/3 移除，仅 CollabPanel context（白名单文件）引用。 */
 export interface BridgePresenceUser {
   userId: string
   name: string
@@ -75,11 +73,10 @@ export interface BridgePresenceUser {
 
 type BridgeListener = (event: BridgeFileEvent) => void
 
-/** SSE 事件 payload 的领域子集：仅消费 path/brand/users 字段。 */
+/** SSE 事件 payload 的领域子集：仅消费 path/brand 字段。 */
 interface BridgeSsePayload {
   path?: string
   brand?: string
-  users?: BridgePresenceUser[]
 }
 
 function encodeRelPath(path: string): string {
@@ -87,12 +84,6 @@ function encodeRelPath(path: string): string {
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/')
-}
-
-/** 写接口鉴权（Phase A）：优先用登录 session token，否则退回 BRIDGE_TOKEN。 */
-export function authHeader(): string | null {
-  const session = getSessionToken()
-  return session ? `Bearer ${session}` : null
 }
 
 /**
@@ -104,7 +95,8 @@ export class BridgeClient {
   readonly pollMs: number
   readonly recentWriteMs: number
 
-  private configPromise: Promise<{ token?: string | null; designRoot?: string } | null> | null = null
+  private configPromise: Promise<{ token?: string | null; designRoot?: string } | null> | null =
+    null
   private eventSource: EventSource | null = null
   private listeners = new Set<BridgeListener>()
   private connected = false
@@ -148,8 +140,6 @@ export class BridgeClient {
   }
 
   private async authHeaders(): Promise<Record<string, string>> {
-    const sessionHeader = authHeader()
-    if (sessionHeader) return { Authorization: sessionHeader }
     const token = await this.getToken()
     return token ? { Authorization: `Bearer ${token}` } : {}
   }
@@ -182,9 +172,7 @@ export class BridgeClient {
     // 同一路径的写串行化（autosave / 手动保存 / MCP save_file / 兜底 PUT 共用）。
     // 避免多个写路径同时 PUT 同一文件导致服务端交错写坏（配合服务端原子写+队列）。
     const previous = this.putQueues.get(path) ?? Promise.resolve()
-    const run = previous
-      .catch(() => undefined)
-      .then(() => this.putFileNow(path, bytes))
+    const run = previous.catch(() => undefined).then(() => this.putFileNow(path, bytes))
     const tail = run.then(
       () => null,
       () => null
@@ -381,26 +369,11 @@ export class BridgeClient {
 
   /** 读取工作区字体文件字节（path 为 fonts/xxx.ttf 相对路径）。 */
   async getFont(path: string): Promise<Uint8Array> {
-    const response = await fetch(`${this.apiBase}/fonts/${encodeRelPath(path.replace(/^fonts\//, ''))}`)
+    const response = await fetch(
+      `${this.apiBase}/fonts/${encodeRelPath(path.replace(/^fonts\//, ''))}`
+    )
     if (!response.ok) throw new Error(`Bridge font fetch failed (${response.status}): ${path}`)
     return new Uint8Array(await response.arrayBuffer())
-  }
-
-  /**
-   * 解析协作房间号（P0 官方实时协作）：服务端 session 鉴权 + 编辑权限校验后由文档路径派生。
-   * 供打开 bridge 文档后自动进房用；失败（未登录/无权限/网络异常）返回 null，不阻塞打开流程。
-   */
-  async resolveCollabRoom(path: string): Promise<string | null> {
-    try {
-      const response = await fetch(`${this.apiBase}/collab/room?path=${encodeURIComponent(path)}`, {
-        headers: { Authorization: authHeader() ?? '' }
-      })
-      if (!response.ok) return null
-      const data = (await response.json()) as { roomId?: unknown }
-      return typeof data.roomId === 'string' ? data.roomId : null
-    } catch {
-      return null
-    }
   }
 
   /** 上报活动文件（打开/切换 tab 时）。失败仅警告，不影响编辑。 */
@@ -438,39 +411,6 @@ export class BridgeClient {
     return data.recents ?? []
   }
 
-  /** 上报文档在线心跳（login，8s 节奏由 useDocumentPresence 的调用方控制）。失败仅警告。 */
-  async reportOnline(path: string): Promise<BridgePresenceUser[]> {
-    try {
-      const response = await fetch(`${this.apiBase}/online`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(await this.authHeaders()) },
-        body: JSON.stringify({ path })
-      })
-      if (!response.ok) return []
-      const data = (await response.json()) as { users?: BridgePresenceUser[] }
-      return data.users ?? []
-    } catch (error) {
-      console.warn('[bridge] online heartbeat failed', error)
-      return []
-    }
-  }
-
-  /** 拉取某文档当前在线快照（login，挂载时自愈用）。 */
-  async getOnline(path: string): Promise<BridgePresenceUser[]> {
-    try {
-      const response = await fetch(
-        `${this.apiBase}/online?path=${encodeURIComponent(path)}`,
-        { headers: await this.authHeaders() }
-      )
-      if (!response.ok) return []
-      const data = (await response.json()) as { users?: BridgePresenceUser[] }
-      return data.users ?? []
-    } catch (error) {
-      console.warn('[bridge] online snapshot failed', error)
-      return []
-    }
-  }
-
   get isConnected(): boolean {
     return this.connected
   }
@@ -504,19 +444,13 @@ export class BridgeClient {
       const type = event.type as BridgeFileEvent['type']
       const path = typeof data.path === 'string' ? data.path : ''
       if (!path) return
-      this.dispatch({
-        type,
-        path,
-        brand: typeof data.brand === 'string' ? data.brand : undefined,
-        users: Array.isArray(data.users) ? data.users : undefined
-      })
+      this.dispatch({ type, path, brand: typeof data.brand === 'string' ? data.brand : undefined })
     }
 
     source.addEventListener('file.changed', handle)
     source.addEventListener('file.created', handle)
     source.addEventListener('file.deleted', handle)
     source.addEventListener('active.changed', handle)
-    source.addEventListener('online.changed', handle)
 
     source.onopen = () => {
       this.connected = true
