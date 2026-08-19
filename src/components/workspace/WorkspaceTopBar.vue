@@ -4,7 +4,6 @@ import { useI18n } from '@open-pencil/vue'
 
 import { openSettingsDialog } from '@/app/settings/dialog'
 import Tip from '@/components/ui/Tip.vue'
-import NotifyBell from '@/components/workspace/NotifyBell.vue'
 
 defineOptions({ name: 'WorkspaceTopBar' })
 
@@ -109,11 +108,10 @@ function handleBack(): void {
         type="button"
         :data-test-id="`${mode}-settings`"
         class="rounded px-2 py-1.5 text-xs text-muted hover:bg-hover hover:text-surface"
-        @click="openSettingsDialog('storage')"
+        @click="openSettingsDialog('ai')"
       >
         {{ dialogs.settings }}
       </button>
-      <NotifyBell />
       <Tip v-if="mode !== 'trash'" :label="dialogs.trash">
         <button
           type="button"

@@ -14,7 +14,7 @@ import { createSelectionMenuActions } from '@/app/shell/menu/selection-actions'
 import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import { openFileDialog } from '@/app/shell/menu/use'
 import { useAppTheme } from '@/app/shell/theme'
-import { closeTab, activeTab, createUntitledTab } from '@/app/tabs'
+import { closeTab, activeTab } from '@/app/tabs'
 
 export interface AppMenuGroup {
   label: string
@@ -38,7 +38,7 @@ export function useAppMenu() {
     otherPages,
     moveSelectionToPage
   } = useEditorCommands()
-  const { menu, dialogs, locale, availableLocales, localeLabels, setLocale } = useI18n()
+  const { menu, locale, availableLocales, localeLabels, setLocale } = useI18n()
   const { theme, setTheme } = useAppTheme()
 
   const translatedMenuItemLabels: Partial<Record<string, keyof typeof menu.value>> = {
@@ -48,6 +48,7 @@ export function useAppMenu() {
     save: 'save',
     'save-as': 'saveAs',
     'export-selection': 'exportSelection',
+    autosave: 'autosave',
     close: 'closeTab',
     copy: 'copy',
     cut: 'cut',
@@ -94,11 +95,10 @@ export function useAppMenu() {
 
   const actions: Partial<Record<string, () => void>> = {
     new: () => {
-      createUntitledTab()
+      void import('@/app/tabs').then((m) => m.createTab())
     },
     open: () => void openFileDialog(),
     'open-storage-workspace': () => openStorageWorkspace(router),
-    'back-to-team-space': () => void router.push('/'),
     save: () => void store.saveFigFile(),
     'save-as': () => void store.saveFigFileAs(),
     'export-selection': () => exportSelection('png'),
@@ -120,6 +120,8 @@ export function useAppMenu() {
 
   function checked(item: AppMenuActionItem): boolean | undefined {
     switch (item.id) {
+      case 'autosave':
+        return store.state.autosaveEnabled
       case 'profiler':
         return store.renderer?.profiler.hudVisible ?? false
       case 'view-rulers':
@@ -139,6 +141,10 @@ export function useAppMenu() {
 
   function onCheckedChange(item: AppMenuActionItem): ((checked: boolean) => void) | undefined {
     switch (item.id) {
+      case 'autosave':
+        return (value: boolean) => {
+          store.state.autosaveEnabled = value
+        }
       case 'profiler':
         return () => store.toggleProfiler()
       case 'view-rulers':
@@ -171,13 +177,6 @@ export function useAppMenu() {
 
     if (entry.id === 'language') {
       return { label: menuLabel(entry), sub: languageMenu.value }
-    }
-
-    if (entry.id === 'back-to-team-space') {
-      return {
-        label: dialogs.value.backToTeamSpace,
-        action: itemAction(entry)
-      }
     }
 
     if (entry.id === 'selection.moveToPage') {

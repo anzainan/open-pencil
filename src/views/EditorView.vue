@@ -11,20 +11,17 @@ import { loadEditorLayout, saveEditorLayout } from '@/app/shell/layout-storage'
 import { openFileFromPath, useEditorMenu } from '@/app/shell/menu/use'
 import { useCollab, COLLAB_KEY } from '@/app/collab/use'
 import { getCollabConfig } from '@/app/collab/config'
-import { currentUser } from '@/app/auth/session'
 import { connectAutomation } from '@/app/automation/bridge/server'
 import { spawnMCPIfNeeded } from '@/app/automation/mcp/spawn'
 import { isTauri } from '@/app/tauri/env'
 import { appMenuShortcut } from '@/app/shell/menu/shortcut'
 import { createDemoShapes } from '@/app/demo/document'
 import { useEditorStore } from '@/app/editor/active-store'
-import { openPermissionRequest } from '@/app/editor/readonly'
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
 import { useDocumentPresence } from '@/app/presence/use'
 import { createTab, activeTab, getActiveStore, tabCount } from '@/app/tabs'
 
 import EditorCanvas from '@/components/EditorCanvas.vue'
-import PermissionRequestDialog from '@/components/editor/PermissionRequestDialog.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
 import MobileDrawer from '@/components/MobileDrawer.vue'
 import MobileHud from '@/components/MobileHud/MobileHud.vue'
@@ -35,9 +32,6 @@ import Tip from '@/components/ui/Tip.vue'
 import Toolbar from '@/components/Toolbar/Toolbar.vue'
 import CollabAvatarStack from '@/components/CollabPanel/CollabAvatarStack.vue'
 import { provideCollabPanel } from '@/components/CollabPanel/context'
-import SharePopover from '@/components/workspace/SharePopover.vue'
-
-import type { Tool } from '@open-pencil/core/editor'
 
 const route = useRoute()
 const params = useUrlSearchParams('history')
@@ -89,7 +83,7 @@ provideCollabPanel(onlineUsers)
 // 触发信号用「binding 就绪」的真反应式 ref（getBindingDocumentId），不再依赖
 // documentName 的「值不变陷阱」：先置 documentName 后设 binding 的时序下，binding
 // 从 null→有值必然触发本 watch（tabs/openStorageDocumentInNewTab 也在改 documentName
-// 之前/之后都同步刷新该信号）。登录态（currentUser）也加入依赖，登录后补触发。
+// 之前/之后都同步刷新该信号）。
 const collabRoomPath = ref<string | null>(null)
 let collabConnectSeq = 0
 function connectSyncCollabRoom(): void {
@@ -101,7 +95,7 @@ async function syncCollabRoom(attempt = 0): Promise<boolean> {
   const binding = tab?.store.getStorageBinding()
   const documentId =
     binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId ? binding.documentId : null
-  const shouldConnect = !!documentId && !store.state.readOnly && !!currentUser.value
+  const shouldConnect = !!documentId && !store.state.readOnly
   if (!shouldConnect) {
     if (collabRoomPath.value) collab.disconnect()
     collabRoomPath.value = null
@@ -139,8 +133,7 @@ watch(
   [
     () => activeTab.value,
     () => activeTab.value?.store.getBindingDocumentId()?.value,
-    () => store.state.readOnly,
-    () => currentUser.value
+    () => store.state.readOnly
   ],
   () => {
     connectSyncCollabRoom()
@@ -148,87 +141,8 @@ watch(
   { immediate: true }
 )
 
-// 分享面板入口：view-only 协作者（readOnly=true）也要能看分享密码/链接 → 需协作者权限
-// （perm.canView）而非仅 !readOnly。bridge 文档打开时解析一次；失败按不可进入降级。
-const shareAccessible = ref(false)
-watch(
-  [() => activeTab.value, () => activeTab.value?.store.getBindingDocumentId()?.value],
-  () => {
-    const binding = activeTab.value?.store.getStorageBinding()
-    if (binding?.providerId === BRIDGE_PROVIDER_ID && binding.documentId) {
-      void bridgeClient
-        .getPermissions(binding.documentId)
-        .then((perm) => {
-          shareAccessible.value = perm.canView
-          return undefined
-        })
-        .catch(() => {
-          shareAccessible.value = false
-          return undefined
-        })
-    } else {
-      shareAccessible.value = false
-    }
-  },
-  { immediate: true }
-)
 // H 子路径：图标走 BASE_URL 前缀（/Mobai/favicon-32.png）。
 const faviconSrc = import.meta.env.BASE_URL + 'favicon-32.png'
-
-// ── 只读模式拦截（Phase B：无编辑权限只读打开）──
-// 1) 只读时若切到编辑工具（键盘快捷键等）→ 弹权限申请 + 复位回选择工具；
-// 2) 只读时发生图变更（delete/拖拽/粘贴/属性面板等）→ 弹权限申请 + 尝试 undo 回滚
-//    （磁盘不受影响：autosave 已强制关闭）。loadings 归零后才武装，避免打开过程误触发。
-function isViewTool(tool: Tool): boolean {
-  return tool === 'SELECT' || tool === 'HAND'
-}
-
-let sceneBaseline: number | null = null
-let lastInterceptedVersion = -1
-
-watch(
-  [() => store.state.readOnly, () => store.state.loading],
-  ([readOnly, loading]) => {
-    if (readOnly && !loading) {
-      sceneBaseline = store.state.sceneVersion
-      lastInterceptedVersion = -1
-      if (!isViewTool(store.state.activeTool)) store.setTool('SELECT')
-    } else if (!readOnly) {
-      sceneBaseline = null
-      lastInterceptedVersion = -1
-    }
-  },
-  { immediate: true }
-)
-
-watch(
-  () => store.state.activeTool,
-  (tool) => {
-    if (!store.state.readOnly) return
-    if (isViewTool(tool)) return
-    openPermissionRequest()
-    store.setTool('SELECT')
-  }
-)
-
-watch(
-  () => store.state.sceneVersion,
-  (version) => {
-    if (!store.state.readOnly || sceneBaseline === null) return
-    if (version === sceneBaseline || version === lastInterceptedVersion) return
-    lastInterceptedVersion = version
-    // 导出设置类提交（label 含 'export setting'）是只读下合法操作，跳过回滚，保证导出配置稳定。
-    const topLabel = store.undo.undoLabel
-    if (topLabel && /export setting/i.test(topLabel)) {
-      sceneBaseline = store.state.sceneVersion
-      return
-    }
-    openPermissionRequest()
-    // 回滚只读态内存改动（undo 栈在打开时已清空，此处只会回退只读期间自己的改动）。
-    if (store.undo.canUndo) store.undo.undo()
-    sceneBaseline = store.state.sceneVersion
-  }
-)
 
 useEventListener(
   document,
@@ -300,17 +214,7 @@ onUnmounted(() => {
 <template>
   <div data-test-id="editor-root" class="relative flex h-screen w-screen flex-col">
     <RenameSelectionDialog />
-    <PermissionRequestDialog />
     <TabBar />
-
-    <!-- 只读提示条（无编辑权限时固定显示） -->
-    <div
-      v-if="store.state.readOnly"
-      data-test-id="readonly-banner"
-      class="pointer-events-none absolute top-3 left-1/2 z-30 -translate-x-1/2 rounded-md bg-[#2A2A2A] px-3 py-1.5 text-[11px] font-medium text-white shadow-md ring-1 ring-white/10"
-    >
-      {{ dialogs['perm.readOnly'] }}
-    </div>
 
     <!-- Desktop layout -->
     <SplitterGroup
@@ -355,7 +259,6 @@ onUnmounted(() => {
           class="flex shrink-0 items-center justify-between border-b border-border px-1.5 py-1.5"
         >
           <CollabAvatarStack v-if="!store.state.readOnly" />
-          <SharePopover v-if="!store.state.readOnly || shareAccessible" />
         </div>
         <PropertiesPanel />
       </SplitterPanel>

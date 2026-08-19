@@ -14,6 +14,7 @@ export const menuMessageDefaults = {
   save: 'Save to cloud',
   saveAs: 'Download to local…',
   exportSelection: 'Export selection…',
+  autosave: 'Auto-save to local file',
   closeTab: 'Close tab',
 
   copy: 'Copy',

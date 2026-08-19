@@ -58,16 +58,6 @@ export interface BridgePinEntry {
   pinnedAt: string
 }
 
-/** 当前登录用户对某路径的权限解析结果（Phase B，打开/编辑前真实校验）。 */
-export interface BridgePermission {
-  canView: boolean
-  canEdit: boolean
-  scope: 'internet' | 'team' | 'self' | null
-  source: 'file' | 'folder' | 'default'
-  entryPath?: string
-  members?: { userId: string; permission: 'view' | 'edit' | 'none' }[]
-}
-
 export interface BridgeFileEvent {
   type: 'file.changed' | 'file.created' | 'file.deleted' | 'active.changed' | 'online.changed'
   path: string
@@ -317,25 +307,6 @@ export class BridgeClient {
       headers: await this.authHeaders()
     })
     if (!response.ok) throw new Error(`Bridge unpin failed (${response.status}): ${path}`)
-  }
-
-  /** 解析当前登录用户对某路径的权限（打开前校验；canView=false 时不得打开）。 */
-  async getPermissions(path: string): Promise<BridgePermission> {
-    const response = await fetch(`${this.apiBase}/permissions?path=${encodeURIComponent(path)}`, {
-      headers: { Authorization: authHeader() ?? '' }
-    })
-    if (!response.ok) throw new Error(`Bridge permissions failed (${response.status}): ${path}`)
-    return (await response.json()) as BridgePermission
-  }
-
-  /** 无编辑权用户申请编辑权限（Phase B：POST → 服务端通知 owner/admin）。 */
-  async requestPermission(path: string): Promise<void> {
-    const response = await fetch(`${this.apiBase}/permission-request`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: authHeader() ?? '' },
-      body: JSON.stringify({ path })
-    })
-    if (!response.ok) throw new Error(`Bridge permission request failed (${response.status}): ${path}`)
   }
 
   /** 重命名文件/文件夹（name 为单段新名，不含扩展名）。返回新相对路径。 */

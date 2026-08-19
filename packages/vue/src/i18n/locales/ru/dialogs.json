@@ -78,6 +78,7 @@
   "openProviderSettings": "Открыть настройки провайдера",
   "settings": "Настройки",
   "settingsDescription": "Управление интеграциями и настройками приложения.",
+  "settingsAIAndAgents": "ИИ и агенты",
   "models": "Модели",
   "modelsDescription": "Настройте переиспользуемые модели и подключения к провайдерам.",
   "addModel": "Добавить модель",

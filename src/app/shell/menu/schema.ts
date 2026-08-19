@@ -35,10 +35,10 @@ export const APP_MENU_SCHEMA = [
     items: [
       { id: 'new', label: 'New', shortcut: 'MOD+N' },
       { id: 'open', label: 'Open…', shortcut: 'MOD+O' },
-      { id: 'back-to-team-space', label: 'Back to team space' },
+      { id: 'open-storage-workspace', label: 'Open Storage Workspace…', handler: 'shell' },
       { type: 'separator' },
-      { id: 'save', label: 'Save to cloud', shortcut: 'MOD+S' },
-      { id: 'save-as', label: 'Download to local…', shortcut: 'MOD+SHIFT+S' },
+      { id: 'save', label: 'Save', shortcut: 'MOD+S' },
+      { id: 'save-as', label: 'Save As…', shortcut: 'MOD+SHIFT+S' },
       { type: 'separator' },
       {
         id: 'export-selection',
@@ -52,6 +52,7 @@ export const APP_MENU_SCHEMA = [
         ]
       },
       { type: 'separator' },
+      { id: 'autosave', label: 'Autosave', checkbox: true },
       { id: 'close', label: 'Close Tab', shortcut: 'MOD+W' }
     ]
   },

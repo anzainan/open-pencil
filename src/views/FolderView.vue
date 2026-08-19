@@ -21,7 +21,6 @@ import RenamePrompt from '@/components/workspace/RenamePrompt.vue'
 import WorkspaceTopBar from '@/components/workspace/WorkspaceTopBar.vue'
 import { toast } from '@/app/shell/ui'
 import { activeTab, createUntitledTab, openStorageDocumentInNewTab } from '@/app/tabs'
-import AccessDialog from '@/components/workspace/AccessDialog.vue'
 
 const { dialogs } = useI18n()
 const router = useRouter()
@@ -71,7 +70,6 @@ const {
   onNewProjectConfirm
 } = grid
 
-const accessDialogOpen = ref(false)
 const pinBusy = ref(false)
 const pinned = computed(() => isFolderPinned(folderName.value))
 
@@ -185,15 +183,6 @@ onUnmounted(() => {
         >
           <icon-lucide-pin class="size-3" />
           {{ pinned ? dialogs.folderPinned : dialogs.folderPin }}
-        </button>
-        <button
-          type="button"
-          class="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded border border-border px-2 text-[11px] text-muted hover:bg-hover"
-          data-test-id="folder-access"
-          @click="accessDialogOpen = true"
-        >
-          <icon-lucide-user-cog class="size-3" />
-          {{ dialogs.accessButton }}
         </button>
       </div>
 
@@ -310,12 +299,6 @@ onUnmounted(() => {
       :cancel-label="dialogs.cancel"
       @update:open="newProjectOpen = $event"
       @confirm="onNewProjectConfirm"
-    />
-
-    <AccessDialog
-      :open="accessDialogOpen"
-      :folder-name="folderName"
-      @update:open="accessDialogOpen = $event"
     />
   </main>
 </template>

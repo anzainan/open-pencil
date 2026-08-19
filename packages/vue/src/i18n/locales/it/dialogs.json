@@ -78,6 +78,7 @@
   "openProviderSettings": "Apri impostazioni provider",
   "settings": "Impostazioni",
   "settingsDescription": "Gestisci integrazioni e preferenze dell’app.",
+  "settingsAIAndAgents": "IA e agenti",
   "models": "Modelli",
   "modelsDescription": "Configura modelli riutilizzabili e le connessioni ai provider.",
   "addModel": "Aggiungi modello",

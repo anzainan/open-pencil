@@ -2,7 +2,6 @@ import { computed } from 'vue'
 
 import type { Editor } from '@open-pencil/core/editor'
 import type { ExportRequest, IORegistry } from '@open-pencil/core/io'
-import { dialogMessages } from '@open-pencil/vue'
 
 import { createDocumentExportActions } from '@/app/document/export'
 import type { ExportOptions } from '@/app/document/export/types'
@@ -14,7 +13,6 @@ import { createPenActions } from '@/app/editor/pen'
 import { createProfilerActions } from '@/app/editor/profiler'
 import type { AppEditorState } from '@/app/editor/session/types'
 import { createVectorEditActions } from '@/app/editor/vector-edit'
-import { toast } from '@/app/shell/ui'
 
 export function defineEditorStoreAccessors(store: object, editor: Editor) {
   Object.defineProperties(store, {
@@ -65,15 +63,6 @@ export function createEditorStoreModules(
   const mobileClipboard = createMobileClipboardActions(editor, state)
   const profiler = createProfilerActions(editor)
 
-  // 只读模式（无编辑权限）：保存入口一律拦截（toast 提示，不落盘）。
-  // 导出（下载素材）对只读查看者开放：导出不写源文件、不破坏只读落盘保护，
-  // 游客分享页的「可导出下载素材」依赖此路径。覆盖菜单/快捷键与面板按钮等全部触发路径。
-  function readonlyBlocked(): boolean {
-    if (!state.readOnly) return false
-    toast.info(dialogMessages.get()['perm.readOnly'])
-    return true
-  }
-
   return {
     ...flash,
     ...pen,
@@ -83,14 +72,8 @@ export function createEditorStoreModules(
     importDOMText: documentIO.importDOMText,
     setViewportSize: documentIO.setViewportSize,
     fitCurrentPageToViewport: documentIO.fitCurrentPageToViewport,
-    saveFigFile: async () => {
-      if (readonlyBlocked()) return
-      await documentIO.saveFigFile()
-    },
-    saveFigFileAs: async () => {
-      if (readonlyBlocked()) return
-      await documentIO.saveFigFileAs()
-    },
+    saveFigFile: documentIO.saveFigFile,
+    saveFigFileAs: documentIO.saveFigFileAs,
     getDocumentFilePath: documentIO.getDocumentFilePath,
     getSourceIdentity: documentIO.getSourceIdentity,
     getStorageBinding: documentIO.getStorageBinding,

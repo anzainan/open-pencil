@@ -2,7 +2,6 @@ import { createHead } from '@unhead/vue/client'
 import { createApp } from 'vue'
 
 import './app.css'
-import { restoreSession } from '@/app/auth/session'
 import { openFileFromQueryParam } from '@/app/bridge/open-from-param'
 import { preloadFonts } from '@/app/editor/fonts'
 import {
@@ -27,12 +26,7 @@ if (
 preloadFonts()
 const head = createHead()
 createApp(App).use(router).use(head).mount('#app')
-// B2：打开入口先等登录恢复完成（restoreSession 幂等）。openFileFromQueryParam 的
-// getFileMeta 必须带 session token，否则 401 会被误判成「工作区文件已被删除」并清掉 ?file=。
-void (async () => {
-  await restoreSession()
-  void openFileFromQueryParam()
-})()
+void openFileFromQueryParam()
 
 if (!IS_TAURI) {
   void import('virtual:pwa-register').then(({ registerSW }) => {

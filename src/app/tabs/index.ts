@@ -3,7 +3,6 @@ import { shallowRef, computed, triggerRef } from 'vue'
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
 import { readFigFile } from '@open-pencil/core/io/formats/fig'
 import { computeAllLayouts } from '@open-pencil/core/layout'
-import { dialogMessages } from '@open-pencil/vue'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { BRIDGE_PROVIDER_ID, bridgeClient } from '@/app/bridge/client'
@@ -38,45 +37,6 @@ let nextTabId = 1
 
 function generateTabId(): string {
   return `tab-${nextTabId++}`
-}
-
-// B3：只读 tab 的权限 live 轮询。仅对「以只读态打开的 bridge 文件」启用（readOnly 成员是
-// 唯一需要翻转的对象），批准后无需刷新即可自动翻转 readOnly=false + 恢复 autosave，
-// 翻转后即自停。复用 NotifyBell 的 15s 节奏，不引入编辑器全局新轮询。
-const READONLY_PERMISSION_POLL_MS = 15_000
-const readonlyPermissionTimers = new Map<string, ReturnType<typeof setInterval>>()
-
-function stopReadonlyPermissionWatch(tabId: string): void {
-  const timer = readonlyPermissionTimers.get(tabId)
-  if (timer) {
-    // oxlint-disable-next-line open-pencil/prefer-vueuse-intervals
-    clearInterval(timer)
-    readonlyPermissionTimers.delete(tabId)
-  }
-}
-
-function startReadonlyPermissionWatch(tabId: string, documentId: string): void {
-  stopReadonlyPermissionWatch(tabId)
-  const check = async (): Promise<void> => {
-    const tab = getTabById(tabId)
-    if (!tab || !tab.store.state.readOnly) {
-      stopReadonlyPermissionWatch(tabId)
-      return
-    }
-    try {
-      const permission = await bridgeClient.getPermissions(documentId)
-      if (!permission.canView || !permission.canEdit) return
-      tab.store.state.readOnly = false
-      tab.store.state.autosaveEnabled = true
-      stopReadonlyPermissionWatch(tabId)
-      toast.info(dialogMessages.get()['perm.editGranted'])
-    } catch (error) {
-      console.warn('[tabs] permission recheck failed, retrying next poll', error)
-    }
-  }
-  void check()
-  // oxlint-disable-next-line open-pencil/prefer-vueuse-intervals
-  readonlyPermissionTimers.set(tabId, setInterval(() => void check(), READONLY_PERMISSION_POLL_MS))
 }
 
 const tabsRef = shallowRef<Tab[]>([])
@@ -155,7 +115,6 @@ export function closeTab(tabId: string) {
 
   if (tabsRef.value.length === 0) {
     createTab()
-    stopReadonlyPermissionWatch(closingTab.id)
     closingTab.store.dispose()
     return
   }
@@ -165,7 +124,6 @@ export function closeTab(tabId: string) {
     activateTab(tabsRef.value[newIdx])
   }
 
-  stopReadonlyPermissionWatch(closingTab.id)
   closingTab.store.dispose()
 }
 
@@ -224,21 +182,6 @@ export async function openStorageDocumentInNewTab(document: StorageDocument): Pr
 
   const store = reusableTabStore()
   store.state.loading = true
-  // Phase B：bridge 工作区文件打开前先查权限（无权限 → toast 拒绝，不打开）。
-  // 权限校验失败按「有权限」降级打开，不阻断既有流程（bridge 不可达时回归现状）。
-  let canEdit = true
-  if (providerId === BRIDGE_PROVIDER_ID) {
-    try {
-      const permission = await bridgeClient.getPermissions(document.id)
-      if (!permission.canView) {
-        toast.error(dialogMessages.get()['perm.noAccess'])
-        return
-      }
-      canEdit = permission.canEdit
-    } catch (error) {
-      console.warn('[tabs] permission check failed, opening with default access', error)
-    }
-  }
   try {
     const resolved = await resolveStorageDocumentBytes(
       providerId,
@@ -267,20 +210,12 @@ export async function openStorageDocumentInNewTab(document: StorageDocument): Pr
       document.name,
       stale ? { stale: true } : undefined
     )
-    // 只读权限：标记编辑器只读态（禁编辑/保存/导出，工具栏只留 hand/select）+ 强制关 autosave。
-    // B3：同时挂 readOnly 权限轮询，批准后 live 翻转回可编辑（无需刷新）。
-    if (!canEdit) {
-      store.state.readOnly = true
-      store.state.autosaveEnabled = false
-      const tab = getTabForStore(store)
-      if (tab) startReadonlyPermissionWatch(tab.id, document.id)
-    }
     store.clearSelection()
     const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
     await store.switchPage(pageId)
     if (stale) {
       toast.warning('该文件已在工作区被删除，已作为副本打开（不会自动保存回云端，可另存为或下载）')
-    } else if (providerId === BRIDGE_PROVIDER_ID && canEdit) {
+    } else if (providerId === BRIDGE_PROVIDER_ID) {
       await restoreBridgeWorkspaceSession(store, document.id)
     }
     await store.fitCurrentPageToViewport()
